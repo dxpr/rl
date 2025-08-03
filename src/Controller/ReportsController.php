@@ -84,6 +84,7 @@ class ReportsController extends ControllerBase {
   public function experimentsOverview() {
     $header = [
       $this->t('Experiment ID'),
+      $this->t('Module'),
       $this->t('Total Turns'),
       $this->t('Total Arms'),
       $this->t('Last Activity'),
@@ -123,10 +124,11 @@ class ReportsController extends ControllerBase {
 
       // Get decorated experiment name or fallback to UUID
       $experiment_display = $this->decoratorManager->decorateExperiment($experiment->uuid);
-      $experiment_name = $experiment_display ?: ['#markup' => $experiment->uuid];
+      $experiment_name = $experiment_display ? \Drupal::service('renderer')->renderPlain($experiment_display) : $experiment->uuid;
 
       $rows[] = [
         $experiment_name,
+        $experiment->module,
         $experiment->total_turns ?: 0,
         $arms_count,
         $last_activity,
@@ -182,8 +184,6 @@ class ReportsController extends ControllerBase {
       $this->t('Rewards'),
       $this->t('Success Rate'),
       $this->t('UCB1 Score'),
-      $this->t('First Seen'),
-      $this->t('Last Updated'),
     ];
 
     $rows = [];
@@ -199,17 +199,9 @@ class ReportsController extends ControllerBase {
       $exploration = sqrt(($alpha * log($total_turns)) / $arm_turns);
       $ucb1_score = $exploitation + $exploration;
 
-      // Format timestamps
-      $first_seen = $arm->created > 0 
-        ? $this->dateFormatter->format($arm->created, 'short')
-        : $this->t('Unknown');
-      $last_updated = $arm->updated > 0 
-        ? $this->dateFormatter->format($arm->updated, 'short')
-        : $this->t('Never');
-
       // Get decorated arm name or fallback to arm ID
       $arm_display = $this->decoratorManager->decorateArm($experiment_uuid, $arm->arm_id);
-      $arm_name = $arm_display ?: ['#markup' => $arm->arm_id];
+      $arm_name = $arm_display ? \Drupal::service('renderer')->renderPlain($arm_display) : $arm->arm_id;
 
       $rows[] = [
         $arm_name,
@@ -217,35 +209,8 @@ class ReportsController extends ControllerBase {
         $arm->rewards,
         number_format($success_rate, 2) . '%',
         number_format($ucb1_score, 4),
-        $first_seen,
-        $last_updated,
       ];
     }
-
-    // Summary information with timestamps
-    $summary_items = [
-      $this->t('Experiment UUID: @uuid', ['@uuid' => $experiment_uuid]),
-      $this->t('Total Turns: @turns', ['@turns' => $experiment_totals->total_turns]),
-      $this->t('Total Arms: @arms', ['@arms' => count($arms)]),
-    ];
-
-    if ($experiment_totals->created > 0) {
-      $summary_items[] = $this->t('First Created: @created', [
-        '@created' => $this->dateFormatter->format($experiment_totals->created, 'long')
-      ]);
-    }
-
-    if ($experiment_totals->updated > 0) {
-      $summary_items[] = $this->t('Last Activity: @updated', [
-        '@updated' => $this->dateFormatter->format($experiment_totals->updated, 'long')
-      ]);
-    }
-
-    $summary = [
-      '#theme' => 'item_list',
-      '#title' => $this->t('Experiment Summary'),
-      '#items' => $summary_items,
-    ];
 
     $table = [
       '#theme' => 'table',
@@ -256,7 +221,6 @@ class ReportsController extends ControllerBase {
     ];
 
     $build = [
-      'summary' => $summary,
       'table' => $table,
     ];
 
