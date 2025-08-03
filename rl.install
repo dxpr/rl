@@ -158,6 +158,14 @@ function rl_uninstall() {
   catch (SchemaObjectDoesNotExistException $e) {
     \Drupal::logger('rl')->notice('Table rl_arm_data does not exist: @message', ['@message' => $e->getMessage()]);
   }
+
+  // Drop the rl_experiment_registry table if it exists.
+  try {
+    $schema->dropTable('rl_experiment_registry');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    \Drupal::logger('rl')->notice('Table rl_experiment_registry does not exist: @message', ['@message' => $e->getMessage()]);
+  }
 }
 
 /**
@@ -267,6 +275,34 @@ function rl_schema() {
     ],
   ];
 
+  $schema['rl_experiment_registry'] = [
+    'description' => 'Registry of experiments and their owning modules',
+    'fields' => [
+      'uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'Experiment UUID',
+      ],
+      'module' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Module that owns this experiment',
+      ],
+      'registered_at' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when registered',
+      ],
+    ],
+    'primary key' => ['uuid'],
+    'indexes' => [
+      'module' => ['module'],
+    ],
+  ];
+
   return $schema;
 }
 
@@ -323,4 +359,50 @@ function rl_update_8001() {
   }
   
   return t('Added created and updated timestamp columns to RL tables.');
+}
+
+/**
+ * Create experiment registry table.
+ */
+function rl_update_8002() {
+  $schema = \Drupal::database()->schema();
+  
+  // Define the rl_experiment_registry table schema.
+  $spec_registry = [
+    'description' => 'Registry of experiments and their owning modules',
+    'fields' => [
+      'uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'Experiment UUID',
+      ],
+      'module' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Module that owns this experiment',
+      ],
+      'registered_at' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when registered',
+      ],
+    ],
+    'primary key' => ['uuid'],
+    'indexes' => [
+      'module' => ['module'],
+    ],
+  ];
+
+  // Create the rl_experiment_registry table.
+  try {
+    $schema->createTable('rl_experiment_registry', $spec_registry);
+  }
+  catch (SchemaObjectExistsException $e) {
+    \Drupal::logger('rl')->notice('Table rl_experiment_registry already exists: @message', ['@message' => $e->getMessage()]);
+  }
+  
+  return t('Created experiment registry table.');
 }

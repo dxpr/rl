@@ -4,8 +4,10 @@ namespace Drupal\rl\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Url;
+use Drupal\rl\Decorator\ExperimentDecoratorManager;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -29,16 +31,36 @@ class ReportsController extends ControllerBase {
   protected $experimentStorage;
 
   /**
+   * The date formatter service.
+   *
+   * @var \Drupal\Core\Datetime\DateFormatterInterface
+   */
+  protected $dateFormatter;
+
+  /**
+   * The experiment decorator manager.
+   *
+   * @var \Drupal\rl\Decorator\ExperimentDecoratorManager
+   */
+  protected $decoratorManager;
+
+  /**
    * Constructs a ReportsController object.
    *
    * @param \Drupal\Core\Database\Connection $database
    *   The database connection.
    * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $experiment_storage
    *   The experiment data storage.
+   * @param \Drupal\Core\Datetime\DateFormatterInterface $date_formatter
+   *   The date formatter service.
+   * @param \Drupal\rl\Decorator\ExperimentDecoratorManager $decorator_manager
+   *   The experiment decorator manager.
    */
-  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage) {
+  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager) {
     $this->database = $database;
     $this->experimentStorage = $experiment_storage;
+    $this->dateFormatter = $date_formatter;
+    $this->decoratorManager = $decorator_manager;
   }
 
   /**
@@ -47,7 +69,9 @@ class ReportsController extends ControllerBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('database'),
-      $container->get('rl.experiment_data_storage')
+      $container->get('rl.experiment_data_storage'),
+      $container->get('date.formatter'),
+      $container->get('rl.experiment_decorator_manager')
     );
   }
 
@@ -59,7 +83,7 @@ class ReportsController extends ControllerBase {
    */
   public function experimentsOverview() {
     $header = [
-      $this->t('Experiment UUID'),
+      $this->t('Experiment ID'),
       $this->t('Total Turns'),
       $this->t('Total Arms'),
       $this->t('Last Activity'),
@@ -68,33 +92,42 @@ class ReportsController extends ControllerBase {
 
     $rows = [];
 
-    // Get all experiments with their totals
-    $query = $this->database->select('rl_experiment_totals', 'et')
-      ->fields('et', ['experiment_uuid', 'total_turns', 'created', 'updated'])
-      ->orderBy('updated', 'DESC');
+    // Get all registered experiments with their totals (if any)
+    $query = $this->database->select('rl_experiment_registry', 'er')
+      ->fields('er', ['uuid', 'module', 'registered_at']);
+    $query->leftJoin('rl_experiment_totals', 'et', 'er.uuid = et.experiment_uuid');
+    $query->addField('et', 'total_turns', 'total_turns');
+    $query->addField('et', 'created', 'totals_created');
+    $query->addField('et', 'updated', 'totals_updated');
+    $query->orderBy('er.registered_at', 'DESC');
     $experiments = $query->execute()->fetchAll();
 
     foreach ($experiments as $experiment) {
       // Count arms for this experiment
       $arms_count = $this->database->select('rl_arm_data', 'ad')
-        ->condition('experiment_uuid', $experiment->experiment_uuid)
+        ->condition('experiment_uuid', $experiment->uuid)
         ->countQuery()
         ->execute()
         ->fetchField();
 
       $detail_url = Url::fromRoute('rl.reports.experiment_detail', [
-        'experiment_uuid' => $experiment->experiment_uuid,
+        'experiment_uuid' => $experiment->uuid,
       ]);
       $detail_link = Link::fromTextAndUrl($this->t('View details'), $detail_url);
 
-      // Format last activity timestamp
-      $last_activity = $experiment->updated > 0 
-        ? $this->dateFormatter()->format($experiment->updated, 'short')
+      // Format last activity timestamp - use totals_updated if available, otherwise registered_at
+      $last_activity_timestamp = $experiment->totals_updated ?: $experiment->registered_at;
+      $last_activity = $last_activity_timestamp > 0 
+        ? $this->dateFormatter->format($last_activity_timestamp, 'short')
         : $this->t('Never');
 
+      // Get decorated experiment name or fallback to UUID
+      $experiment_display = $this->decoratorManager->decorateExperiment($experiment->uuid);
+      $experiment_name = $experiment_display ?: ['#markup' => $experiment->uuid];
+
       $rows[] = [
-        $experiment->experiment_uuid,
-        $experiment->total_turns,
+        $experiment_name,
+        $experiment->total_turns ?: 0,
         $arms_count,
         $last_activity,
         $detail_link,
@@ -168,14 +201,18 @@ class ReportsController extends ControllerBase {
 
       // Format timestamps
       $first_seen = $arm->created > 0 
-        ? $this->dateFormatter()->format($arm->created, 'short')
+        ? $this->dateFormatter->format($arm->created, 'short')
         : $this->t('Unknown');
       $last_updated = $arm->updated > 0 
-        ? $this->dateFormatter()->format($arm->updated, 'short')
+        ? $this->dateFormatter->format($arm->updated, 'short')
         : $this->t('Never');
 
+      // Get decorated arm name or fallback to arm ID
+      $arm_display = $this->decoratorManager->decorateArm($experiment_uuid, $arm->arm_id);
+      $arm_name = $arm_display ?: ['#markup' => $arm->arm_id];
+
       $rows[] = [
-        $arm->arm_id,
+        $arm_name,
         $arm->turns,
         $arm->rewards,
         number_format($success_rate, 2) . '%',
@@ -194,13 +231,13 @@ class ReportsController extends ControllerBase {
 
     if ($experiment_totals->created > 0) {
       $summary_items[] = $this->t('First Created: @created', [
-        '@created' => $this->dateFormatter()->format($experiment_totals->created, 'long')
+        '@created' => $this->dateFormatter->format($experiment_totals->created, 'long')
       ]);
     }
 
     if ($experiment_totals->updated > 0) {
       $summary_items[] = $this->t('Last Activity: @updated', [
-        '@updated' => $this->dateFormatter()->format($experiment_totals->updated, 'long')
+        '@updated' => $this->dateFormatter->format($experiment_totals->updated, 'long')
       ]);
     }
 

@@ -9,3 +9,12 @@ services:
   rl.experiment_manager:
     class: Drupal\rl\Service\ExperimentManager
     arguments: ['@rl.experiment_data_storage', '@rl.ucb1_calculator']
+
+  rl.experiment_registry:
+    class: Drupal\rl\Registry\ExperimentRegistry
+    arguments: ['@database']
+
+  rl.experiment_decorator_manager:
+    class: Drupal\rl\Decorator\ExperimentDecoratorManager
+    tags:
+      - { name: service_collector, tag: rl_experiment_decorator, call: addDecorator }
