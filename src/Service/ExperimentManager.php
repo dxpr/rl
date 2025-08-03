@@ -3,6 +3,7 @@
 namespace Drupal\rl\Service;
 
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
+use Drupal\rl\Service\ThompsonCalculator;
 
 /**
  * Service for managing reinforcement learning experiments.
@@ -17,23 +18,23 @@ class ExperimentManager implements ExperimentManagerInterface {
   protected $storage;
 
   /**
-   * The UCB1 calculator.
+   * The Thompson Sampling calculator.
    *
-   * @var \Drupal\rl\Service\UCB1Calculator
+   * @var \Drupal\rl\Service\ThompsonCalculator
    */
-  protected $ucb1Calculator;
+  protected $tsCalculator;
 
   /**
    * Constructs a new ExperimentManager.
    *
    * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
    *   The experiment data storage.
-   * @param \Drupal\rl\Service\UCB1Calculator $ucb1_calculator
-   *   The UCB1 calculator.
+   * @param \Drupal\rl\Service\ThompsonCalculator $ts_calculator
+   *   The Thompson Sampling calculator.
    */
-  public function __construct(ExperimentDataStorageInterface $storage, UCB1Calculator $ucb1_calculator) {
+  public function __construct(ExperimentDataStorageInterface $storage, ThompsonCalculator $ts_calculator) {
     $this->storage = $storage;
-    $this->ucb1Calculator = $ucb1_calculator;
+    $this->tsCalculator = $ts_calculator;
   }
 
   /**
@@ -85,7 +86,7 @@ class ExperimentManager implements ExperimentManagerInterface {
     $arms_data = $this->getAllArmsData($experiment_uuid);
     $total_turns = $this->getTotalTurns($experiment_uuid);
 
-    return $this->ucb1Calculator->calculateUCB1Scores($arms_data, $total_turns, $alpha);
+    return $this->tsCalculator->calculateUCB1Scores($arms_data, $total_turns, $alpha);
   }
 
 }

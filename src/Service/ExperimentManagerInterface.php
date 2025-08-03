@@ -73,15 +73,15 @@ interface ExperimentManagerInterface {
   public function getTotalTurns($experiment_uuid);
 
   /**
-   * Gets UCB1 scores for all arms in an experiment.
+   * Gets Thompson Sampling scores for all arms in an experiment.
    *
    * @param string $experiment_uuid
    *   The experiment UUID.
    * @param float $alpha
-   *   The exploration parameter (default 2.0).
+   *   The exploration parameter (unused for Thompson Sampling, kept for BC).
    *
    * @return array
-   *   Array of UCB1 scores keyed by arm_id.
+   *   Array of Thompson Sampling scores keyed by arm_id.
    */
   public function getUCB1Scores($experiment_uuid, $alpha = 2.0);
 

@@ -124,7 +124,7 @@ class ExperimentController extends ControllerBase {
   }
 
   /**
-   * Gets UCB1 scores for all arms in an experiment.
+   * Gets Thompson Sampling scores for all arms in an experiment.
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   The current request.
@@ -132,7 +132,7 @@ class ExperimentController extends ControllerBase {
    *   The experiment UUID.
    *
    * @return \Symfony\Component\HttpFoundation\JsonResponse
-   *   A JSON response with the UCB1 scores.
+   *   A JSON response with the Thompson Sampling scores.
    */
   public function getUCB1Scores(Request $request, $experiment_uuid) {
     $alpha = $request->query->get('alpha', 2.0);

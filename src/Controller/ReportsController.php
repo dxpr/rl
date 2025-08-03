@@ -183,7 +183,7 @@ class ReportsController extends ControllerBase {
       $this->t('Turns'),
       $this->t('Rewards'),
       $this->t('Success Rate'),
-      $this->t('UCB1 Score'),
+      $this->t('TS Score'),
     ];
 
     $rows = [];
@@ -192,12 +192,10 @@ class ReportsController extends ControllerBase {
     foreach ($arms as $arm) {
       $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
       
-      // Calculate UCB1 score (using default alpha=2.0)
-      $alpha = 2.0;
-      $arm_turns = max(1, $arm->turns);
-      $exploitation = $arm->rewards / $arm_turns;
-      $exploration = sqrt(($alpha * log($total_turns)) / $arm_turns);
-      $ucb1_score = $exploitation + $exploration;
+      // Calculate Thompson Sampling score
+      $alpha_param = $arm->rewards + 1;
+      $beta_param = ($arm->turns - $arm->rewards) + 1;
+      $ts_score = $alpha_param / ($alpha_param + $beta_param); // Beta mean as approximation
 
       // Get decorated arm name or fallback to arm ID
       $arm_display = $this->decoratorManager->decorateArm($experiment_uuid, $arm->arm_id);
@@ -208,7 +206,7 @@ class ReportsController extends ControllerBase {
         $arm->turns,
         $arm->rewards,
         number_format($success_rate, 2) . '%',
-        number_format($ucb1_score, 4),
+        number_format($ts_score, 4),
       ];
     }
 
@@ -226,7 +224,7 @@ class ReportsController extends ControllerBase {
 
     // Add explanatory text
     $build['#prefix'] = '<p>' . $this->t('This page shows detailed information about a specific reinforcement learning experiment and all its arms (options being tested).') . '</p>';
-    $build['#suffix'] = '<p>' . $this->t('<strong>Terms:</strong><br>• <em>Turns</em>: Number of times this arm was presented/tried<br>• <em>Rewards</em>: Number of times this arm received positive feedback<br>• <em>Success Rate</em>: Percentage of turns that resulted in rewards<br>• <em>UCB1 Score</em>: Algorithm score balancing exploitation vs exploration (higher = more likely to be selected)<br>• <em>First Seen</em>: When this content was first added to the experiment<br>• <em>Last Updated</em>: When this arm last received activity (turns or rewards)') . '</p>';
+    $build['#suffix'] = '<p>' . $this->t('<strong>Terms:</strong><br>• <em>Turns</em>: Number of times this arm was presented/tried<br>• <em>Rewards</em>: Number of times this arm received positive feedback<br>• <em>Success Rate</em>: Percentage of turns that resulted in rewards<br>• <em>TS Score</em>: Thompson Sampling expected success rate (higher = more likely to be selected)<br>• <em>First Seen</em>: When this content was first added to the experiment<br>• <em>Last Updated</em>: When this arm last received activity (turns or rewards)') . '</p>';
 
     return $build;
   }
