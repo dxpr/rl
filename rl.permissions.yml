@@ -1,0 +1,7 @@
+administer reinforcement learning:
+  title: 'Administer Reinforcement Learning'
+  description: 'Manage RL experiments and view analytics'
+
+view reinforcement learning data:
+  title: 'View Reinforcement Learning data'
+  description: 'Access experiment scores and analytics'

@@ -1,0 +1,52 @@
+rl.experiment.turn:
+  path: '/rl/experiment/{experiment_uuid}/turn'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ExperimentController::recordTurn'
+  methods: [POST]
+  requirements:
+    _access: 'TRUE'
+    experiment_uuid: '.+'
+
+rl.experiment.turns:
+  path: '/rl/experiment/{experiment_uuid}/turns'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ExperimentController::recordTurns'
+  methods: [POST]
+  requirements:
+    _access: 'TRUE'
+    experiment_uuid: '.+'
+
+rl.experiment.reward:
+  path: '/rl/experiment/{experiment_uuid}/reward'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ExperimentController::recordReward'
+  methods: [POST]
+  requirements:
+    _access: 'TRUE'
+    experiment_uuid: '.+'
+
+rl.experiment.scores:
+  path: '/rl/experiment/{experiment_uuid}/scores'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ExperimentController::getUCB1Scores'
+  methods: [GET]
+  requirements:
+    _access: 'TRUE'
+    experiment_uuid: '.+'
+
+rl.reports.experiments:
+  path: '/admin/reports/rl'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ReportsController::experimentsOverview'
+    _title: 'RL Experiments'
+  requirements:
+    _permission: 'administer rl experiments'
+
+rl.reports.experiment_detail:
+  path: '/admin/reports/rl/experiment/{experiment_uuid}'
+  defaults:
+    _controller: '\Drupal\rl\Controller\ReportsController::experimentDetail'
+    _title: 'RL Experiment Detail'
+  requirements:
+    _permission: 'administer rl experiments'
+    experiment_uuid: '.+'

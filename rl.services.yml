@@ -1,0 +1,11 @@
+services:
+  rl.experiment_data_storage:
+    class: Drupal\rl\Storage\ExperimentDataStorage
+    arguments: ['@database']
+
+  rl.ucb1_calculator:
+    class: Drupal\rl\Service\UCB1Calculator
+
+  rl.experiment_manager:
+    class: Drupal\rl\Service\ExperimentManager
+    arguments: ['@rl.experiment_data_storage', '@rl.ucb1_calculator']

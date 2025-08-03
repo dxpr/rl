@@ -1,0 +1,326 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the Reinforcement Learning module.
+ */
+
+use Drupal\Core\Database\Database;
+use Drupal\Core\Database\SchemaObjectExistsException;
+use Drupal\Core\Database\SchemaObjectDoesNotExistException;
+
+/**
+ * Implements hook_install().
+ */
+function rl_install() {
+  $schema = \Drupal::database()->schema();
+
+  // Define the rl_experiment_totals table schema.
+  $spec_totals = [
+    'description' => 'Stores total turns for RL experiments.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'UUID identifying the experiment.',
+      ],
+      'total_turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total number of turns in this experiment.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was first created.',
+      ],
+      'updated' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was last updated.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'experiment_unique' => ['experiment_uuid'],
+    ],
+    'indexes' => [
+      'experiment_uuid' => ['experiment_uuid'],
+    ],
+  ];
+
+  // Create the rl_experiment_totals table.
+  try {
+    $schema->createTable('rl_experiment_totals', $spec_totals);
+  }
+  catch (SchemaObjectExistsException $e) {
+    \Drupal::logger('rl')->notice('Table rl_experiment_totals already exists: @message', ['@message' => $e->getMessage()]);
+  }
+
+  // Define the rl_arm_data table schema.
+  $spec_arms = [
+    'description' => 'Stores turn and reward data for experiment arms.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'UUID identifying the experiment.',
+      ],
+      'arm_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Identifier for the specific arm.',
+      ],
+      'turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of times this arm has been trialed.',
+      ],
+      'rewards' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of rewards received for this arm.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was first created.',
+      ],
+      'updated' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was last updated.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'experiment_arm' => ['experiment_uuid', 'arm_id'],
+    ],
+    'indexes' => [
+      'experiment_uuid' => ['experiment_uuid'],
+    ],
+  ];
+
+  // Create the rl_arm_data table.
+  try {
+    $schema->createTable('rl_arm_data', $spec_arms);
+  }
+  catch (SchemaObjectExistsException $e) {
+    \Drupal::logger('rl')->notice('Table rl_arm_data already exists: @message', ['@message' => $e->getMessage()]);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function rl_uninstall() {
+  $schema = \Drupal::database()->schema();
+
+  // Drop the rl_experiment_totals table if it exists.
+  try {
+    $schema->dropTable('rl_experiment_totals');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    \Drupal::logger('rl')->notice('Table rl_experiment_totals does not exist: @message', ['@message' => $e->getMessage()]);
+  }
+
+  // Drop the rl_arm_data table if it exists.
+  try {
+    $schema->dropTable('rl_arm_data');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    \Drupal::logger('rl')->notice('Table rl_arm_data does not exist: @message', ['@message' => $e->getMessage()]);
+  }
+}
+
+/**
+ * Implements hook_schema().
+ */
+function rl_schema() {
+  $schema['rl_experiment_totals'] = [
+    'description' => 'Stores total turns for RL experiments.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'UUID identifying the experiment.',
+      ],
+      'total_turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total number of turns in this experiment.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was first created.',
+      ],
+      'updated' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was last updated.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'experiment_unique' => ['experiment_uuid'],
+    ],
+    'indexes' => [
+      'experiment_uuid' => ['experiment_uuid'],
+    ],
+  ];
+
+  $schema['rl_arm_data'] = [
+    'description' => 'Stores turn and reward data for experiment arms.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'UUID identifying the experiment.',
+      ],
+      'arm_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Identifier for the specific arm.',
+      ],
+      'turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of times this arm has been trialed.',
+      ],
+      'rewards' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of rewards received for this arm.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was first created.',
+      ],
+      'updated' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was last updated.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'experiment_arm' => ['experiment_uuid', 'arm_id'],
+    ],
+    'indexes' => [
+      'experiment_uuid' => ['experiment_uuid'],
+    ],
+  ];
+
+  return $schema;
+}
+
+/**
+ * Add created and updated timestamp columns to RL tables.
+ */
+function rl_update_8001() {
+  $schema = \Drupal::database()->schema();
+  
+  // Add timestamp columns to rl_experiment_totals table
+  if ($schema->tableExists('rl_experiment_totals')) {
+    if (!$schema->fieldExists('rl_experiment_totals', 'created')) {
+      $schema->addField('rl_experiment_totals', 'created', [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was first created.',
+      ]);
+    }
+    
+    if (!$schema->fieldExists('rl_experiment_totals', 'updated')) {
+      $schema->addField('rl_experiment_totals', 'updated', [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this experiment was last updated.',
+      ]);
+    }
+  }
+  
+  // Add timestamp columns to rl_arm_data table
+  if ($schema->tableExists('rl_arm_data')) {
+    if (!$schema->fieldExists('rl_arm_data', 'created')) {
+      $schema->addField('rl_arm_data', 'created', [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was first created.',
+      ]);
+    }
+    
+    if (!$schema->fieldExists('rl_arm_data', 'updated')) {
+      $schema->addField('rl_arm_data', 'updated', [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp when this arm was last updated.',
+      ]);
+    }
+  }
+  
+  return t('Added created and updated timestamp columns to RL tables.');
+}
