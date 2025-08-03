@@ -5,27 +5,63 @@
  * Handles RL experiment tracking via AJAX with minimal bootstrap.
  * 
  * Following the statistics.php architecture for optimal performance.
+ * Updated for Drupal 10/11 compatibility.
  */
 
 use Drupal\Core\DrupalKernel;
 use Symfony\Component\HttpFoundation\Request;
 
 // CRITICAL: Only accept POST requests for security and caching reasons
-$action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_STRING);
-$experiment_uuid = filter_input(INPUT_POST, 'experiment_uuid', FILTER_SANITIZE_STRING);
-$arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_STRING);
+$action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$experiment_uuid = filter_input(INPUT_POST, 'experiment_uuid', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-// Early exit if not POST or missing required parameters
-if (!$action || !$experiment_uuid) {
+// Validate inputs more strictly
+if (!$action || !$experiment_uuid || !in_array($action, ['turn', 'turns', 'reward'])) {
+  http_response_code(400);
+  exit();
+}
+
+// Additional validation for experiment_uuid (should be alphanumeric/hash)
+if (!preg_match('/^[a-zA-Z0-9]+$/', $experiment_uuid)) {
+  http_response_code(400);
   exit();
 }
 
 // Catch exceptions when site is not configured or storage fails
 try {
-  // Navigate to Drupal root (assumes module in modules/custom/rl)
-  chdir('../../..');
+  // Find Drupal root - more robust path detection
+  $drupal_root = dirname(__FILE__);
+  $max_iterations = 10;
+  $iterations = 0;
+  
+  while (!file_exists($drupal_root . '/autoload.php') && $iterations < $max_iterations) {
+    $drupal_root = dirname($drupal_root);
+    $iterations++;
+  }
+  
+  if (!file_exists($drupal_root . '/autoload.php')) {
+    // Fallback: try common patterns
+    $possible_roots = [
+      dirname(dirname(dirname(__FILE__))), // modules/contrib/rl -> root
+      dirname(dirname(dirname(dirname(__FILE__)))), // modules/custom/rl -> root  
+      dirname(dirname(dirname(dirname(dirname(__FILE__))))), // web/modules/contrib/rl -> root
+    ];
+    
+    foreach ($possible_roots as $root) {
+      if (file_exists($root . '/autoload.php')) {
+        $drupal_root = $root;
+        break;
+      }
+    }
+  }
+  
+  if (!file_exists($drupal_root . '/autoload.php')) {
+    http_response_code(500);
+    exit();
+  }
 
-  $autoloader = require_once 'autoload.php';
+  $autoloader = require_once $drupal_root . '/autoload.php';
 
   $request = Request::createFromGlobals();
   $kernel = DrupalKernel::createFromRequest($request, $autoloader, 'prod');
@@ -38,28 +74,54 @@ try {
   // Handle the different actions
   switch ($action) {
     case 'turn':
-      if ($arm_id) {
+      // Validate arm_id for single turn
+      if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
         $storage->recordTurn($experiment_uuid, $arm_id);
       }
       break;
 
     case 'turns':
-      $arm_ids = filter_input(INPUT_POST, 'arm_ids', FILTER_SANITIZE_STRING);
+      // Handle multiple turns with better validation
+      $arm_ids = filter_input(INPUT_POST, 'arm_ids', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
       if ($arm_ids) {
         $arm_ids_array = explode(',', $arm_ids);
         $arm_ids_array = array_map('trim', $arm_ids_array);
-        $storage->recordTurns($experiment_uuid, $arm_ids_array);
+        
+        // Validate each arm_id
+        $valid_arm_ids = [];
+        foreach ($arm_ids_array as $aid) {
+          if (preg_match('/^[a-zA-Z0-9_-]+$/', $aid)) {
+            $valid_arm_ids[] = $aid;
+          }
+        }
+        
+        if (!empty($valid_arm_ids)) {
+          $storage->recordTurns($experiment_uuid, $valid_arm_ids);
+        }
       }
       break;
 
     case 'reward':
-      if ($arm_id) {
+      // Validate arm_id for reward
+      if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
         $storage->recordReward($experiment_uuid, $arm_id);
       }
       break;
   }
+  
+  // Send success response
+  http_response_code(200);
+  
 }
 catch (\Exception $e) {
   // Silently fail - same as statistics.php
-  // Do nothing if there is PDO Exception or other failure
+  // Log error if logging is available but don't expose details
+  if (isset($container) && $container && $container->has('logger.factory')) {
+    try {
+      $container->get('logger.factory')->get('rl')->error('RL endpoint error: @message', ['@message' => $e->getMessage()]);
+    } catch (\Exception $log_error) {
+      // Ignore logging errors
+    }
+  }
+  http_response_code(500);
 }
