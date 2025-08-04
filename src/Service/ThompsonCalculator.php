@@ -3,98 +3,63 @@
 namespace Drupal\rl\Service;
 
 /**
- * Thompson Sampling algorithm implementation for multi-armed bandit experiments.
+ * Thompson Sampling.
  *
- * Implements the Thompson Sampling algorithm using a Beta-Bernoulli model.
- * The Beta distribution is generated using the Marsaglia-Tsang algorithm
- * for Gamma distribution sampling, requiring no external dependencies.
+ * Idea in metaphor.
+ * -----------------
+ * – Each “arm” is a different filter-coffee blend.  
+ * – After every cup we store two counts per blend:
+ *       • turns   = how many cups were served
+ *       • rewards = how many of those cups were rated “good”
+ * – Before the next customer is served we draw one *taste score* for
+ *   every blend.  The draw is **randomized but not uniform**:
+ *       blends with more good ratings are *more likely* to draw
+ *       higher scores, blends with few ratings still get a chance.
+ * – We serve the blend with the highest drawn score.  Repeating this
+ *   process balances *exploration* (trying all blends) and *exploitation*
+ *   (serving the best-known blend more often).
+ *
+ * Idea in math terms
+ * ------------------
+ * • For a blend with   successes = a   and   failures = b
+ *   we treat the “unknown true like-rate” as following a Beta(a+1, b+1)
+ *   curve.  (That “+1” is just a neutral starting point.)
+ * • A fast trick to draw a Beta value is:
+ *       X ← Gamma(a+1,1)   Y ← Gamma(b+1,1)
+ *       return  X / (X + Y).
+ * 
+ *  @see https://arxiv.org/abs/1707.02038
+ *  @see https://dl.acm.org/doi/pdf/10.1145/358407.358414
  */
 class ThompsonCalculator {
 
-  /**
-   * Calculates Thompson Sampling scores for all arms in an experiment.
-   *
-   * @param array $arms_data
-   *   Array of arm data objects, each containing 'turns' and 'rewards' properties.
-   *
-   * @return array
-   *   Array of sampled scores keyed by arm_id.
-   */
-  public function calculateThompsonScores(array $arms_data) {
-    return $this->calculateScores($arms_data);
-  }
+  /*──────────────────────── PUBLIC API ────────────────────────*/
 
   /**
-   * Generates Thompson Sampling scores by sampling from Beta distributions.
+   * Draw one Thompson score for every blend.
    *
-   * For each arm, samples from Beta(α, β) where:
-   * - α = successes + 1 (prior successes)
-   * - β = failures + 1 (prior failures)
-   *
-   * @param array $arms_data
-   *   Array of arm data objects with 'turns' and 'rewards' properties.
-   *
-   * @return array
-   *   Array of sampled scores keyed by arm_id.
+   * @param array $arms_data  objects with ->turns and ->rewards
+   * @return array            scores keyed by blend id
    */
-  public function calculateScores(array $arms_data): array {
+  public function calculateThompsonScores(array $arms_data): array {
     $scores = [];
 
-    foreach ($arms_data as $arm_id => $arm) {
-      // Beta distribution parameters: α = successes + 1, β = failures + 1
-      $alpha = $arm->rewards + 1;
-      $beta = ($arm->turns - $arm->rewards) + 1;
-
-      $scores[$arm_id] = $this->randBeta($alpha, $beta);
+    foreach ($arms_data as $id => $arm) {
+      $alpha = $arm->rewards + 1;                 // good ratings + 1
+      $beta  = ($arm->turns - $arm->rewards) + 1; // bad  ratings + 1
+      $scores[$id] = $this->randBeta($alpha, $beta);
     }
-
     return $scores;
   }
 
-  /**
-   * Calculates a single Thompson Sampling score for one arm.
-   *
-   * @param int $arm_turns
-   *   Total number of trials for this arm.
-   * @param int $arm_rewards
-   *   Total number of successes for this arm.
-   *
-   * @return float
-   *   Sampled score from Beta distribution.
-   */
-  public function calculateThompsonScore($arm_turns, $arm_rewards) {
-    $alpha = $arm_rewards + 1;
-    $beta = ($arm_turns - $arm_rewards) + 1;
-    return $this->randBeta($alpha, $beta);
-  }
-
-  /**
-   * Selects the arm with the highest Thompson Sampling score.
-   *
-   * @param array $scores
-   *   Array of scores keyed by arm_id.
-   *
-   * @return string|null
-   *   The arm_id with the highest score, or NULL if no scores provided.
-   */
+  /** Pick the blend with the highest score. */
   public function selectBestArm(array $scores) {
     return $scores ? array_keys($scores, max($scores))[0] : NULL;
   }
 
-  /**
-   * Samples from a Beta distribution using two Gamma distributions.
-   *
-   * Uses the property that if X ~ Gamma(α) and Y ~ Gamma(β), 
-   * then X/(X+Y) ~ Beta(α,β).
-   *
-   * @param int $alpha
-   *   Alpha parameter of the Beta distribution.
-   * @param int $beta
-   *   Beta parameter of the Beta distribution.
-   *
-   * @return float
-   *   Random sample from Beta(α,β) distribution.
-   */
+  /*───────────────────── PRIVATE HELPERS ─────────────────────*/
+
+  /** Draw Beta(α,β) by dividing two Gamma draws. */
   private function randBeta(int $alpha, int $beta): float {
     $x = $this->randGamma($alpha);
     $y = $this->randGamma($beta);
@@ -102,90 +67,104 @@ class ThompsonCalculator {
   }
 
   /**
-   * Samples from a Gamma distribution using the Marsaglia-Tsang algorithm.
+   * Marsaglia–Tsang Γ(k,1) sampler.
    *
-   * Efficient method for generating Gamma-distributed random numbers
-   * without external dependencies.
+   * Key ideas (k ≥ 1)
+   * -----------------
+   * 1.  Rewrite k as  k = d + 1/3  with  d = k − 1/3.
+   *     This centres the target density so the proposal works well.
+   * 2.  Draw Z ~ N(0,1) (a bell-curve number) and set
+   *         V = (1 + c·Z)³      where  c = 1 / √(9d)
+   *     → V is positive most of the time.  Multiplying by d later scales
+   *       it into the right range for a Gamma random number.
+   * 3.  Use *rejection sampling*: accept V with probability equal to the
+   *    ratio “target Gamma density / proposal density”.
+   *    a) FAST test  u < 1 − 0.0331 Z⁴
+   *       • Cheap polynomial bound that sits fully inside the true
+   *         acceptance region.  If it passes we can safely accept.
+   *       • Accepts ~87 % of good candidates, saving calls to log().
+   *    b) If the fast test fails, run the EXACT test
+   *         ln u < ½ Z² + d (1 − V + ln V)
+   *       • This is the exact log-likelihood ratio.  It guarantees that
+   *         the remaining ~13 % of cases are accepted or rejected
+   *         correctly, so the output distribution is truly Γ(k,1).
    *
-   * @param float $shape
-   *   Shape parameter (k) of the Gamma distribution.
-   *
-   * @return float
-   *   Random sample from Gamma(k,1) distribution.
+   * k < 1
+   * -----
+   *  • Trick: sample Γ(k+1,1) (which has shape ≥ 1) and then divide by
+   *    U^{1/k}.  The scaling U^{1/k} converts the +1 shape back down.
    */
-  private function randGamma(float $shape): float {
-    // Handle shape < 1 by boosting and scaling
-    if ($shape < 1.0) {
-      return $this->randGamma($shape + 1.0) * pow($this->u(), 1.0 / $shape);
+  private function randGamma(float $k): float {
+    /* ----- Case 0 < k < 1  ----------------------------------------- */
+    if ($k < 1.0) {
+      // Draw Γ(k+1) and shrink it.  The exponent 1/k acts like “take the
+      // k-th root” of a uniform number, redistributing mass toward zero.
+      return $this->randGamma($k + 1.0) * pow($this->u(), 1.0 / $k);
     }
 
-    $d = $shape - 1.0 / 3.0;
-    $c = 1.0 / sqrt(9.0 * $d);
+    /* ----- Case k ≥ 1  --------------------------------------------- */
+    $d = $k - 1.0 / 3.0;          // shifts the shape
+    $c = 1.0 / sqrt(9.0 * $d);    // scales the normal draw
 
     while (true) {
-      // Generate standard normal random variable
+      /* Step 1: Z ~ N(0,1) */
       $z = $this->z();
+
+      /* Step 2: candidate V;  (1 + cZ) might be negative if Z < −1/c  */
       $v = pow(1.0 + $c * $z, 3);
 
-      // Reject negative values
-      if ($v <= 0.0) {
+      if ($v <= 0.0) {            // invalid candidate → try again
         continue;
       }
 
-      $u = $this->u();
+      $u = $this->u();            // U ~ Uniform(0,1) for accept/reject
 
-      // Fast acceptance test
+      /* Step 3a: FAST acceptance (“squeeze” region)                   *
+       * Inequality derived in the paper ensures we are safely inside  *
+       * the true acceptance region, so accepting here is always ok.   */
       if ($u < 1.0 - 0.0331 * $z ** 4) {
         return $d * $v;
       }
 
-      // Slow acceptance test
+      /* Step 3b: EXACT acceptance (rare)                              *
+       *  log U  vs.  log(target/proposal)                             *
+       * If the inequality holds we accept; otherwise loop again.      */
       if (log($u) < 0.5 * $z * $z + $d * (1.0 - $v + log($v))) {
         return $d * $v;
       }
+      /* If we reach here both tests failed; draw a new Z and restart. */
     }
   }
 
-  /**
-   * Generates a cryptographically secure uniform random number in (0,1).
-   *
-   * @return float
-   *   Random number between 0 and 1 (exclusive).
-   */
+  /*──────────── RNG helpers (uniform & normal) ──────────────*/
+
+  /** Uniform(0,1) using PHP’s cryptographic RNG. */
   private function u(): float {
     return random_int(1, PHP_INT_MAX - 1) / PHP_INT_MAX;
   }
 
   /**
-   * Generates a standard normal random variable using Box-Muller transform.
-   *
-   * Uses static caching to generate two normal variables per call to the
-   * uniform random number generator, improving efficiency.
-   *
-   * @return float
-   *   Random sample from standard normal distribution N(0,1).
+   * Standard normal N(0,1) via Box-Muller transform.
+   * Generates two normals per two uniforms; caches one for speed.
    */
   private function z(): float {
     static $cache = NULL;
 
-    // Return cached value if available
     if ($cache !== NULL) {
       $z = $cache;
       $cache = NULL;
       return $z;
     }
 
-    // Generate two uniform random numbers in unit circle
     do {
       $u1 = 2.0 * $this->u() - 1.0;
       $u2 = 2.0 * $this->u() - 1.0;
-      $s = $u1 * $u1 + $u2 * $u2;
+      $s  = $u1 * $u1 + $u2 * $u2;
     } while ($s >= 1.0 || $s == 0.0);
 
-    // Apply Box-Muller transformation
     $factor = sqrt(-2.0 * log($s) / $s);
-    $cache = $u1 * $factor;  // Cache one value
-    return $u2 * $factor;    // Return the other
+    $cache  = $u1 * $factor;   // save one normal for next call
+    return  $u2 * $factor;     // return the other
   }
 
 }
