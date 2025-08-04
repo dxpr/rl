@@ -7,7 +7,7 @@ namespace Drupal\rl\Service;
  *
  * Idea in metaphor.
  * -----------------
- * – Each “arm” is a different filter-coffee blend.  
+ * – Each “arm” is a different coffee blend.  
  * – After every cup we store two counts per blend:
  *       • turns   = how many cups were served
  *       • rewards = how many of those cups were rated “good”
