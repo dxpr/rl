@@ -1,0 +1,81 @@
+<h2>About Reinforcement Learning</h2>
+
+<p>The <strong>Reinforcement Learning (RL)</strong> module implements multi-armed bandit experiments in Drupal using Thompson Sampling algorithm.</p>
+
+<p><strong>Thompson Sampling</strong> is a learning-while-doing method. Each time a visitor lands on your site the algorithm “rolls the dice” based on what it has learned so far. Copies that have performed well roll larger numbers, so they are shown more often, while weak copies still get a small chance to prove themselves. This simple trick means the system can discover winners very quickly without stopping normal traffic.</p>
+
+<p>Traditional A/B tests run for a fixed horizon—say two weeks—during which half your visitors keep seeing the weaker version. Thompson Sampling avoids this waste. As soon as the algorithm has even a little evidence it quietly shifts most traffic to the better variant, saving conversions and shortening the wait for useful insights.</p>
+
+<h3>Features</h3>
+
+<ul>
+<li><strong>Thompson Sampling Algorithm</strong> - Pure PHP implementation</li>
+<li><strong>HTTP REST API</strong> - JSON endpoints for tracking</li>
+<li><strong>Administrative Reports</strong> - Experiment analysis interface</li>
+<li><strong>Service-based Architecture</strong> - Extensible design</li>
+</ul>
+
+<h3>Use Cases</h3>
+
+<ul>
+<li><strong>A/B Testing</strong> - Test content variations</li>
+<li><strong>Content Optimization</strong> - Track content engagement</li>
+<li><strong>Feature Selection</strong> - Choose features to show users</li>
+<li><strong>Recommendations</strong> - Optimize content recommendations</li>
+<li><strong>Resource Allocation</strong> - Distribute resources across options</li>
+</ul>
+
+<h3>Thompson Sampling</h3>
+
+<p>Unlike traditional A/B testing, Thompson Sampling:</p>
+
+<ul>
+<li><strong>Adapts automatically</strong> - Shifts traffic to better options</li>
+<li><strong>Handles multiple options</strong> - Works with 2+ variations, even thousands of arms are handled well</li>
+<li><strong>Continuous learning</strong> - No fixed test duration</li>
+<li><strong>Bayesian approach</strong> - Incorporates uncertainty</li>
+</ul>
+
+<h3>API</h3>
+
+<pre><code>// Get the experiment manager
+$experiment_manager = \Drupal::service('rl.experiment_manager');
+
+// Record a trial (content shown)
+$experiment_manager->recordTurn('my-experiment', 'variant-a');
+
+// Record a success (user clicked)
+$experiment_manager->recordReward('my-experiment', 'variant-a');
+
+// Get Thompson Sampling scores
+$scores = $experiment_manager->getThompsonScores('my-experiment');
+
+// Select the best option
+$ts_calculator = \Drupal::service('rl.ts_calculator');
+$best_option = $ts_calculator->selectBestArm($scores);
+</code></pre>
+
+<h3>HTTP Endpoints</h3>
+
+<ul>
+<li><code>POST /rl/experiment/{uuid}/turns</code> - Record trials</li>
+<li><code>POST /rl/experiment/{uuid}/rewards</code> - Record successes</li>
+<li><code>GET /rl/experiment/{uuid}/scores</code> - Get scores</li>
+</ul>
+
+<h3>Related Modules</h3>
+
+<p>Looking for a ready-to-use solution for content optimization? Check out the <a href="https://www.drupal.org/project/ai_sorting"><strong>AI Sorting</strong></a> module, which builds on the RL module to provide intelligent content ordering for Drupal Views. Perfect for content marketers who want automatic optimization without custom development.</p>
+
+<p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>
+
+<h3>Resources</h3>
+<ul>
+  <li>Multi-Armed Bandit Problem explained <a href="https://en.wikipedia.org/wiki/Multi-armed_bandit" target="_blank" rel="noopener">Wikipedia</a></li>
+  <li>On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples <a href="https://www.jstor.org/stable/2332286" target="_blank" rel="noopener">JSTOR</a></li>
+  <li>Finite-time Analysis of the Multiarmed Bandit
+Problem ― <a href="https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf" target="_blank" rel="noopener">PDF</a></li>
+</ul>
+
+
+

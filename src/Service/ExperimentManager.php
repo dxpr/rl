@@ -82,11 +82,10 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function getUCB1Scores($experiment_uuid, $alpha = 2.0) {
+  public function getThompsonScores($experiment_uuid) {
     $arms_data = $this->getAllArmsData($experiment_uuid);
-    $total_turns = $this->getTotalTurns($experiment_uuid);
 
-    return $this->tsCalculator->calculateUCB1Scores($arms_data, $total_turns, $alpha);
+    return $this->tsCalculator->calculateThompsonScores($arms_data);
   }
 
 }

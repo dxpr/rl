@@ -134,11 +134,9 @@ class ExperimentController extends ControllerBase {
    * @return \Symfony\Component\HttpFoundation\JsonResponse
    *   A JSON response with the Thompson Sampling scores.
    */
-  public function getUCB1Scores(Request $request, $experiment_uuid) {
-    $alpha = $request->query->get('alpha', 2.0);
-
+  public function getThompsonScores(Request $request, $experiment_uuid) {
     try {
-      $scores = $this->experimentManager->getUCB1Scores($experiment_uuid, (float) $alpha);
+      $scores = $this->experimentManager->getThompsonScores($experiment_uuid);
       return new JsonResponse(['scores' => $scores]);
     }
     catch (\Exception $e) {

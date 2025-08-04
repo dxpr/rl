@@ -66,7 +66,7 @@ function rl_install() {
     $schema->createTable('rl_experiment_totals', $spec_totals);
   }
   catch (SchemaObjectExistsException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_totals already exists: @message', ['@message' => $e->getMessage()]);
+    // Table already exists, silently continue.
   }
 
   // Define the rl_arm_data table schema.
@@ -133,7 +133,7 @@ function rl_install() {
     $schema->createTable('rl_arm_data', $spec_arms);
   }
   catch (SchemaObjectExistsException $e) {
-    \Drupal::logger('rl')->notice('Table rl_arm_data already exists: @message', ['@message' => $e->getMessage()]);
+    // Table already exists, silently continue.
   }
 
   // Define the rl_experiment_registry table schema.
@@ -170,7 +170,7 @@ function rl_install() {
     $schema->createTable('rl_experiment_registry', $spec_registry);
   }
   catch (SchemaObjectExistsException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_registry already exists: @message', ['@message' => $e->getMessage()]);
+    // Table already exists, silently continue.
   }
 }
 
@@ -185,7 +185,7 @@ function rl_uninstall() {
     $schema->dropTable('rl_experiment_totals');
   }
   catch (SchemaObjectDoesNotExistException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_totals does not exist: @message', ['@message' => $e->getMessage()]);
+    // Table doesn't exist, silently continue.
   }
 
   // Drop the rl_arm_data table if it exists.
@@ -193,7 +193,7 @@ function rl_uninstall() {
     $schema->dropTable('rl_arm_data');
   }
   catch (SchemaObjectDoesNotExistException $e) {
-    \Drupal::logger('rl')->notice('Table rl_arm_data does not exist: @message', ['@message' => $e->getMessage()]);
+    // Table doesn't exist, silently continue.
   }
 
   // Drop the rl_experiment_registry table if it exists.
@@ -201,7 +201,7 @@ function rl_uninstall() {
     $schema->dropTable('rl_experiment_registry');
   }
   catch (SchemaObjectDoesNotExistException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_registry does not exist: @message', ['@message' => $e->getMessage()]);
+    // Table doesn't exist, silently continue.
   }
 }
 
