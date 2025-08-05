@@ -1,0 +1,112 @@
+<p>This module is included in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
+
+<blockquote>The <strong>Reinforcement Learning (RL)</strong> module implements A/B testing in the most efficient and effective way possible, minizing lost conversions using machine learning.</blockquote>
+
+<p><strong>Thompson Sampling</strong> is a learning-while-doing method. Each time a visitor lands on your site the algorithm “rolls the dice” based on what it has learned so far. Variants that have performed well roll larger numbers, so they are shown more often, while weak copies still get a small chance to prove themselves. This simple trick means the system can discover winners very quickly without stopping normal traffic.</p>
+
+<p>Traditional A/B tests run for a fixed horizon—say two weeks—during which half your visitors keep seeing the weaker version. Thompson Sampling avoids this waste. As soon as the algorithm has even a little evidence it quietly shifts most traffic to the better variant, saving conversions and shortening the wait for useful insights.</p>
+
+<p>For full details of what goes on behind the curtains check the source code: 
+<a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.
+</p>
+
+<h3>RL Modules</h3>
+
+<ul>
+<li><a href="https://www.drupal.org/project/ai_sorting"><strong>AI Sorting</strong></a> - Intelligent content ordering/switching for Drupal Views</li>
+</ul>
+
+<h3>Features</h3>
+
+<ul>
+<li><strong>Thompson Sampling Algorithm</strong> - Pure PHP implementation</li>
+<li><strong>Fast HTTP REST API</strong> - Optimized JSON endpoints for tracking and decisions</li>
+<li><strong>Administrative Reports</strong> - Experiment analysis interface</li>
+<li><strong>Service-based Architecture</strong> - Extensible design</li>
+<li><strong>Data Sovereignty, Privacy First</strong> - No cloud, just Drupal</li>
+</ul>
+
+<h3>You need RL if</h3>
+
+<ul>
+<li><strong>A/B Testing</strong> - Test content variations</li>
+<li><strong>Content Optimization</strong> - Track content engagement</li>
+<li><strong>Feature Selection</strong> - Choose features to show users</li>
+<li><strong>Recommendations</strong> - Optimize content recommendations</li>
+<li><strong>Resource Allocation</strong> - Distribute resources across options</li>
+</ul>
+
+<h3>Thompson Sampling</h3>
+
+<p>Unlike traditional A/B testing, Thompson Sampling:</p>
+
+<ul>
+<li><strong>Adapts automatically</strong> - Shifts traffic to better options</li>
+<li><strong>Handles multiple options</strong> - Works with 2+ variations, even thousands of arms are handled well</li>
+<li><strong>Continuous learning</strong> - No fixed test duration</li>
+<li><strong>Bayesian approach</strong> - Incorporates uncertainty</li>
+</ul>
+
+<h3>API</h3>
+
+<pre><code>// Get the experiment manager
+$experiment_manager = \Drupal::service('rl.experiment_manager');
+
+// Record a trial (content shown)
+$experiment_manager->recordTurn('my-experiment', 'variant-a');
+
+// Record a success (user clicked)
+$experiment_manager->recordReward('my-experiment', 'variant-a');
+
+// Get Thompson Sampling scores
+$scores = $experiment_manager->getThompsonScores('my-experiment');
+
+// Select the best option
+$ts_calculator = \Drupal::service('rl.ts_calculator');
+$best_option = $ts_calculator->selectBestArm($scores);
+</code></pre>
+
+<h3>HTTP Endpoints</h3>
+
+<h4>rl.php - High-Performance Endpoint (Recommended)</h4>
+<p><strong>For high-volume, low-latency applications, use the direct rl.php endpoint:</strong></p>
+
+<pre><code>// Record turns (trials) - when content is viewed
+const formData = new FormData();
+formData.append('action', 'turns');
+formData.append('experiment_uuid', 'abc123');
+formData.append('arm_ids', '1,2,3');
+navigator.sendBeacon('/modules/contrib/rl/rl.php', formData);
+
+// Record reward (success) - when user clicks/converts  
+const rewardData = new FormData();
+rewardData.append('action', 'rewards');
+rewardData.append('experiment_uuid', 'abc123');
+rewardData.append('arm_id', '1');
+navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
+
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>Minimal server overhead (no full Drupal bootstrap)</li>
+<li>Faster response times for JavaScript tracking</li>
+<li>Optimized for <code>navigator.sendBeacon()</code> requests</li>
+<li>Used by AI Sorting module for real-time content optimization</li>
+</ul>
+
+<h4>Drupal Routes - Full API</h4>
+<p><strong>For applications requiring full Drupal integration:</strong></p>
+<ul>
+<li><code>POST /rl/experiment/{uuid}/turns</code> - Record trials</li>
+<li><code>POST /rl/experiment/{uuid}/rewards</code> - Record successes</li>
+<li><code>GET /rl/experiment/{uuid}/scores</code> - Get scores</li>
+</ul>
+
+<p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>
+
+<h3>Resources</h3>
+<ul>
+  <li>Multi-Armed Bandit Problem explained <a href="https://en.wikipedia.org/wiki/Multi-armed_bandit" target="_blank" rel="noopener">Wikipedia</a></li>
+  <li>On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples <a href="https://www.jstor.org/stable/2332286" target="_blank" rel="noopener">JSTOR</a></li>
+  <li>Finite-time Analysis of the Multiarmed Bandit
+Problem ― <a href="https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf" target="_blank" rel="noopener">PDF</a></li>
+</ul>
