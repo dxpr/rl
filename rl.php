@@ -30,36 +30,8 @@ if (!preg_match('/^[a-zA-Z0-9]+$/', $experiment_uuid)) {
 
 // Catch exceptions when site is not configured or storage fails
 try {
-  // Find Drupal root - more robust path detection
-  $drupal_root = dirname(__FILE__);
-  $max_iterations = 10;
-  $iterations = 0;
-  
-  while (!file_exists($drupal_root . '/autoload.php') && $iterations < $max_iterations) {
-    $drupal_root = dirname($drupal_root);
-    $iterations++;
-  }
-  
-  if (!file_exists($drupal_root . '/autoload.php')) {
-    // Fallback: try common patterns
-    $possible_roots = [
-      dirname(dirname(dirname(__FILE__))), // modules/contrib/rl -> root
-      dirname(dirname(dirname(dirname(__FILE__)))), // modules/custom/rl -> root  
-      dirname(dirname(dirname(dirname(dirname(__FILE__))))), // web/modules/contrib/rl -> root
-    ];
-    
-    foreach ($possible_roots as $root) {
-      if (file_exists($root . '/autoload.php')) {
-        $drupal_root = $root;
-        break;
-      }
-    }
-  }
-  
-  if (!file_exists($drupal_root . '/autoload.php')) {
-    http_response_code(500);
-    exit();
-  }
+  // Assumes module in modules/contrib/rl, so three levels below root.
+  chdir('../../..');
 
   $autoloader = require_once $drupal_root . '/autoload.php';
 
@@ -67,6 +39,13 @@ try {
   $kernel = DrupalKernel::createFromRequest($request, $autoloader, 'prod');
   $kernel->boot();
   $container = $kernel->getContainer();
+
+  // Check if experiment is registered
+  $registry = $container->get('rl.experiment_registry');
+  if (!$registry->isRegistered($experiment_uuid)) {
+    // Silently ignore unregistered experiments like statistics module
+    exit();
+  }
 
   // Get the experiment data storage service
   $storage = $container->get('rl.experiment_data_storage');
@@ -114,14 +93,5 @@ try {
   
 }
 catch (\Exception $e) {
-  // Silently fail - same as statistics.php
-  // Log error if logging is available but don't expose details
-  if (isset($container) && $container && $container->has('logger.factory')) {
-    try {
-      $container->get('logger.factory')->get('rl')->error('RL endpoint error: @message', ['@message' => $e->getMessage()]);
-    } catch (\Exception $log_error) {
-      // Ignore logging errors
-    }
-  }
-  http_response_code(500);
+  // Do nothing if there is PDO Exception or other failure.
 }

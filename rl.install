@@ -66,7 +66,7 @@ function rl_install() {
     $schema->createTable('rl_experiment_totals', $spec_totals);
   }
   catch (SchemaObjectExistsException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_totals already exists: @message', ['@message' => $e->getMessage()]);
+    // Table already exists, silently continue.
   }
 
   // Define the rl_arm_data table schema.
@@ -133,7 +133,44 @@ function rl_install() {
     $schema->createTable('rl_arm_data', $spec_arms);
   }
   catch (SchemaObjectExistsException $e) {
-    \Drupal::logger('rl')->notice('Table rl_arm_data already exists: @message', ['@message' => $e->getMessage()]);
+    // Table already exists, silently continue.
+  }
+
+  // Define the rl_experiment_registry table schema.
+  $spec_registry = [
+    'description' => 'Registry of experiments and their owning modules',
+    'fields' => [
+      'uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'Experiment UUID',
+      ],
+      'module' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Module that owns this experiment',
+      ],
+      'registered_at' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when registered',
+      ],
+    ],
+    'primary key' => ['uuid'],
+    'indexes' => [
+      'module' => ['module'],
+    ],
+  ];
+
+  // Create the rl_experiment_registry table.
+  try {
+    $schema->createTable('rl_experiment_registry', $spec_registry);
+  }
+  catch (SchemaObjectExistsException $e) {
+    // Table already exists, silently continue.
   }
 }
 
@@ -148,7 +185,7 @@ function rl_uninstall() {
     $schema->dropTable('rl_experiment_totals');
   }
   catch (SchemaObjectDoesNotExistException $e) {
-    \Drupal::logger('rl')->notice('Table rl_experiment_totals does not exist: @message', ['@message' => $e->getMessage()]);
+    // Table doesn't exist, silently continue.
   }
 
   // Drop the rl_arm_data table if it exists.
@@ -156,7 +193,15 @@ function rl_uninstall() {
     $schema->dropTable('rl_arm_data');
   }
   catch (SchemaObjectDoesNotExistException $e) {
-    \Drupal::logger('rl')->notice('Table rl_arm_data does not exist: @message', ['@message' => $e->getMessage()]);
+    // Table doesn't exist, silently continue.
+  }
+
+  // Drop the rl_experiment_registry table if it exists.
+  try {
+    $schema->dropTable('rl_experiment_registry');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    // Table doesn't exist, silently continue.
   }
 }
 
@@ -267,60 +312,34 @@ function rl_schema() {
     ],
   ];
 
+  $schema['rl_experiment_registry'] = [
+    'description' => 'Registry of experiments and their owning modules',
+    'fields' => [
+      'uuid' => [
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'Experiment UUID',
+      ],
+      'module' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Module that owns this experiment',
+      ],
+      'registered_at' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when registered',
+      ],
+    ],
+    'primary key' => ['uuid'],
+    'indexes' => [
+      'module' => ['module'],
+    ],
+  ];
+
   return $schema;
 }
 
-/**
- * Add created and updated timestamp columns to RL tables.
- */
-function rl_update_8001() {
-  $schema = \Drupal::database()->schema();
-  
-  // Add timestamp columns to rl_experiment_totals table
-  if ($schema->tableExists('rl_experiment_totals')) {
-    if (!$schema->fieldExists('rl_experiment_totals', 'created')) {
-      $schema->addField('rl_experiment_totals', 'created', [
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Timestamp when this experiment was first created.',
-      ]);
-    }
-    
-    if (!$schema->fieldExists('rl_experiment_totals', 'updated')) {
-      $schema->addField('rl_experiment_totals', 'updated', [
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Timestamp when this experiment was last updated.',
-      ]);
-    }
-  }
-  
-  // Add timestamp columns to rl_arm_data table
-  if ($schema->tableExists('rl_arm_data')) {
-    if (!$schema->fieldExists('rl_arm_data', 'created')) {
-      $schema->addField('rl_arm_data', 'created', [
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Timestamp when this arm was first created.',
-      ]);
-    }
-    
-    if (!$schema->fieldExists('rl_arm_data', 'updated')) {
-      $schema->addField('rl_arm_data', 'updated', [
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Timestamp when this arm was last updated.',
-      ]);
-    }
-  }
-  
-  return t('Added created and updated timestamp columns to RL tables.');
-}

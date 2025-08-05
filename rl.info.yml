@@ -1,7 +1,7 @@
 name: 'Reinforcement Learning'
 type: module
 description: 'Core API module for tracking multi-armed bandit experiments using turns and rewards.'
-core_version_requirement: ^10
+core_version_requirement: ^10.3 | ^11
 package: Custom
 dependencies:
   - drupal:system

@@ -28,7 +28,7 @@ rl.experiment.reward:
 rl.experiment.scores:
   path: '/rl/experiment/{experiment_uuid}/scores'
   defaults:
-    _controller: '\Drupal\rl\Controller\ExperimentController::getUCB1Scores'
+    _controller: '\Drupal\rl\Controller\ExperimentController::getThompsonScores'
   methods: [GET]
   requirements:
     _access: 'TRUE'
