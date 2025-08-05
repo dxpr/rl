@@ -33,7 +33,7 @@ try {
   // Assumes module in modules/contrib/rl, so three levels below root.
   chdir('../../..');
 
-  $autoloader = require_once 'autoload.php';
+  $autoloader = require_once $drupal_root . '/autoload.php';
 
   $request = Request::createFromGlobals();
   $kernel = DrupalKernel::createFromRequest($request, $autoloader, 'prod');
