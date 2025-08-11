@@ -80,11 +80,40 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL) {
+  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL, array $requested_arms = []) {
     $arms_data = $this->storage->getAllArmsData($experiment_uuid, $time_window_seconds);
 
+    // If specific arms are requested, ensure they all have scores.
+    // New arms get initialized with zero stats for maximum exploration.
+    if (!empty($requested_arms)) {
+      foreach ($requested_arms as $arm_id) {
+        if (!isset($arms_data[$arm_id])) {
+          // New arm: initialize with zero stats (0 turns, 0 rewards).
+          // Thompson sampling will give these high exploration scores.
+          $arms_data[$arm_id] = (object) [
+            'arm_id' => $arm_id,
+            'turns' => 0,
+            'rewards' => 0,
+          ];
+        }
+      }
+    }
+
+    // Complete cold start: no arms at all.
     if (empty($arms_data)) {
-      return [];
+      // If no specific arms requested, we can't generate scores.
+      if (empty($requested_arms)) {
+        return [];
+      }
+
+      // If arms were requested, initialize them all as new.
+      foreach ($requested_arms as $arm_id) {
+        $arms_data[$arm_id] = (object) [
+          'arm_id' => $arm_id,
+          'turns' => 0,
+          'rewards' => 0,
+        ];
+      }
     }
 
     return $this->tsCalculator->calculateThompsonScores($arms_data);
