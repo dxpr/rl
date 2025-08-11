@@ -56,7 +56,7 @@ function rl_install() {
       'experiment_unique' => ['experiment_uuid'],
     ],
     'indexes' => [
-      'experiment_uuid' => ['experiment_uuid'],
+      'experiment_updated' => ['experiment_uuid', 'updated'],
     ],
   ];
 
@@ -123,7 +123,7 @@ function rl_install() {
       'experiment_arm' => ['experiment_uuid', 'arm_id'],
     ],
     'indexes' => [
-      'experiment_uuid' => ['experiment_uuid'],
+      'covering_time_window' => ['experiment_uuid', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
     ],
   ];
 
@@ -249,7 +249,7 @@ function rl_schema() {
       'experiment_unique' => ['experiment_uuid'],
     ],
     'indexes' => [
-      'experiment_uuid' => ['experiment_uuid'],
+      'experiment_updated' => ['experiment_uuid', 'updated'],
     ],
   ];
 
@@ -307,7 +307,7 @@ function rl_schema() {
       'experiment_arm' => ['experiment_uuid', 'arm_id'],
     ],
     'indexes' => [
-      'experiment_uuid' => ['experiment_uuid'],
+      'covering_time_window' => ['experiment_uuid', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
     ],
   ];
 
