@@ -76,3 +76,11 @@ rl.experiment.delete:
   requirements:
     _permission: 'administer rl experiments'
     experiment_uuid: '.+'
+
+rl.settings:
+  path: '/admin/config/development/rl'
+  defaults:
+    _form: '\Drupal\rl\Form\RlSettingsForm'
+    _title: 'RL Settings'
+  requirements:
+    _permission: 'administer site configuration'

@@ -155,13 +155,33 @@ class ReportsController extends ControllerBase {
 
     $build = [];
 
+    $actions = [];
+    
     if ($this->currentUser()->hasPermission('administer rl experiments')) {
       $add_url = Url::fromRoute('rl.experiment.add');
-      $build['add_link'] = [
+      $actions[] = [
         '#type' => 'link',
         '#title' => $this->t('Add experiment'),
         '#url' => $add_url,
         '#attributes' => ['class' => ['button', 'button--primary']],
+      ];
+    }
+
+    if ($this->currentUser()->hasPermission('administer site configuration')) {
+      $settings_url = Url::fromRoute('rl.settings');
+      $actions[] = [
+        '#type' => 'link',
+        '#title' => $this->t('RL Settings'),
+        '#url' => $settings_url,
+        '#attributes' => ['class' => ['button']],
+      ];
+    }
+
+    if (!empty($actions)) {
+      $build['actions'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rl-actions']],
+        'links' => $actions,
         '#suffix' => '<br><br>',
       ];
     }

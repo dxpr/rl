@@ -109,4 +109,22 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function getExperimentName(string $uuid): ?string {
+    try {
+      $result = $this->database->select('rl_experiment_registry', 'r')
+        ->fields('r', ['experiment_name'])
+        ->condition('uuid', $uuid)
+        ->execute()
+        ->fetchField();
+
+      return $result ?: NULL;
+    }
+    catch (\Exception $e) {
+      return NULL;
+    }
+  }
+
 }

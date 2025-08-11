@@ -1,0 +1,7 @@
+rl.settings:
+  type: config_object
+  label: 'RL module settings'
+  mapping:
+    debug_mode:
+      type: boolean
+      label: 'Debug mode'
