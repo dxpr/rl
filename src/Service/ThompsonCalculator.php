@@ -47,11 +47,12 @@ class ThompsonCalculator {
     $scores = [];
 
     foreach ($arms_data as $id => $arm) {
-      // Good ratings + 1.
       $alpha = $arm->rewards + 1;
-      // Bad  ratings + 1.
       $beta = ($arm->turns - $arm->rewards) + 1;
-      $scores[$id] = $this->randBeta($alpha, $beta);
+      $base_score = $this->randBeta($alpha, $beta);
+
+      $tie_breaker = mt_rand(1, 999) / 1000000;
+      $scores[$id] = $base_score + $tie_breaker;
     }
     return $scores;
   }

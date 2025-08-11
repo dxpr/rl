@@ -11,62 +11,70 @@
 use Drupal\Core\DrupalKernel;
 use Symfony\Component\HttpFoundation\Request;
 
-// CRITICAL: Only accept POST requests for security and caching reasons.
 $action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $experiment_uuid = filter_input(INPUT_POST, 'experiment_uuid', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-// Validate inputs more strictly.
 if (!$action || !$experiment_uuid || !in_array($action, ['turn', 'turns', 'reward'])) {
   http_response_code(400);
-  exit();
+  exit('Invalid request parameters');
 }
 
-// Additional validation for experiment_uuid (should be alphanumeric/hash)
 if (!preg_match('/^[a-zA-Z0-9]+$/', $experiment_uuid)) {
   http_response_code(400);
-  exit();
+  exit('Invalid experiment_uuid format');
 }
 
-// Catch exceptions when site is not configured or storage fails.
 try {
-  // Assumes module in modules/contrib/rl, so three levels below root.
-  chdir('../../..');
+  $levels_up = '../../../';
 
-  $autoloader = require_once $drupal_root . '/autoload.php';
+  chdir($levels_up);
+  $drupal_root = getcwd();
+  $autoload_path = $drupal_root . '/../vendor/autoload.php';
+
+  if (!file_exists($autoload_path)) {
+    $script_filename = $_SERVER['SCRIPT_FILENAME'] ?? '';
+    if (!preg_match('/^[a-zA-Z0-9\/_.-]+$/', $script_filename)) {
+      http_response_code(500);
+      exit('Invalid script filename');
+    }
+
+    $drupal_root = dirname(dirname(dirname(dirname($script_filename))));
+    $autoload_path = $drupal_root . '/../vendor/autoload.php';
+
+    if (!file_exists($autoload_path)) {
+      http_response_code(500);
+      exit('Drupal autoload.php not found');
+    }
+  }
+
+  $autoloader = require_once $autoload_path;
 
   $request = Request::createFromGlobals();
   $kernel = DrupalKernel::createFromRequest($request, $autoloader, 'prod');
   $kernel->boot();
   $container = $kernel->getContainer();
 
-  // Check if experiment is registered.
   $registry = $container->get('rl.experiment_registry');
   if (!$registry->isRegistered($experiment_uuid)) {
-    // Silently ignore unregistered experiments like statistics module.
     exit();
   }
 
-  // Get the experiment data storage service.
   $storage = $container->get('rl.experiment_data_storage');
 
-  // Handle the different actions.
   switch ($action) {
     case 'turn':
-      // Validate arm_id for single turn.
       if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
         $storage->recordTurn($experiment_uuid, $arm_id);
       }
       break;
 
     case 'turns':
-      // Handle multiple turns with better validation.
       $arm_ids = filter_input(INPUT_POST, 'arm_ids', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
       if ($arm_ids) {
         $arm_ids_array = explode(',', $arm_ids);
         $arm_ids_array = array_map('trim', $arm_ids_array);
 
-        // Validate each arm_id.
         $valid_arm_ids = [];
         foreach ($arm_ids_array as $aid) {
           if (preg_match('/^[a-zA-Z0-9_-]+$/', $aid)) {
@@ -81,16 +89,12 @@ try {
       break;
 
     case 'reward':
-      // Validate arm_id for reward.
       if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
         $storage->recordReward($experiment_uuid, $arm_id);
       }
       break;
   }
 
-  // Send success response.
-  http_response_code(200);
 }
 catch (\Exception $e) {
-  // Do nothing if there is PDO Exception or other failure.
 }

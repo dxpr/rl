@@ -151,6 +151,12 @@ function rl_install() {
         'not null' => TRUE,
         'description' => 'Module that owns this experiment',
       ],
+      'experiment_name' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'Human-readable experiment name',
+      ],
       'registered_at' => [
         'type' => 'int',
         'unsigned' => TRUE,
@@ -325,6 +331,12 @@ function rl_schema() {
         'length' => 255,
         'not null' => TRUE,
         'description' => 'Module that owns this experiment',
+      ],
+      'experiment_name' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'Human-readable experiment name',
       ],
       'registered_at' => [
         'type' => 'int',

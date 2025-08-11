@@ -79,10 +79,14 @@ interface ExperimentManagerInterface {
    *   The experiment UUID.
    * @param int|null $time_window_seconds
    *   Optional time window in seconds. Only considers arms active within this timeframe.
+   * @param array $requested_arms
+   *   Optional array of arm IDs that need scores. New arms will be initialized
+   *   with zero stats (0 turns, 0 rewards) to ensure maximum exploration.
    *
    * @return array
-   *   Array of Thompson Sampling scores keyed by arm_id.
+   *   Array of Thompson Sampling scores keyed by arm_id. Returns empty array
+   *   only if no arms exist AND no requested_arms were provided.
    */
-  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL);
+  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL, array $requested_arms = []);
 
 }
