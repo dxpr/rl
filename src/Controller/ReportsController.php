@@ -156,7 +156,7 @@ class ReportsController extends ControllerBase {
     $build = [];
 
     $actions = [];
-    
+
     if ($this->currentUser()->hasPermission('administer rl experiments')) {
       $add_url = Url::fromRoute('rl.experiment.add');
       $actions[] = [
