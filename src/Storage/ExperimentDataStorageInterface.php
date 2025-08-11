@@ -55,11 +55,13 @@ interface ExperimentDataStorageInterface {
    *
    * @param string $experiment_uuid
    *   The experiment UUID.
+   * @param int|null $time_window_seconds
+   *   Optional time window in seconds. Only returns arms active within this timeframe.
    *
    * @return array
-   *   Array of arm data objects.
+   *   Array of arm data objects keyed by arm_id.
    */
-  public function getAllArmsData($experiment_uuid);
+  public function getAllArmsData($experiment_uuid, $time_window_seconds = NULL);
 
   /**
    * Gets the total number of turns for an experiment.
@@ -71,18 +73,5 @@ interface ExperimentDataStorageInterface {
    *   The total number of turns.
    */
   public function getTotalTurns($experiment_uuid);
-
-  /**
-   * Gets data for all arms in an experiment with seconds-based time window.
-   *
-   * @param string $experiment_uuid
-   *   The experiment UUID.
-   * @param int|null $time_window_seconds
-   *   Optional time window in seconds. Only returns arms active within this timeframe.
-   *
-   * @return array
-   *   Array of arm data objects keyed by arm_id.
-   */
-  public function getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds = NULL);
 
 }

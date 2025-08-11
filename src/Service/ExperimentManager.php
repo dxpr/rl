@@ -81,7 +81,7 @@ class ExperimentManager implements ExperimentManagerInterface {
    * {@inheritdoc}
    */
   public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL) {
-    $arms_data = $this->storage->getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds);
+    $arms_data = $this->storage->getAllArmsData($experiment_uuid, $time_window_seconds);
 
     if (empty($arms_data)) {
       return [];
