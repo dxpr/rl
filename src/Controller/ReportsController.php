@@ -83,12 +83,12 @@ class ReportsController extends ControllerBase {
    */
   public function experimentsOverview() {
     $header = [
+      $this->t('Operations'),
       $this->t('Experiment ID'),
-      $this->t('Module'),
+      $this->t('Ownership'),
       $this->t('Total Turns'),
       $this->t('Total Arms'),
       $this->t('Last Activity'),
-      $this->t('Operations'),
     ];
 
     $rows = [];
@@ -145,12 +145,12 @@ class ReportsController extends ControllerBase {
       $experiment_name = $experiment_display ? \Drupal::service('renderer')->renderPlain($experiment_display) : $experiment->uuid;
 
       $rows[] = [
+        ['data' => ['#markup' => $operations_markup]],
         $experiment_name,
         $experiment->module,
         $experiment->total_turns ?: 0,
         $arms_count,
         $last_activity,
-        ['data' => ['#markup' => $operations_markup]],
       ];
     }
 
