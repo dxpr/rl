@@ -110,17 +110,11 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    * {@inheritdoc}
    */
   public function getAllArmsData($experiment_uuid, $time_window_days = NULL) {
-    $query = $this->database->select('rl_arm_data', 'ad')
-      ->fields('ad', ['arm_id', 'turns', 'rewards', 'created', 'updated'])
-      ->condition('experiment_uuid', $experiment_uuid);
-
-    // Apply time window filter if specified.
-    if ($time_window_days !== NULL && $time_window_days > 0) {
-      $cutoff_timestamp = \Drupal::time()->getRequestTime() - ($time_window_days * 86400);
-      $query->condition('updated', $cutoff_timestamp, '>=');
+    $time_window_seconds = NULL;
+    if ($time_window_days && $time_window_days > 0) {
+      $time_window_seconds = $time_window_days * 86400;
     }
-
-    return $query->execute()->fetchAllAssoc('arm_id');
+    return $this->getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds);
   }
 
   /**
@@ -147,6 +141,22 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     $result = $query->execute()->fetchField();
     return $result ? (int) $result : 0;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds = NULL) {
+    $query = $this->database->select('rl_arm_data', 'ad')
+      ->fields('ad', ['arm_id', 'turns', 'rewards', 'created', 'updated'])
+      ->condition('experiment_uuid', $experiment_uuid);
+
+    if ($time_window_seconds && $time_window_seconds > 0) {
+      $cutoff_timestamp = \Drupal::time()->getRequestTime() - $time_window_seconds;
+      $query->condition('updated', $cutoff_timestamp, '>=');
+    }
+
+    return $query->execute()->fetchAllAssoc('arm_id');
   }
 
 }
