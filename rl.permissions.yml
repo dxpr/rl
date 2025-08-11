@@ -1,7 +1,8 @@
-administer reinforcement learning:
-  title: 'Administer Reinforcement Learning'
-  description: 'Manage RL experiments and view analytics'
+administer rl experiments:
+  title: 'Administer RL experiments'
+  description: 'Create, update, and delete reinforcement learning experiments.'
+  restrict access: true
 
-view reinforcement learning data:
-  title: 'View Reinforcement Learning data'
-  description: 'Access experiment scores and analytics'
+view rl reports:
+  title: 'View RL reports'  
+  description: 'View reinforcement learning experiment reports and statistics.'

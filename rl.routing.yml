@@ -40,13 +40,39 @@ rl.reports.experiments:
     _controller: '\Drupal\rl\Controller\ReportsController::experimentsOverview'
     _title: 'RL Experiments'
   requirements:
-    _permission: 'administer rl experiments'
+    _permission: 'view rl reports'
 
 rl.reports.experiment_detail:
   path: '/admin/reports/rl/experiment/{experiment_uuid}'
   defaults:
     _controller: '\Drupal\rl\Controller\ReportsController::experimentDetail'
     _title: 'RL Experiment Detail'
+  requirements:
+    _permission: 'view rl reports'
+    experiment_uuid: '.+'
+
+rl.experiment.add:
+  path: '/admin/reports/rl/add'
+  defaults:
+    _form: '\Drupal\rl\Form\ExperimentForm'
+    _title: 'Add RL Experiment'
+  requirements:
+    _permission: 'administer rl experiments'
+
+rl.experiment.edit:
+  path: '/admin/reports/rl/experiment/{experiment_uuid}/edit'
+  defaults:
+    _form: '\Drupal\rl\Form\ExperimentForm'
+    _title: 'Edit RL Experiment'
+  requirements:
+    _permission: 'administer rl experiments'
+    experiment_uuid: '.+'
+
+rl.experiment.delete:
+  path: '/admin/reports/rl/experiment/{experiment_uuid}/delete'
+  defaults:
+    _form: '\Drupal\rl\Form\ExperimentDeleteForm'
+    _title: 'Delete RL Experiment'
   requirements:
     _permission: 'administer rl experiments'
     experiment_uuid: '.+'

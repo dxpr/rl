@@ -111,10 +111,28 @@ class ReportsController extends ControllerBase {
         ->execute()
         ->fetchField();
 
+      $operations = [];
+
       $detail_url = Url::fromRoute('rl.reports.experiment_detail', [
         'experiment_uuid' => $experiment->uuid,
       ]);
-      $detail_link = Link::fromTextAndUrl($this->t('View details'), $detail_url);
+      $operations[] = Link::fromTextAndUrl($this->t('View'), $detail_url);
+
+      if ($this->currentUser()->hasPermission('administer rl experiments')) {
+        $edit_url = Url::fromRoute('rl.experiment.edit', [
+          'experiment_uuid' => $experiment->uuid,
+        ]);
+        $operations[] = Link::fromTextAndUrl($this->t('Edit'), $edit_url);
+
+        $delete_url = Url::fromRoute('rl.experiment.delete', [
+          'experiment_uuid' => $experiment->uuid,
+        ]);
+        $operations[] = Link::fromTextAndUrl($this->t('Delete'), $delete_url);
+      }
+
+      $operations_markup = implode(' | ', array_map(function ($link) {
+        return $link->toString();
+      }, $operations));
 
       // Format last activity timestamp - use totals_updated if available, otherwise registered_at.
       $last_activity_timestamp = $experiment->totals_updated ?: $experiment->registered_at;
@@ -132,11 +150,24 @@ class ReportsController extends ControllerBase {
         $experiment->total_turns ?: 0,
         $arms_count,
         $last_activity,
-        $detail_link,
+        ['data' => ['#markup' => $operations_markup]],
       ];
     }
 
-    $build = [
+    $build = [];
+
+    if ($this->currentUser()->hasPermission('administer rl experiments')) {
+      $add_url = Url::fromRoute('rl.experiment.add');
+      $build['add_link'] = [
+        '#type' => 'link',
+        '#title' => $this->t('Add experiment'),
+        '#url' => $add_url,
+        '#attributes' => ['class' => ['button', 'button--primary']],
+        '#suffix' => '<br><br>',
+      ];
+    }
+
+    $build['table'] = [
       '#theme' => 'table',
       '#header' => $header,
       '#rows' => $rows,
@@ -144,7 +175,6 @@ class ReportsController extends ControllerBase {
       '#caption' => $this->t('All Reinforcement Learning experiments and their statistics.'),
     ];
 
-    // Add some explanatory text.
     $build['#prefix'] = '<p>' . $this->t('This page shows all active reinforcement learning experiments. Each experiment represents a multi-armed bandit test where different "arms" (options) are being evaluated based on user interactions (turns and rewards).') . '</p>';
 
     return $build;
