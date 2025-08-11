@@ -60,9 +60,33 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    * {@inheritdoc}
    */
   public function recordTurns($experiment_uuid, array $arm_ids) {
+    $timestamp = \Drupal::time()->getRequestTime();
+
+    // Record a turn for each arm (each arm gets exposure).
     foreach ($arm_ids as $arm_id) {
-      $this->recordTurn($experiment_uuid, $arm_id);
+      $this->database->merge('rl_arm_data')
+        ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
+        ->fields([
+          'turns' => 1,
+          'created' => $timestamp,
+          'updated' => $timestamp,
+        ])
+        ->expression('turns', 'turns + :inc', [':inc' => 1])
+        ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
+        ->execute();
     }
+
+    // Record only ONE total turn per call (1 page view = 1 turn).
+    $this->database->merge('rl_experiment_totals')
+      ->key(['experiment_uuid' => $experiment_uuid])
+      ->fields([
+        'total_turns' => 1,
+        'created' => $timestamp,
+        'updated' => $timestamp,
+      ])
+      ->expression('total_turns', 'total_turns + :inc', [':inc' => 1])
+      ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
+      ->execute();
   }
 
   /**
