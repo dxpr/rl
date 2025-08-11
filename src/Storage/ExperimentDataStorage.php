@@ -8,7 +8,6 @@ use Drupal\Core\Database\Connection;
  * Storage handler for experiment data.
  */
 class ExperimentDataStorage implements ExperimentDataStorageInterface {
-
   /**
    * The database connection.
    *
@@ -31,8 +30,8 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    */
   public function recordTurn($experiment_uuid, $arm_id) {
     $timestamp = \Drupal::time()->getRequestTime();
-    
-    // Update arm data
+
+    // Update arm data.
     $this->database->merge('rl_arm_data')
       ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
       ->fields([
@@ -44,7 +43,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
-    // Update total turns
+    // Update total turns.
     $this->database->merge('rl_experiment_totals')
       ->key(['experiment_uuid' => $experiment_uuid])
       ->fields([
@@ -71,7 +70,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    */
   public function recordReward($experiment_uuid, $arm_id) {
     $timestamp = \Drupal::time()->getRequestTime();
-    
+
     $this->database->merge('rl_arm_data')
       ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
       ->fields([
@@ -82,8 +81,8 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->expression('rewards', 'rewards + :inc', [':inc' => 1])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
-      
-    // Also update experiment totals timestamp
+
+    // Also update experiment totals timestamp.
     $this->database->merge('rl_experiment_totals')
       ->key(['experiment_uuid' => $experiment_uuid])
       ->fields([

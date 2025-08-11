@@ -12,7 +12,6 @@ use Symfony\Component\HttpFoundation\Request;
  * Controller for RL experiment operations.
  */
 class ExperimentController extends ControllerBase {
-
   /**
    * The experiment manager service.
    *
@@ -35,8 +34,8 @@ class ExperimentController extends ControllerBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('rl.experiment_manager')
-    );
+          $container->get('rl.experiment_manager')
+      );
   }
 
   /**

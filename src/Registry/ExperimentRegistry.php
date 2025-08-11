@@ -8,7 +8,6 @@ use Drupal\Core\Database\Connection;
  * Service for managing experiment registration.
  */
 class ExperimentRegistry implements ExperimentRegistryInterface {
-
   /**
    * The database connection.
    *
@@ -31,7 +30,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
    */
   public function register(string $uuid, string $module): void {
     try {
-      // Use merge to handle duplicate registrations gracefully
+      // Use merge to handle duplicate registrations gracefully.
       $this->database->merge('rl_experiment_registry')
         ->key(['uuid' => $uuid])
         ->fields([
@@ -41,7 +40,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
         ->execute();
     }
     catch (\Exception $e) {
-      // Log error but don't break the page
+      // Log error but don't break the page.
       \Drupal::logger('rl')->error('Failed to register experiment @uuid: @message', [
         '@uuid' => $uuid,
         '@message' => $e->getMessage(),
@@ -60,11 +59,11 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
         ->countQuery()
         ->execute()
         ->fetchField();
-      
+
       return (bool) $result;
     }
     catch (\Exception $e) {
-      // Return false if table doesn't exist yet
+      // Return false if table doesn't exist yet.
       return FALSE;
     }
   }
@@ -79,7 +78,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
         ->condition('uuid', $uuid)
         ->execute()
         ->fetchField();
-      
+
       return $result ?: NULL;
     }
     catch (\Exception $e) {
@@ -96,7 +95,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
         ->fields('r', ['uuid', 'module'])
         ->execute()
         ->fetchAllKeyed();
-      
+
       return $results;
     }
     catch (\Exception $e) {

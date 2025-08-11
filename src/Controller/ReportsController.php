@@ -2,6 +2,7 @@
 
 namespace Drupal\rl\Controller;
 
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Datetime\DateFormatterInterface;
@@ -15,7 +16,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Controller for RL experiment reports.
  */
 class ReportsController extends ControllerBase {
-
   /**
    * The database connection.
    *
@@ -68,11 +68,11 @@ class ReportsController extends ControllerBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('database'),
-      $container->get('rl.experiment_data_storage'),
-      $container->get('date.formatter'),
-      $container->get('rl.experiment_decorator_manager')
-    );
+          $container->get('database'),
+          $container->get('rl.experiment_data_storage'),
+          $container->get('date.formatter'),
+          $container->get('rl.experiment_decorator_manager')
+      );
   }
 
   /**
@@ -104,7 +104,7 @@ class ReportsController extends ControllerBase {
     $experiments = $query->execute()->fetchAll();
 
     foreach ($experiments as $experiment) {
-      // Count arms for this experiment
+      // Count arms for this experiment.
       $arms_count = $this->database->select('rl_arm_data', 'ad')
         ->condition('experiment_uuid', $experiment->uuid)
         ->countQuery()
@@ -116,13 +116,13 @@ class ReportsController extends ControllerBase {
       ]);
       $detail_link = Link::fromTextAndUrl($this->t('View details'), $detail_url);
 
-      // Format last activity timestamp - use totals_updated if available, otherwise registered_at
+      // Format last activity timestamp - use totals_updated if available, otherwise registered_at.
       $last_activity_timestamp = $experiment->totals_updated ?: $experiment->registered_at;
-      $last_activity = $last_activity_timestamp > 0 
-        ? $this->dateFormatter->format($last_activity_timestamp, 'short')
-        : $this->t('Never');
+      $last_activity = $last_activity_timestamp > 0
+            ? $this->dateFormatter->format($last_activity_timestamp, 'short')
+            : $this->t('Never');
 
-      // Get decorated experiment name or fallback to UUID
+      // Get decorated experiment name or fallback to UUID.
       $experiment_display = $this->decoratorManager->decorateExperiment($experiment->uuid);
       $experiment_name = $experiment_display ? \Drupal::service('renderer')->renderPlain($experiment_display) : $experiment->uuid;
 
@@ -144,7 +144,7 @@ class ReportsController extends ControllerBase {
       '#caption' => $this->t('All Reinforcement Learning experiments and their statistics.'),
     ];
 
-    // Add some explanatory text
+    // Add some explanatory text.
     $build['#prefix'] = '<p>' . $this->t('This page shows all active reinforcement learning experiments. Each experiment represents a multi-armed bandit test where different "arms" (options) are being evaluated based on user interactions (turns and rewards).') . '</p>';
 
     return $build;
@@ -160,7 +160,7 @@ class ReportsController extends ControllerBase {
    *   A render array.
    */
   public function experimentDetail($experiment_uuid) {
-    // Get experiment totals
+    // Get experiment totals.
     $experiment_totals = $this->database->select('rl_experiment_totals', 'et')
       ->fields('et')
       ->condition('experiment_uuid', $experiment_uuid)
@@ -168,10 +168,10 @@ class ReportsController extends ControllerBase {
       ->fetchObject();
 
     if (!$experiment_totals) {
-      throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException();
+      throw new NotFoundHttpException();
     }
 
-    // Get all arms for this experiment
+    // Get all arms for this experiment.
     $arms_query = $this->database->select('rl_arm_data', 'ad')
       ->fields('ad')
       ->condition('experiment_uuid', $experiment_uuid)
@@ -191,13 +191,14 @@ class ReportsController extends ControllerBase {
 
     foreach ($arms as $arm) {
       $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
-      
-      // Calculate Thompson Sampling score
+
+      // Calculate Thompson Sampling score.
       $alpha_param = $arm->rewards + 1;
       $beta_param = ($arm->turns - $arm->rewards) + 1;
-      $ts_score = $alpha_param / ($alpha_param + $beta_param); // Beta mean as approximation
+      // Beta mean as approximation.
+      $ts_score = $alpha_param / ($alpha_param + $beta_param);
 
-      // Get decorated arm name or fallback to arm ID
+      // Get decorated arm name or fallback to arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_uuid, $arm->arm_id);
       $arm_name = $arm_display ? \Drupal::service('renderer')->renderPlain($arm_display) : $arm->arm_id;
 
@@ -222,7 +223,7 @@ class ReportsController extends ControllerBase {
       'table' => $table,
     ];
 
-    // Add explanatory text
+    // Add explanatory text.
     $build['#prefix'] = '<p>' . $this->t('This page shows detailed information about a specific reinforcement learning experiment and all its arms (options being tested).') . '</p>';
     $build['#suffix'] = '<p>' . $this->t('<strong>Terms:</strong><br>• <em>Turns</em>: Number of times this arm was presented/tried<br>• <em>Rewards</em>: Number of times this arm received positive feedback<br>• <em>Success Rate</em>: Percentage of turns that resulted in rewards<br>• <em>TS Score</em>: Thompson Sampling expected success rate (higher = more likely to be selected)<br>• <em>First Seen</em>: When this content was first added to the experiment<br>• <em>Last Updated</em>: When this arm last received activity (turns or rewards)') . '</p>';
 

@@ -2,8 +2,8 @@
 set -e
 
 if [ -z "$TARGET_DRUPAL_CORE_VERSION" ]; then
-  # default to target Drupal 8, you can override this by setting the secrets value on your github repo
-  TARGET_DRUPAL_CORE_VERSION=10
+  # default to target Drupal 11, you can override this by setting the secrets value on your github repo
+  TARGET_DRUPAL_CORE_VERSION=11
 fi
 
 echo "php --version"

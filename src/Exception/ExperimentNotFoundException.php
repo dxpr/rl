@@ -19,7 +19,7 @@ class ExperimentNotFoundException extends \Exception {
    * @param \Throwable $previous
    *   The previous throwable used for the exception chaining.
    */
-  public function __construct($experiment_uuid = '', $message = '', $code = 0, \Throwable $previous = NULL) {
+  public function __construct($experiment_uuid = '', $message = '', $code = 0, ?\Throwable $previous = NULL) {
     if (empty($message)) {
       $message = sprintf('Experiment "%s" not found.', $experiment_uuid);
     }

@@ -9,7 +9,6 @@ namespace Drupal\rl\Decorator;
  * allowing modules to provide their own decorators.
  */
 class ExperimentDecoratorManager {
-
   /**
    * Array of decorator services.
    *

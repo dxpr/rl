@@ -7,7 +7,7 @@ namespace Drupal\rl\Service;
  *
  * Idea in metaphor.
  * -----------------
- * – Each “arm” is a different coffee blend.  
+ * – Each “arm” is a different coffee blend.
  * – After every cup we store two counts per blend:
  *       • turns   = how many cups were served
  *       • rewards = how many of those cups were rated “good”
@@ -27,39 +27,45 @@ namespace Drupal\rl\Service;
  * • A fast trick to draw a Beta value is:
  *       X ← Gamma(a+1,1)   Y ← Gamma(b+1,1)
  *       return  X / (X + Y).
- * 
+ *
  *  @see https://arxiv.org/abs/1707.02038
  *  @see https://dl.acm.org/doi/pdf/10.1145/358407.358414
  */
 class ThompsonCalculator {
-
   /*──────────────────────── PUBLIC API ────────────────────────*/
 
   /**
    * Draw one Thompson score for every blend.
    *
-   * @param array $arms_data  objects with ->turns and ->rewards
-   * @return array            scores keyed by blend id
+   * @param array $arms_data
+   *   Objects with ->turns and ->rewards.
+   *
+   * @return array
+   *   Scores keyed by blend id.
    */
   public function calculateThompsonScores(array $arms_data): array {
     $scores = [];
 
     foreach ($arms_data as $id => $arm) {
-      $alpha = $arm->rewards + 1;                 // good ratings + 1
-      $beta  = ($arm->turns - $arm->rewards) + 1; // bad  ratings + 1
+      // Good ratings + 1.
+      $alpha = $arm->rewards + 1;
+      // Bad  ratings + 1.
+      $beta = ($arm->turns - $arm->rewards) + 1;
       $scores[$id] = $this->randBeta($alpha, $beta);
     }
     return $scores;
   }
 
-  /** Pick the blend with the highest score. */
+  /**
+   * Pick the blend with the highest score. */
   public function selectBestArm(array $scores) {
     return $scores ? array_keys($scores, max($scores))[0] : NULL;
   }
 
   /*───────────────────── PRIVATE HELPERS ─────────────────────*/
 
-  /** Draw Beta(α,β) by dividing two Gamma draws. */
+  /**
+   * Draw Beta(α,β) by dividing two Gamma draws. */
   private function randBeta(int $alpha, int $beta): float {
     $x = $this->randGamma($alpha);
     $y = $this->randGamma($beta);
@@ -103,21 +109,25 @@ class ThompsonCalculator {
     }
 
     /* ----- Case k ≥ 1  --------------------------------------------- */
-    $d = $k - 1.0 / 3.0;          // shifts the shape
-    $c = 1.0 / sqrt(9.0 * $d);    // scales the normal draw
+    // Shifts the shape.
+    $d = $k - 1.0 / 3.0;
+    // Scales the normal draw.
+    $c = 1.0 / sqrt(9.0 * $d);
 
-    while (true) {
+    while (TRUE) {
       /* Step 1: Z ~ N(0,1) */
       $z = $this->z();
 
       /* Step 2: candidate V;  (1 + cZ) might be negative if Z < −1/c  */
       $v = pow(1.0 + $c * $z, 3);
 
-      if ($v <= 0.0) {            // invalid candidate → try again
+      // Invalid candidate → try again.
+      if ($v <= 0.0) {
         continue;
       }
 
-      $u = $this->u();            // U ~ Uniform(0,1) for accept/reject
+      // U ~ Uniform(0,1) for accept/reject.
+      $u = $this->u();
 
       /* Step 3a: FAST acceptance (“squeeze” region)                   *
        * Inequality derived in the paper ensures we are safely inside  *
@@ -138,13 +148,15 @@ class ThompsonCalculator {
 
   /*──────────── RNG helpers (uniform & normal) ──────────────*/
 
-  /** Uniform(0,1) using PHP’s cryptographic RNG. */
+  /**
+   * Uniform(0,1) using PHP’s cryptographic RNG. */
   private function u(): float {
     return random_int(1, PHP_INT_MAX - 1) / PHP_INT_MAX;
   }
 
   /**
    * Standard normal N(0,1) via Box-Muller transform.
+   *
    * Generates two normals per two uniforms; caches one for speed.
    */
   private function z(): float {
@@ -163,8 +175,10 @@ class ThompsonCalculator {
     } while ($s >= 1.0 || $s == 0.0);
 
     $factor = sqrt(-2.0 * log($s) / $s);
-    $cache  = $u1 * $factor;   // save one normal for next call
-    return  $u2 * $factor;     // return the other
+    // Save one normal for next call.
+    $cache = $u1 * $factor;
+    // Return the other.
+    return $u2 * $factor;
   }
 
 }

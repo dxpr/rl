@@ -1,6 +1,7 @@
 # Reinforcement Learning (RL)
 
-Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for efficient A/B testing that minimizes lost conversions.
+Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
+efficient A/B testing that minimizes lost conversions.
 
 ## Features
 
@@ -12,9 +13,14 @@ Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for e
 
 ## How Thompson Sampling Works
 
-Thompson Sampling is a learning-while-doing method. Each visitor triggers the algorithm to "roll the dice" based on learned performance. High-performing variants get larger numbers and show more often, while weak variants still get chances to prove themselves.
+Thompson Sampling is a learning-while-doing method. Each visitor triggers the
+algorithm to "roll the dice" based on learned performance. High-performing
+variants get larger numbers and show more often, while weak variants still get
+chances to prove themselves.
 
-Traditional A/B tests waste conversions by showing losing variants for fixed durations. Thompson Sampling shifts traffic to better variants as soon as evidence emerges, saving conversions and reducing testing time.
+Traditional A/B tests waste conversions by showing losing variants for fixed
+durations. Thompson Sampling shifts traffic to better variants as soon as
+evidence emerges, saving conversions and reducing testing time.
 
 ## Use Cases
 
@@ -55,7 +61,8 @@ $best_option = $ts_calculator->selectBestArm($scores);
 ## HTTP Endpoints
 
 ### rl.php - High-Performance Endpoint (Recommended)
-**For high-volume, low-latency applications, use the direct rl.php endpoint:**
+**For high-volume, low-latency applications, use the direct rl.php
+endpoint:**
 
 ```javascript
 // Record turns (trials) - when content is viewed
@@ -87,7 +94,8 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 
 ## Related Modules
 
-- [AI Sorting](https://www.drupal.org/project/ai_sorting) - Intelligent content ordering for Drupal Views
+- [AI Sorting](https://www.drupal.org/project/ai_sorting) - Intelligent content
+  ordering for Drupal Views
 
 ## Technical Implementation
 
@@ -96,6 +104,8 @@ Full algorithm details available in source code:
 
 ## Resources
 
-- [Multi-Armed Bandit Problem](https://en.wikipedia.org/wiki/Multi-armed_bandit) - Wikipedia overview
+- [Multi-Armed Bandit Problem](https://en.wikipedia.org/wiki/Multi-armed_bandit) -
+  Wikipedia overview
 - [Thompson Sampling Paper](https://www.jstor.org/stable/2332286) - Original research
-- [Finite-time Analysis](https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf) - Mathematical foundations
+- [Finite-time Analysis](https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf) -
+  Mathematical foundations
