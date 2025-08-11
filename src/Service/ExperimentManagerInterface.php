@@ -77,23 +77,12 @@ interface ExperimentManagerInterface {
    *
    * @param string $experiment_uuid
    *   The experiment UUID.
-   *
-   * @return array
-   *   Array of Thompson Sampling scores keyed by arm_id.
-   */
-  public function getThompsonScores($experiment_uuid);
-
-  /**
-   * Gets Thompson Sampling scores for all arms with seconds-based time window.
-   *
-   * @param string $experiment_uuid
-   *   The experiment UUID.
    * @param int|null $time_window_seconds
    *   Optional time window in seconds. Only considers arms active within this timeframe.
    *
    * @return array
    *   Array of Thompson Sampling scores keyed by arm_id.
    */
-  public function getThompsonScoresWithWindow($experiment_uuid, $time_window_seconds = NULL);
+  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL);
 
 }

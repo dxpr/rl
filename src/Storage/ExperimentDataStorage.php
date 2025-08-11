@@ -109,44 +109,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function getAllArmsData($experiment_uuid, $time_window_days = NULL) {
-    $time_window_seconds = NULL;
-    if ($time_window_days && $time_window_days > 0) {
-      $time_window_seconds = $time_window_days * 86400;
-    }
-    return $this->getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getTotalTurns($experiment_uuid, $time_window_days = NULL) {
-    // If no time window, use the cached total.
-    if ($time_window_days === NULL || $time_window_days <= 0) {
-      $result = $this->database->select('rl_experiment_totals', 'et')
-        ->fields('et', ['total_turns'])
-        ->condition('experiment_uuid', $experiment_uuid)
-        ->execute()
-        ->fetchField();
-
-      return $result ? (int) $result : 0;
-    }
-
-    // With time window, calculate total from arms within the window.
-    $cutoff_timestamp = \Drupal::time()->getRequestTime() - ($time_window_days * 86400);
-    $query = $this->database->select('rl_arm_data', 'ad');
-    $query->addExpression('SUM(turns)', 'total_turns');
-    $query->condition('experiment_uuid', $experiment_uuid)
-      ->condition('updated', $cutoff_timestamp, '>=');
-
-    $result = $query->execute()->fetchField();
-    return $result ? (int) $result : 0;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getAllArmsDataWithWindow($experiment_uuid, $time_window_seconds = NULL) {
+  public function getAllArmsData($experiment_uuid, $time_window_seconds = NULL) {
     $query = $this->database->select('rl_arm_data', 'ad')
       ->fields('ad', ['arm_id', 'turns', 'rewards', 'created', 'updated'])
       ->condition('experiment_uuid', $experiment_uuid);
@@ -157,6 +120,19 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     }
 
     return $query->execute()->fetchAllAssoc('arm_id');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTotalTurns($experiment_uuid) {
+    $result = $this->database->select('rl_experiment_totals', 'et')
+      ->fields('et', ['total_turns'])
+      ->condition('experiment_uuid', $experiment_uuid)
+      ->execute()
+      ->fetchField();
+
+    return $result ? (int) $result : 0;
   }
 
 }
