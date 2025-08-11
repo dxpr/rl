@@ -359,14 +359,14 @@ function rl_schema() {
  */
 function rl_update_8002() {
   $schema = \Drupal::database()->schema();
-  
+
   $field_spec = [
     'type' => 'varchar',
     'length' => 255,
     'not null' => FALSE,
     'description' => 'Human-readable experiment name',
   ];
-  
+
   if ($schema->tableExists('rl_experiment_registry')) {
     $schema->addField('rl_experiment_registry', 'experiment_name', $field_spec);
   }

@@ -17,7 +17,7 @@ interface ExperimentRegistryInterface {
    * @param string $experiment_name
    *   Optional human-readable experiment name.
    */
-  public function register(string $uuid, string $module, string $experiment_name = NULL): void;
+  public function register(string $uuid, string $module, ?string $experiment_name = NULL): void;
 
   /**
    * Check if an experiment UUID is registered.
