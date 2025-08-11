@@ -49,4 +49,15 @@ interface ExperimentRegistryInterface {
    */
   public function getAll(): array;
 
+  /**
+   * Get the human-readable name for an experiment.
+   *
+   * @param string $uuid
+   *   The experiment UUID.
+   *
+   * @return string|null
+   *   The experiment name or NULL if not found.
+   */
+  public function getExperimentName(string $uuid): ?string;
+
 }

@@ -9,7 +9,7 @@ services:
 
   rl.experiment_manager:
     class: Drupal\rl\Service\ExperimentManager
-    arguments: ['@rl.experiment_data_storage', '@rl.ts_calculator']
+    arguments: ['@rl.experiment_data_storage', '@rl.ts_calculator', '@config.factory', '@database', '@logger.factory']
 
   rl.experiment_registry:
     class: Drupal\rl\Registry\ExperimentRegistry
