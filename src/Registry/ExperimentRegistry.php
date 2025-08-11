@@ -28,15 +28,21 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   /**
    * {@inheritdoc}
    */
-  public function register(string $uuid, string $module): void {
+  public function register(string $uuid, string $module, string $experiment_name = NULL): void {
     try {
       // Use merge to handle duplicate registrations gracefully.
+      $fields = [
+        'module' => $module,
+        'registered_at' => \Drupal::time()->getRequestTime(),
+      ];
+      
+      if ($experiment_name !== NULL) {
+        $fields['experiment_name'] = $experiment_name;
+      }
+      
       $this->database->merge('rl_experiment_registry')
         ->key(['uuid' => $uuid])
-        ->fields([
-          'module' => $module,
-          'registered_at' => \Drupal::time()->getRequestTime(),
-        ])
+        ->fields($fields)
         ->execute();
     }
     catch (\Exception $e) {

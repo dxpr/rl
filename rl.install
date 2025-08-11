@@ -151,6 +151,12 @@ function rl_install() {
         'not null' => TRUE,
         'description' => 'Module that owns this experiment',
       ],
+      'experiment_name' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'Human-readable experiment name',
+      ],
       'registered_at' => [
         'type' => 'int',
         'unsigned' => TRUE,
@@ -326,6 +332,12 @@ function rl_schema() {
         'not null' => TRUE,
         'description' => 'Module that owns this experiment',
       ],
+      'experiment_name' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'Human-readable experiment name',
+      ],
       'registered_at' => [
         'type' => 'int',
         'unsigned' => TRUE,
@@ -340,4 +352,22 @@ function rl_schema() {
   ];
 
   return $schema;
+}
+
+/**
+ * Add experiment_name field to rl_experiment_registry table.
+ */
+function rl_update_8002() {
+  $schema = \Drupal::database()->schema();
+  
+  $field_spec = [
+    'type' => 'varchar',
+    'length' => 255,
+    'not null' => FALSE,
+    'description' => 'Human-readable experiment name',
+  ];
+  
+  if ($schema->tableExists('rl_experiment_registry')) {
+    $schema->addField('rl_experiment_registry', 'experiment_name', $field_spec);
+  }
 }

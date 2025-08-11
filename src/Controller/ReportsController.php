@@ -95,7 +95,7 @@ class ReportsController extends ControllerBase {
 
     // Get all registered experiments with their totals (if any)
     $query = $this->database->select('rl_experiment_registry', 'er')
-      ->fields('er', ['uuid', 'module', 'registered_at']);
+      ->fields('er', ['uuid', 'module', 'experiment_name', 'registered_at']);
     $query->leftJoin('rl_experiment_totals', 'et', 'er.uuid = et.experiment_uuid');
     $query->addField('et', 'total_turns', 'total_turns');
     $query->addField('et', 'created', 'totals_created');
@@ -140,9 +140,8 @@ class ReportsController extends ControllerBase {
             ? $this->dateFormatter->format($last_activity_timestamp, 'short')
             : $this->t('Never');
 
-      // Get decorated experiment name or fallback to UUID.
-      $experiment_display = $this->decoratorManager->decorateExperiment($experiment->uuid);
-      $experiment_name = $experiment_display ? \Drupal::service('renderer')->renderPlain($experiment_display) : $experiment->uuid;
+      // Use experiment name from registry or fallback to UUID.
+      $experiment_name = $experiment->experiment_name ?: $experiment->uuid;
 
       $rows[] = [
         ['data' => ['#markup' => $operations_markup]],
