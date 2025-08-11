@@ -61,6 +61,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    */
   public function recordTurns($experiment_uuid, array $arm_ids) {
     $timestamp = \Drupal::time()->getRequestTime();
+    $arm_count = count($arm_ids);
 
     // Record a turn for each arm (each arm gets exposure).
     foreach ($arm_ids as $arm_id) {
@@ -76,15 +77,15 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         ->execute();
     }
 
-    // Record only ONE total turn per call (1 page view = 1 turn).
+    // Record total turns = number of arms shown (sum of individual turns).
     $this->database->merge('rl_experiment_totals')
       ->key(['experiment_uuid' => $experiment_uuid])
       ->fields([
-        'total_turns' => 1,
+        'total_turns' => $arm_count,
         'created' => $timestamp,
         'updated' => $timestamp,
       ])
-      ->expression('total_turns', 'total_turns + :inc', [':inc' => 1])
+      ->expression('total_turns', 'total_turns + :inc', [':inc' => $arm_count])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
   }
