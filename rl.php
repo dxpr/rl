@@ -98,7 +98,7 @@ try {
   http_response_code(200);
 }
 catch (\Exception $e) {
-  // Log error and return 500
+  // Log error and return 500.
   error_log('RL endpoint error: ' . $e->getMessage());
   http_response_code(500);
   exit('Server error');

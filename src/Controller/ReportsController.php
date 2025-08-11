@@ -119,11 +119,6 @@ class ReportsController extends ControllerBase {
       $operations[] = Link::fromTextAndUrl($this->t('View'), $detail_url);
 
       if ($this->currentUser()->hasPermission('administer rl experiments')) {
-        $edit_url = Url::fromRoute('rl.experiment.edit', [
-          'experiment_uuid' => $experiment->uuid,
-        ]);
-        $operations[] = Link::fromTextAndUrl($this->t('Edit'), $edit_url);
-
         $delete_url = Url::fromRoute('rl.experiment.delete', [
           'experiment_uuid' => $experiment->uuid,
         ]);
