@@ -1,0 +1,6 @@
+tracking:
+  js:
+    js/rl-example-tracking.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

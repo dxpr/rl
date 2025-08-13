@@ -1,0 +1,7 @@
+name: 'RL Example'
+type: module
+description: 'Newsletter signup A/B testing example using the RL module'
+core_version_requirement: ^10 || ^11
+package: RL
+dependencies:
+  - rl:rl

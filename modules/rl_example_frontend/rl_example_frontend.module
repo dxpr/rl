@@ -1,0 +1,17 @@
+<?php
+
+/**
+ * @file
+ * RL Example Frontend module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function rl_example_frontend_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name == 'help.page.rl_example_frontend') {
+    return '<p>' . t('Place the "RL Example Frontend Newsletter Signup" block to see A/B testing in action. This module demonstrates frontend-only A/B testing - JavaScript fetches Thompson sampling scores and overrides button text without any cache management complexity.') . '</p>';
+  }
+}

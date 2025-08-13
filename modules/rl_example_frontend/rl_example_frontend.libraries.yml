@@ -1,0 +1,6 @@
+frontend_ab_testing:
+  js:
+    js/frontend-ab-testing.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

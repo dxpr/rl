@@ -1,0 +1,7 @@
+name: 'RL Example Frontend'
+type: module
+description: 'Simple newsletter signup A/B testing example using frontend JavaScript and the RL module'
+core_version_requirement: ^10 || ^11
+package: RL
+dependencies:
+  - rl:rl

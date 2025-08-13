@@ -1,0 +1,17 @@
+<?php
+
+/**
+ * @file
+ * RL Example module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function rl_example_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name == 'help.page.rl_example') {
+    return '<p>' . t('Place the "RL Example Newsletter Signup" block to see A/B testing in action. The module tests which button text gets more signups.') . '</p>';
+  }
+}
