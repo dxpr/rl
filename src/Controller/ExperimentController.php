@@ -43,13 +43,13 @@ class ExperimentController extends ControllerBase {
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   The current request.
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return \Symfony\Component\HttpFoundation\JsonResponse
    *   A JSON response indicating success or failure.
    */
-  public function recordTurn(Request $request, $experiment_uuid) {
+  public function recordTurn(Request $request, $experiment_id) {
     $data = json_decode($request->getContent(), TRUE);
     $arm_id = $data['arm_id'] ?? NULL;
 
@@ -58,7 +58,7 @@ class ExperimentController extends ControllerBase {
     }
 
     try {
-      $this->experimentManager->recordTurn($experiment_uuid, $arm_id);
+      $this->experimentManager->recordTurn($experiment_id, $arm_id);
       return new JsonResponse(['success' => TRUE]);
     }
     catch (\Exception $e) {
@@ -71,13 +71,13 @@ class ExperimentController extends ControllerBase {
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   The current request.
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return \Symfony\Component\HttpFoundation\JsonResponse
    *   A JSON response indicating success or failure.
    */
-  public function recordTurns(Request $request, $experiment_uuid) {
+  public function recordTurns(Request $request, $experiment_id) {
     $data = json_decode($request->getContent(), TRUE);
     $arm_ids = $data['arm_ids'] ?? [];
 
@@ -86,7 +86,7 @@ class ExperimentController extends ControllerBase {
     }
 
     try {
-      $this->experimentManager->recordTurns($experiment_uuid, $arm_ids);
+      $this->experimentManager->recordTurns($experiment_id, $arm_ids);
       return new JsonResponse(['success' => TRUE]);
     }
     catch (\Exception $e) {
@@ -99,13 +99,13 @@ class ExperimentController extends ControllerBase {
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   The current request.
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return \Symfony\Component\HttpFoundation\JsonResponse
    *   A JSON response indicating success or failure.
    */
-  public function recordReward(Request $request, $experiment_uuid) {
+  public function recordReward(Request $request, $experiment_id) {
     $data = json_decode($request->getContent(), TRUE);
     $arm_id = $data['arm_id'] ?? NULL;
 
@@ -114,7 +114,7 @@ class ExperimentController extends ControllerBase {
     }
 
     try {
-      $this->experimentManager->recordReward($experiment_uuid, $arm_id);
+      $this->experimentManager->recordReward($experiment_id, $arm_id);
       return new JsonResponse(['success' => TRUE]);
     }
     catch (\Exception $e) {
@@ -127,15 +127,15 @@ class ExperimentController extends ControllerBase {
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   The current request.
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return \Symfony\Component\HttpFoundation\JsonResponse
    *   A JSON response with the Thompson Sampling scores.
    */
-  public function getThompsonScores(Request $request, $experiment_uuid) {
+  public function getThompsonScores(Request $request, $experiment_id) {
     try {
-      $scores = $this->experimentManager->getThompsonScores($experiment_uuid);
+      $scores = $this->experimentManager->getThompsonScores($experiment_id);
       return new JsonResponse(['scores' => $scores]);
     }
     catch (\Exception $e) {

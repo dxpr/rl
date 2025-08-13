@@ -18,7 +18,7 @@ function rl_help($route_name, RouteMatchInterface $route_match) {
       $output .= '<p>' . t('The Reinforcement Learning module provides a core API for tracking multi-armed bandit experiments using turns and rewards. It supports Thompson Sampling for optimizing decision making.') . '</p>';
       $output .= '<h3>' . t('Features') . '</h3>';
       $output .= '<ul>';
-      $output .= '<li>' . t('Abstract experiment tracking with UUIDs') . '</li>';
+      $output .= '<li>' . t('Abstract experiment tracking with deterministic IDs') . '</li>';
       $output .= '<li>' . t('Turn and reward recording') . '</li>';
       $output .= '<li>' . t('Thompson Sampling algorithm implementation') . '</li>';
       $output .= '<li>' . t('Optimized endpoints for high-performance tracking') . '</li>';

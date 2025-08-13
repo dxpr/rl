@@ -1,38 +1,42 @@
 rl.experiment.turn:
-  path: '/rl/experiment/{experiment_uuid}/turn'
+  path: '/rl/experiment/{experiment_id}/turn'
   defaults:
     _controller: '\Drupal\rl\Controller\ExperimentController::recordTurn'
   methods: [POST]
   requirements:
+    # Open access for RL tracking from anonymous users
     _access: 'TRUE'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.experiment.turns:
-  path: '/rl/experiment/{experiment_uuid}/turns'
+  path: '/rl/experiment/{experiment_id}/turns'
   defaults:
     _controller: '\Drupal\rl\Controller\ExperimentController::recordTurns'
   methods: [POST]
   requirements:
+    # Open access for RL tracking from anonymous users
     _access: 'TRUE'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.experiment.reward:
-  path: '/rl/experiment/{experiment_uuid}/reward'
+  path: '/rl/experiment/{experiment_id}/reward'
   defaults:
     _controller: '\Drupal\rl\Controller\ExperimentController::recordReward'
   methods: [POST]
   requirements:
+    # Open access for RL tracking from anonymous users
     _access: 'TRUE'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.experiment.scores:
-  path: '/rl/experiment/{experiment_uuid}/scores'
+  path: '/rl/experiment/{experiment_id}/scores'
   defaults:
     _controller: '\Drupal\rl\Controller\ExperimentController::getThompsonScores'
   methods: [GET]
   requirements:
+    # Open access for RL score requests from anonymous users
     _access: 'TRUE'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.reports.experiments:
   path: '/admin/reports/rl'
@@ -43,13 +47,13 @@ rl.reports.experiments:
     _permission: 'view rl reports'
 
 rl.reports.experiment_detail:
-  path: '/admin/reports/rl/experiment/{experiment_uuid}'
+  path: '/admin/reports/rl/experiment/{experiment_id}'
   defaults:
     _controller: '\Drupal\rl\Controller\ReportsController::experimentDetail'
     _title: 'RL Experiment Detail'
   requirements:
     _permission: 'view rl reports'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.experiment.add:
   path: '/admin/reports/rl/add'
@@ -60,25 +64,25 @@ rl.experiment.add:
     _permission: 'administer rl experiments'
 
 rl.experiment.edit:
-  path: '/admin/reports/rl/experiment/{experiment_uuid}/edit'
+  path: '/admin/reports/rl/experiment/{experiment_id}/edit'
   defaults:
     _form: '\Drupal\rl\Form\ExperimentForm'
     _title: 'Edit RL Experiment'
   requirements:
     _permission: 'administer rl experiments'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.experiment.delete:
-  path: '/admin/reports/rl/experiment/{experiment_uuid}/delete'
+  path: '/admin/reports/rl/experiment/{experiment_id}/delete'
   defaults:
     _form: '\Drupal\rl\Form\ExperimentDeleteForm'
     _title: 'Delete RL Experiment'
   requirements:
     _permission: 'administer rl experiments'
-    experiment_uuid: '.+'
+    experiment_id: '.+'
 
 rl.settings:
-  path: '/admin/config/development/rl'
+  path: '/admin/config/ai/rl'
   defaults:
     _form: '\Drupal\rl\Form\RlSettingsForm'
     _title: 'RL Settings'

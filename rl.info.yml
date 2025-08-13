@@ -3,6 +3,6 @@ type: module
 description: 'Core API module for tracking multi-armed bandit experiments using turns and rewards.'
 core_version_requirement: ^10.3 | ^11
 package: Custom
-configure: rl.admin.settings
+configure: rl.settings
 dependencies:
   - drupal:system

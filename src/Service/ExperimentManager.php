@@ -71,50 +71,50 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordTurn($experiment_uuid, $arm_id) {
-    $this->storage->recordTurn($experiment_uuid, $arm_id);
+  public function recordTurn($experiment_id, $arm_id) {
+    $this->storage->recordTurn($experiment_id, $arm_id);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function recordTurns($experiment_uuid, array $arm_ids) {
-    $this->storage->recordTurns($experiment_uuid, $arm_ids);
+  public function recordTurns($experiment_id, array $arm_ids) {
+    $this->storage->recordTurns($experiment_id, $arm_ids);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function recordReward($experiment_uuid, $arm_id) {
-    $this->storage->recordReward($experiment_uuid, $arm_id);
+  public function recordReward($experiment_id, $arm_id) {
+    $this->storage->recordReward($experiment_id, $arm_id);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getArmData($experiment_uuid, $arm_id) {
-    return $this->storage->getArmData($experiment_uuid, $arm_id);
+  public function getArmData($experiment_id, $arm_id) {
+    return $this->storage->getArmData($experiment_id, $arm_id);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getAllArmsData($experiment_uuid) {
-    return $this->storage->getAllArmsData($experiment_uuid);
+  public function getAllArmsData($experiment_id) {
+    return $this->storage->getAllArmsData($experiment_id);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getTotalTurns($experiment_uuid) {
-    return $this->storage->getTotalTurns($experiment_uuid);
+  public function getTotalTurns($experiment_id) {
+    return $this->storage->getTotalTurns($experiment_id);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getThompsonScores($experiment_uuid, $time_window_seconds = NULL, array $requested_arms = []) {
-    $arms_data = $this->storage->getAllArmsData($experiment_uuid, $time_window_seconds);
+  public function getThompsonScores($experiment_id, $time_window_seconds = NULL, array $requested_arms = []) {
+    $arms_data = $this->storage->getAllArmsData($experiment_id, $time_window_seconds);
 
     // If specific arms are requested, ensure they all have scores.
     // New arms get initialized with zero stats for maximum exploration.
@@ -153,7 +153,7 @@ class ExperimentManager implements ExperimentManagerInterface {
 
     // Debug logging if enabled.
     if ($this->configFactory->get('rl.settings')->get('debug_mode')) {
-      $this->debugLogScores($experiment_uuid, $scores);
+      $this->debugLogScores($experiment_id, $scores);
     }
 
     return $scores;
@@ -162,14 +162,14 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * Logs Thompson Sampling scores for debugging.
    *
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    * @param array $scores
    *   The calculated scores.
    */
-  protected function debugLogScores($experiment_uuid, array $scores) {
+  protected function debugLogScores($experiment_id, array $scores) {
     // Get human-readable experiment name.
-    $experiment_name = $this->getExperimentName($experiment_uuid);
+    $experiment_name = $this->getExperimentName($experiment_id);
 
     // Format scores for logging.
     $score_pairs = [];
@@ -177,9 +177,9 @@ class ExperimentManager implements ExperimentManagerInterface {
       $score_pairs[] = $arm_id . ':' . number_format($score, 4);
     }
 
-    $this->loggerFactory->get('rl_debug')->info('Thompson Sampling scores calculated | Experiment: @name (@uuid) | Scores: @scores', [
+    $this->loggerFactory->get('rl_debug')->info('Thompson Sampling scores calculated | Experiment: @name (@id) | Scores: @scores', [
       '@name' => $experiment_name ?: 'Unknown',
-      '@uuid' => $experiment_uuid,
+      '@id' => $experiment_id,
       '@scores' => implode(', ', $score_pairs),
     ]);
   }
@@ -187,17 +187,17 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * Gets the human-readable name for an experiment.
    *
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return string|null
    *   The experiment name or NULL if not found.
    */
-  protected function getExperimentName($experiment_uuid) {
+  protected function getExperimentName($experiment_id) {
     try {
       $result = $this->database->select('rl_experiment_registry', 'r')
         ->fields('r', ['experiment_name'])
-        ->condition('uuid', $experiment_uuid)
+        ->condition('experiment_id', $experiment_id)
         ->execute()
         ->fetchField();
 

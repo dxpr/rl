@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Install, update and uninstall functions for the Reinforcement Learning module.
+ * Install, update and uninstall functions for the RL module.
  */
 
 use Drupal\Core\Database\SchemaObjectExistsException;
@@ -23,11 +23,11 @@ function rl_install() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ],
-      'experiment_uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'UUID identifying the experiment.',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'total_turns' => [
         'type' => 'int',
@@ -53,10 +53,10 @@ function rl_install() {
     ],
     'primary key' => ['id'],
     'unique keys' => [
-      'experiment_unique' => ['experiment_uuid'],
+      'experiment_unique' => ['experiment_id'],
     ],
     'indexes' => [
-      'experiment_updated' => ['experiment_uuid', 'updated'],
+      'experiment_updated' => ['experiment_id', 'updated'],
     ],
   ];
 
@@ -77,11 +77,11 @@ function rl_install() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ],
-      'experiment_uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'UUID identifying the experiment.',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'arm_id' => [
         'type' => 'varchar',
@@ -120,10 +120,10 @@ function rl_install() {
     ],
     'primary key' => ['id'],
     'unique keys' => [
-      'experiment_arm' => ['experiment_uuid', 'arm_id'],
+      'experiment_arm' => ['experiment_id', 'arm_id'],
     ],
     'indexes' => [
-      'covering_time_window' => ['experiment_uuid', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
+      'covering_time_window' => ['experiment_id', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
     ],
   ];
 
@@ -139,11 +139,11 @@ function rl_install() {
   $spec_registry = [
     'description' => 'Registry of experiments and their owning modules',
     'fields' => [
-      'uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'Experiment UUID',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'module' => [
         'type' => 'varchar',
@@ -164,7 +164,7 @@ function rl_install() {
         'description' => 'Unix timestamp when registered',
       ],
     ],
-    'primary key' => ['uuid'],
+    'primary key' => ['experiment_id'],
     'indexes' => [
       'module' => ['module'],
     ],
@@ -222,11 +222,11 @@ function rl_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ],
-      'experiment_uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'UUID identifying the experiment.',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'total_turns' => [
         'type' => 'int',
@@ -252,10 +252,10 @@ function rl_schema() {
     ],
     'primary key' => ['id'],
     'unique keys' => [
-      'experiment_unique' => ['experiment_uuid'],
+      'experiment_unique' => ['experiment_id'],
     ],
     'indexes' => [
-      'experiment_updated' => ['experiment_uuid', 'updated'],
+      'experiment_updated' => ['experiment_id', 'updated'],
     ],
   ];
 
@@ -267,11 +267,11 @@ function rl_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ],
-      'experiment_uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'UUID identifying the experiment.',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'arm_id' => [
         'type' => 'varchar',
@@ -310,21 +310,21 @@ function rl_schema() {
     ],
     'primary key' => ['id'],
     'unique keys' => [
-      'experiment_arm' => ['experiment_uuid', 'arm_id'],
+      'experiment_arm' => ['experiment_id', 'arm_id'],
     ],
     'indexes' => [
-      'covering_time_window' => ['experiment_uuid', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
+      'covering_time_window' => ['experiment_id', 'updated', 'arm_id', 'turns', 'rewards', 'created'],
     ],
   ];
 
   $schema['rl_experiment_registry'] = [
     'description' => 'Registry of experiments and their owning modules',
     'fields' => [
-      'uuid' => [
+      'experiment_id' => [
         'type' => 'varchar',
-        'length' => 128,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'Experiment UUID',
+        'description' => 'Human-readable identifier for the experiment.',
       ],
       'module' => [
         'type' => 'varchar',
@@ -345,7 +345,7 @@ function rl_schema() {
         'description' => 'Unix timestamp when registered',
       ],
     ],
-    'primary key' => ['uuid'],
+    'primary key' => ['experiment_id'],
     'indexes' => [
       'module' => ['module'],
     ],

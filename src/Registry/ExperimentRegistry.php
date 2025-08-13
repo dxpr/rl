@@ -28,7 +28,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   /**
    * {@inheritdoc}
    */
-  public function register(string $uuid, string $module, ?string $experiment_name = NULL): void {
+  public function register(string $experiment_id, string $module, ?string $experiment_name = NULL): void {
     try {
       // Use merge to handle duplicate registrations gracefully.
       $fields = [
@@ -41,14 +41,14 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
       }
 
       $this->database->merge('rl_experiment_registry')
-        ->key(['uuid' => $uuid])
+        ->key(['experiment_id' => $experiment_id])
         ->fields($fields)
         ->execute();
     }
     catch (\Exception $e) {
       // Log error but don't break the page.
-      \Drupal::logger('rl')->error('Failed to register experiment @uuid: @message', [
-        '@uuid' => $uuid,
+      \Drupal::logger('rl')->error('Failed to register experiment @id: @message', [
+        '@id' => $experiment_id,
         '@message' => $e->getMessage(),
       ]);
     }
@@ -57,11 +57,11 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   /**
    * {@inheritdoc}
    */
-  public function isRegistered(string $uuid): bool {
+  public function isRegistered(string $experiment_id): bool {
     try {
       $result = $this->database->select('rl_experiment_registry', 'r')
-        ->fields('r', ['uuid'])
-        ->condition('uuid', $uuid)
+        ->fields('r', ['experiment_id'])
+        ->condition('experiment_id', $experiment_id)
         ->countQuery()
         ->execute()
         ->fetchField();
@@ -77,11 +77,11 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   /**
    * {@inheritdoc}
    */
-  public function getOwner(string $uuid): ?string {
+  public function getOwner(string $experiment_id): ?string {
     try {
       $result = $this->database->select('rl_experiment_registry', 'r')
         ->fields('r', ['module'])
-        ->condition('uuid', $uuid)
+        ->condition('experiment_id', $experiment_id)
         ->execute()
         ->fetchField();
 
@@ -98,7 +98,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   public function getAll(): array {
     try {
       $results = $this->database->select('rl_experiment_registry', 'r')
-        ->fields('r', ['uuid', 'module'])
+        ->fields('r', ['experiment_id', 'module'])
         ->execute()
         ->fetchAllKeyed();
 
@@ -112,11 +112,11 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   /**
    * {@inheritdoc}
    */
-  public function getExperimentName(string $uuid): ?string {
+  public function getExperimentName(string $experiment_id): ?string {
     try {
       $result = $this->database->select('rl_experiment_registry', 'r')
         ->fields('r', ['experiment_name'])
-        ->condition('uuid', $uuid)
+        ->condition('experiment_id', $experiment_id)
         ->execute()
         ->fetchField();
 

@@ -12,17 +12,18 @@ use Drupal\Core\DrupalKernel;
 use Symfony\Component\HttpFoundation\Request;
 
 $action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-$experiment_uuid = filter_input(INPUT_POST, 'experiment_uuid', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$experiment_id = filter_input(INPUT_POST, 'experiment_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-if (!$action || !$experiment_uuid || !in_array($action, ['turn', 'turns', 'reward'])) {
+if (!$action || !$experiment_id || !in_array($action, ['turn', 'turns', 'reward'])) {
   http_response_code(400);
   exit('Invalid request parameters');
 }
 
-if (!preg_match('/^[a-zA-Z0-9]+$/', $experiment_uuid)) {
+// Validate experiment ID format (alphanumeric, hyphens, underscores).
+if (!preg_match('/^[a-zA-Z0-9_-]+$/', $experiment_id)) {
   http_response_code(400);
-  exit('Invalid experiment_uuid format');
+  exit('Invalid experiment_id format');
 }
 
 try {
@@ -56,16 +57,17 @@ try {
   $container = $kernel->getContainer();
 
   $registry = $container->get('rl.experiment_registry');
-  if (!$registry->isRegistered($experiment_uuid)) {
+  if (!$registry->isRegistered($experiment_id)) {
     exit();
   }
 
   $storage = $container->get('rl.experiment_data_storage');
 
+
   switch ($action) {
     case 'turn':
       if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
-        $storage->recordTurn($experiment_uuid, $arm_id);
+        $storage->recordTurn($experiment_id, $arm_id);
       }
       break;
 
@@ -83,14 +85,14 @@ try {
         }
 
         if (!empty($valid_arm_ids)) {
-          $storage->recordTurns($experiment_uuid, $valid_arm_ids);
+          $storage->recordTurns($experiment_id, $valid_arm_ids);
         }
       }
       break;
 
     case 'reward':
       if ($arm_id && preg_match('/^[a-zA-Z0-9_-]+$/', $arm_id)) {
-        $storage->recordReward($experiment_uuid, $arm_id);
+        $storage->recordReward($experiment_id, $arm_id);
       }
       break;
   }

@@ -68,14 +68,14 @@ endpoint:**
 // Record turns (trials) - when content is viewed
 const formData = new FormData();
 formData.append('action', 'turns');
-formData.append('experiment_uuid', 'abc123');
+formData.append('experiment_id', 'abc123');
 formData.append('arm_ids', '1,2,3');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', formData);
 
 // Record reward (success) - when user clicks/converts  
 const rewardData = new FormData();
 rewardData.append('action', 'rewards');
-rewardData.append('experiment_uuid', 'abc123');
+rewardData.append('experiment_id', 'abc123');
 rewardData.append('arm_id', '1');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 ```
@@ -88,9 +88,9 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 
 ### Drupal Routes - Full API
 **For applications requiring full Drupal integration:**
-- `POST /rl/experiment/{uuid}/turns` - Record trials
-- `POST /rl/experiment/{uuid}/rewards` - Record successes  
-- `GET /rl/experiment/{uuid}/scores` - Get scores
+- `POST /rl/experiment/{experiment_id}/turns` - Record trials
+- `POST /rl/experiment/{experiment_id}/rewards` - Record successes  
+- `GET /rl/experiment/{experiment_id}/scores` - Get scores
 
 ## Related Modules
 
@@ -101,6 +101,25 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 
 Full algorithm details available in source code:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php)
+
+## Development
+
+### Linting and Code Standards
+
+Run coding standards checks:
+```bash
+docker compose --profile lint run --rm drupal-lint
+```
+
+Auto-fix coding standard violations:
+```bash
+docker compose --profile lint run --rm drupal-lint-auto-fix
+```
+
+Run Drupal compatibility checks:
+```bash
+docker compose --profile lint run --rm drupal-check
+```
 
 ## Resources
 

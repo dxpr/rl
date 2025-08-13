@@ -28,12 +28,12 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordTurn($experiment_uuid, $arm_id) {
+  public function recordTurn($experiment_id, $arm_id) {
     $timestamp = \Drupal::time()->getRequestTime();
 
     // Update arm data.
     $this->database->merge('rl_arm_data')
-      ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
+      ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
       ->fields([
         'turns' => 1,
         'created' => $timestamp,
@@ -45,7 +45,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Update total turns.
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_uuid' => $experiment_uuid])
+      ->key(['experiment_id' => $experiment_id])
       ->fields([
         'total_turns' => 1,
         'created' => $timestamp,
@@ -59,14 +59,14 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordTurns($experiment_uuid, array $arm_ids) {
+  public function recordTurns($experiment_id, array $arm_ids) {
     $timestamp = \Drupal::time()->getRequestTime();
     $arm_count = count($arm_ids);
 
     // Record a turn for each arm (each arm gets exposure).
     foreach ($arm_ids as $arm_id) {
       $this->database->merge('rl_arm_data')
-        ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
+        ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
         ->fields([
           'turns' => 1,
           'created' => $timestamp,
@@ -79,7 +79,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Record total turns = number of arms shown (sum of individual turns).
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_uuid' => $experiment_uuid])
+      ->key(['experiment_id' => $experiment_id])
       ->fields([
         'total_turns' => $arm_count,
         'created' => $timestamp,
@@ -93,11 +93,11 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordReward($experiment_uuid, $arm_id) {
+  public function recordReward($experiment_id, $arm_id) {
     $timestamp = \Drupal::time()->getRequestTime();
 
     $this->database->merge('rl_arm_data')
-      ->key(['experiment_uuid' => $experiment_uuid, 'arm_id' => $arm_id])
+      ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
       ->fields([
         'rewards' => 1,
         'created' => $timestamp,
@@ -109,7 +109,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Also update experiment totals timestamp.
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_uuid' => $experiment_uuid])
+      ->key(['experiment_id' => $experiment_id])
       ->fields([
         'total_turns' => 0,
         'created' => $timestamp,
@@ -122,10 +122,10 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function getArmData($experiment_uuid, $arm_id) {
+  public function getArmData($experiment_id, $arm_id) {
     return $this->database->select('rl_arm_data', 'ad')
       ->fields('ad', ['arm_id', 'turns', 'rewards', 'created', 'updated'])
-      ->condition('experiment_uuid', $experiment_uuid)
+      ->condition('experiment_id', $experiment_id)
       ->condition('arm_id', $arm_id)
       ->execute()
       ->fetchObject();
@@ -134,10 +134,10 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function getAllArmsData($experiment_uuid, $time_window_seconds = NULL) {
+  public function getAllArmsData($experiment_id, $time_window_seconds = NULL) {
     $query = $this->database->select('rl_arm_data', 'ad')
       ->fields('ad', ['arm_id', 'turns', 'rewards', 'created', 'updated'])
-      ->condition('experiment_uuid', $experiment_uuid);
+      ->condition('experiment_id', $experiment_id);
 
     if ($time_window_seconds && $time_window_seconds > 0) {
       $cutoff_timestamp = \Drupal::time()->getRequestTime() - $time_window_seconds;
@@ -150,10 +150,10 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function getTotalTurns($experiment_uuid) {
+  public function getTotalTurns($experiment_id) {
     $result = $this->database->select('rl_experiment_totals', 'et')
       ->fields('et', ['total_turns'])
-      ->condition('experiment_uuid', $experiment_uuid)
+      ->condition('experiment_id', $experiment_id)
       ->execute()
       ->fetchField();
 
