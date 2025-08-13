@@ -33,7 +33,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Update arm data.
     $this->database->merge('rl_arm_data')
-      ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+      ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
       ->fields([
         'turns' => 1,
         'created' => $timestamp,
@@ -45,7 +45,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Update total turns.
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_id' => $experiment_id])
+      ->key('experiment_id', $experiment_id)
       ->fields([
         'total_turns' => 1,
         'created' => $timestamp,
@@ -66,7 +66,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     // Record a turn for each arm (each arm gets exposure).
     foreach ($arm_ids as $arm_id) {
       $this->database->merge('rl_arm_data')
-        ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+        ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
         ->fields([
           'turns' => 1,
           'created' => $timestamp,
@@ -79,7 +79,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Record total turns = number of arms shown (sum of individual turns).
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_id' => $experiment_id])
+      ->key('experiment_id', $experiment_id)
       ->fields([
         'total_turns' => $arm_count,
         'created' => $timestamp,
@@ -97,7 +97,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     $timestamp = \Drupal::time()->getRequestTime();
 
     $this->database->merge('rl_arm_data')
-      ->key(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+      ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
       ->fields([
         'rewards' => 1,
         'created' => $timestamp,
@@ -109,7 +109,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     // Also update experiment totals timestamp.
     $this->database->merge('rl_experiment_totals')
-      ->key(['experiment_id' => $experiment_id])
+      ->key('experiment_id', $experiment_id)
       ->fields([
         'total_turns' => 0,
         'created' => $timestamp,

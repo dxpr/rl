@@ -41,7 +41,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
       }
 
       $this->database->merge('rl_experiment_registry')
-        ->key(['experiment_id' => $experiment_id])
+        ->key('experiment_id', $experiment_id)
         ->fields($fields)
         ->execute();
     }
