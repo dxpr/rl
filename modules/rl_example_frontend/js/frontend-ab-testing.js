@@ -52,20 +52,6 @@
               // Step 4: Set up click handler for reward tracking
               setupRewardTracking(form, config, selectedArmId);
             }
-          })
-          .catch(function(error) {
-            console.warn('RL Frontend A/B: Failed to fetch scores, using fallback:', error);
-            // Fallback: use first available button text
-            const fallbackArmId = Object.keys(config.buttonTexts)[0];
-            selectedArmId = fallbackArmId;
-            
-            const submitButton = form.querySelector('input[type="submit"]');
-            if (submitButton) {
-              submitButton.value = config.buttonTexts[fallbackArmId];
-            }
-            
-            setupTurnTracking(form, config, selectedArmId);
-            setupRewardTracking(form, config, selectedArmId);
           });
       });
 
@@ -121,14 +107,7 @@
               formData.append('arm_ids', armId);
               
               // Send the turn signal
-              if (navigator.sendBeacon) {
-                navigator.sendBeacon(config.rlEndpointUrl, formData);
-              } else {
-                // Fallback for browsers without sendBeacon
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', config.rlEndpointUrl, true);
-                xhr.send(formData);
-              }
+              navigator.sendBeacon(config.rlEndpointUrl, formData);
               
               // Disconnect observer after recording turn
               observer.disconnect();
@@ -157,14 +136,7 @@
             formData.append('arm_id', armId);
             
             // Use sendBeacon for non-blocking send
-            if (navigator.sendBeacon) {
-              navigator.sendBeacon(config.rlEndpointUrl, formData);
-            } else {
-              // Fallback for browsers without sendBeacon
-              const xhr = new XMLHttpRequest();
-              xhr.open('POST', config.rlEndpointUrl, true);
-              xhr.send(formData);
-            }
+            navigator.sendBeacon(config.rlEndpointUrl, formData);
           });
         }
       }
