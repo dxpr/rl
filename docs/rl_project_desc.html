@@ -71,6 +71,10 @@ $scores = $experiment_manager->getThompsonScores('my-experiment');
 // Select the best option
 $ts_calculator = \Drupal::service('rl.ts_calculator');
 $best_option = $ts_calculator->selectBestArm($scores);
+
+// Override page cache for web components (optional)
+$cache_manager = \Drupal::service('rl.cache_manager');
+$cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 </code></pre>
 
 <h3>HTTP Endpoints</h3>
@@ -106,6 +110,28 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
 <li><code>POST /rl/experiment/{uuid}/turns</code> - Record trials</li>
 <li><code>POST /rl/experiment/{uuid}/rewards</code> - Record successes</li>
 <li><code>GET /rl/experiment/{uuid}/scores</code> - Get scores</li>
+</ul>
+
+<h3>Cache Management</h3>
+
+<p>RL provides optional cache management for web components:</p>
+
+<pre><code>// Override page cache if experiment cache is shorter than site cache
+\Drupal::service('rl.cache_manager')->overridePageCacheIfShorter(30);
+</code></pre>
+
+<p><strong>How it works:</strong></p>
+<ul>
+<li>If site cache is 300s and experiment needs 30s → overrides to 30s</li>
+<li>If site cache is 60s and experiment needs 300s → leaves at 60s</li>
+<li>If site cache is disabled → no override</li>
+</ul>
+
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Views plugins using RL for content sorting</li>
+<li>Blocks displaying A/B tested content</li>
+<li>Components needing frequent RL score updates</li>
 </ul>
 
 <p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>

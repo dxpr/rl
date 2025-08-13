@@ -19,3 +19,12 @@ services:
     class: Drupal\rl\Decorator\ExperimentDecoratorManager
     tags:
       - { name: service_collector, tag: rl_experiment_decorator, call: addDecorator }
+
+  rl.cache_manager:
+    class: Drupal\rl\Service\CacheManager
+    arguments: ['@config.factory']
+
+  rl.cache_response_subscriber:
+    class: Drupal\rl\EventSubscriber\CacheResponseSubscriber
+    tags:
+      - { name: event_subscriber }

@@ -7,7 +7,8 @@ efficient A/B testing that minimizes lost conversions.
 
 - **Thompson Sampling Algorithm**: Pure PHP implementation
 - **Fast HTTP REST API**: Optimized JSON endpoints for tracking and decisions
-- **Administrative Reports**: Experiment analysis interface at `/admin/reports/rl`
+- **Administrative Reports**: Experiment analysis interface at 
+  `/admin/reports/rl`
 - **Service-based Architecture**: Extensible design for custom implementations
 - **Data Sovereignty**: No cloud dependencies, pure Drupal solution
 
@@ -56,6 +57,10 @@ $scores = $experiment_manager->getThompsonScores('my-experiment');
 // Select best option
 $ts_calculator = \Drupal::service('rl.ts_calculator');
 $best_option = $ts_calculator->selectBestArm($scores);
+
+// Override page cache for web components (optional)
+$cache_manager = \Drupal::service('rl.cache_manager');
+$cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 ```
 
 ## HTTP Endpoints
@@ -91,6 +96,25 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 - `POST /rl/experiment/{experiment_id}/turns` - Record trials
 - `POST /rl/experiment/{experiment_id}/rewards` - Record successes  
 - `GET /rl/experiment/{experiment_id}/scores` - Get scores
+
+## Cache Management
+
+RL provides optional cache management for web components:
+
+```php
+// Override page cache if experiment cache is shorter than site cache
+\Drupal::service('rl.cache_manager')->overridePageCacheIfShorter(30);
+```
+
+**How it works:**
+- If site cache is 300s and experiment needs 30s → overrides to 30s
+- If site cache is 60s and experiment needs 300s → leaves at 60s  
+- If site cache is disabled → no override
+
+**Use cases:**
+- Views plugins using RL for content sorting
+- Blocks displaying A/B tested content
+- Components needing frequent RL score updates
 
 ## Related Modules
 
