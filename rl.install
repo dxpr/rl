@@ -12,6 +12,13 @@ use Drupal\Core\Database\SchemaObjectDoesNotExistException;
  * Implements hook_install().
  */
 function rl_install() {
+  // Disable page_cache module if enabled. Page cache only saves 10-20ms and breaks
+  // time-based cache expiration. See https://www.drupal.org/project/drupal/issues/2352009
+  $module_handler = \Drupal::service('module_handler');
+  if ($module_handler->moduleExists('page_cache')) {
+    \Drupal::service('module_installer')->uninstall(['page_cache']);
+  }
+
   $schema = \Drupal::database()->schema();
 
   // Define the rl_experiment_totals table schema.
