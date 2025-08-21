@@ -2,6 +2,7 @@
 
 namespace Drupal\rl\EventSubscriber;
 
+use Drupal\Core\Cache\CacheableResponseInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -33,6 +34,11 @@ class CacheResponseSubscriber implements EventSubscriberInterface {
       $response = $event->getResponse();
       $response->setPublic();
       $response->setMaxAge($cache_override);
+
+      // Also update the cacheability metadata for Drupal's internal page cache.
+      if ($response instanceof CacheableResponseInterface) {
+        $response->getCacheableMetadata()->setCacheMaxAge($cache_override);
+      }
 
       // Clear the static variable.
       $cache_override = NULL;
