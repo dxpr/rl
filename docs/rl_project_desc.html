@@ -54,6 +54,25 @@
   <p><a href="https://www.drupal.org/project/dxpr_cms" title="DXPR CMS platform">Get DXPR CMS »</a></p>
 </div>
 
+<h3>Installation</h3>
+
+<pre><code>composer require drupal/rl
+drush en rl</code></pre>
+
+<h4>Verify rl.php Access</h4>
+<p>The RL module includes a <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:</p>
+
+<pre><code>curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://your-site.com/modules/contrib/rl/rl.php</code></pre>
+
+<p><strong>If the test fails:</strong></p>
+<ul>
+<li><strong>Apache</strong>: Ensure <code>.htaccess</code> files are processed (<code>AllowOverride All</code>)</li>
+<li><strong>Nginx</strong>: Copy the rewrite rules from <code>.htaccess</code> to your server config</li>
+<li><strong>Security modules</strong>: Whitelist <code>/modules/contrib/rl/rl.php</code></li>
+</ul>
+
+<p>If server policies prevent direct access to <code>rl.php</code>, use the Drupal Routes API instead.</p>
+
 <h3>API</h3>
 
 <pre><code>// Get the experiment manager
@@ -79,8 +98,8 @@ $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 
 <h3>HTTP Endpoints</h3>
 
-<h4>rl.php - High-Performance Endpoint (Recommended)</h4>
-<p><strong>For high-volume, low-latency applications, use the direct rl.php endpoint:</strong></p>
+<h4>rl.php - Direct Endpoint (Recommended)</h4>
+<p><strong>Use the direct rl.php endpoint for optimal performance:</strong></p>
 
 <pre><code>// Record turns (trials) - when content is viewed
 const formData = new FormData();
@@ -96,16 +115,8 @@ rewardData.append('experiment_uuid', 'abc123');
 rewardData.append('arm_id', '1');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
 
-<p><strong>Benefits:</strong></p>
-<ul>
-<li>Minimal server overhead (no full Drupal bootstrap)</li>
-<li>Faster response times for JavaScript tracking</li>
-<li>Optimized for <code>navigator.sendBeacon()</code> requests</li>
-<li>Used by AI Sorting module for real-time content optimization</li>
-</ul>
-
-<h4>Drupal Routes - Full API</h4>
-<p><strong>For applications requiring full Drupal integration:</strong></p>
+<h4>Drupal Routes - Alternative API</h4>
+<p><strong>Use only when server security policies prevent direct access to rl.php:</strong></p>
 <ul>
 <li><code>POST /rl/experiment/{uuid}/turns</code> - Record trials</li>
 <li><code>POST /rl/experiment/{uuid}/rewards</code> - Record successes</li>
