@@ -38,6 +38,23 @@ composer require drupal/rl
 drush en rl
 ```
 
+### Post-Installation: Verify rl.php Access
+
+The RL module includes a `.htaccess` file that allows direct access to `rl.php` (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:
+
+```bash
+# Test if rl.php is accessible
+curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://your-site.com/modules/contrib/rl/rl.php
+```
+
+**If the test fails:**
+
+- **Apache**: Ensure `.htaccess` files are processed (`AllowOverride All`)
+- **Nginx**: Copy the rewrite rules from `.htaccess` to your server config
+- **Security modules**: Whitelist `/modules/contrib/rl/rl.php`
+
+If server policies prevent direct access to `rl.php`, use the Drupal Routes API instead.
+
 ## API Usage
 
 ### PHP API
@@ -65,9 +82,8 @@ $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 
 ## HTTP Endpoints
 
-### rl.php - High-Performance Endpoint (Recommended)
-**For high-volume, low-latency applications, use the direct rl.php
-endpoint:**
+### rl.php - Direct Endpoint (Recommended)
+**Use the direct rl.php endpoint for optimal performance:**
 
 ```javascript
 // Record turns (trials) - when content is viewed
@@ -85,14 +101,8 @@ rewardData.append('arm_id', '1');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 ```
 
-**Benefits:**
-- Minimal server overhead (no full Drupal bootstrap)
-- Faster response times for JavaScript tracking
-- Optimized for `navigator.sendBeacon()` requests
-- Used by AI Sorting module for real-time content optimization
-
-### Drupal Routes - Full API
-**For applications requiring full Drupal integration:**
+### Drupal Routes - Alternative API
+**Use only when server security policies prevent direct access to rl.php:**
 - `POST /rl/experiment/{experiment_id}/turns` - Record trials
 - `POST /rl/experiment/{experiment_id}/rewards` - Record successes  
 - `GET /rl/experiment/{experiment_id}/scores` - Get scores
