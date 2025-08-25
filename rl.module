@@ -27,27 +27,3 @@ function rl_help($route_name, RouteMatchInterface $route_match) {
       return $output;
   }
 }
-
-/**
- * Implements hook_requirements().
- */
-function rl_requirements($phase) {
-  $requirements = [];
-
-  if ($phase == 'runtime') {
-    $module_handler = \Drupal::service('module_handler');
-    if ($module_handler->moduleExists('page_cache')) {
-      $requirements['rl_page_cache_conflict'] = [
-        'title' => t('RL: Page Cache compatibility'),
-        'severity' => REQUIREMENT_ERROR,
-        'value' => t('Page Cache module is enabled'),
-        'description' => t('The Page Cache module breaks time-based cache expiration needed for RL experiments. <a href="@link">Disable the Page Cache module</a> to fix this issue. Page cache only saves 10-20ms and conflicts with proper caching. See <a href="@issue" target="_blank">Drupal core issue #2352009</a>.', [
-          '@link' => '/admin/modules/uninstall',
-          '@issue' => 'https://www.drupal.org/project/drupal/issues/2352009',
-        ]),
-      ];
-    }
-  }
-
-  return $requirements;
-}

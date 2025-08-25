@@ -1,7 +1,11 @@
 services:
+  logger.channel.rl:
+    parent: logger.channel_base
+    arguments: ['rl']
+
   rl.experiment_data_storage:
     class: Drupal\rl\Storage\ExperimentDataStorage
-    arguments: ['@database']
+    arguments: ['@database', '@datetime.time']
 
   rl.ts_calculator:
     class: Drupal\rl\Service\ThompsonCalculator
@@ -13,7 +17,7 @@ services:
 
   rl.experiment_registry:
     class: Drupal\rl\Registry\ExperimentRegistry
-    arguments: ['@database']
+    arguments: ['@database', '@datetime.time', '@logger.channel.rl']
 
   rl.experiment_decorator_manager:
     class: Drupal\rl\Decorator\ExperimentDecoratorManager

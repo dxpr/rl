@@ -3,12 +3,14 @@
 namespace Drupal\rl_example\Plugin\Block;
 
 use Drupal\Core\Block\BlockBase;
+use Drupal\Core\Extension\ModuleExtensionList;
+use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Drupal\rl\Service\ExperimentManagerInterface;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\CacheManager;
-use Drupal\Core\Messenger\MessengerInterface;
+use Drupal\rl\Service\ExperimentManagerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\MessageCommand;
 
@@ -51,6 +53,20 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
   protected $cacheManager;
 
   /**
+   * The module extension list service.
+   *
+   * @var \Drupal\Core\Extension\ModuleExtensionList
+   */
+  protected $moduleExtensionList;
+
+  /**
+   * The request stack service.
+   *
+   * @var \Symfony\Component\HttpFoundation\RequestStack
+   */
+  protected $requestStack;
+
+  /**
    * The experiment ID.
    *
    * @var string
@@ -84,6 +100,10 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
    *   The messenger service.
    * @param \Drupal\rl\Service\CacheManager $cache_manager
    *   The RL cache manager.
+   * @param \Drupal\Core\Extension\ModuleExtensionList $module_extension_list
+   *   The module extension list service.
+   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
+   *   The request stack service.
    */
   public function __construct(
     array $configuration,
@@ -93,12 +113,16 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
     ExperimentRegistryInterface $experiment_registry,
     MessengerInterface $messenger,
     CacheManager $cache_manager,
+    ModuleExtensionList $module_extension_list,
+    RequestStack $request_stack,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->experimentManager = $experiment_manager;
     $this->experimentRegistry = $experiment_registry;
     $this->messenger = $messenger;
     $this->cacheManager = $cache_manager;
+    $this->moduleExtensionList = $module_extension_list;
+    $this->requestStack = $request_stack;
 
     // Use deterministic ID for this specific experiment.
     $this->experimentId = 'rl_example-newsletter_button';
@@ -122,7 +146,9 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
       $container->get('rl.experiment_manager'),
       $container->get('rl.experiment_registry'),
       $container->get('messenger'),
-      $container->get('rl.cache_manager')
+      $container->get('rl.cache_manager'),
+      $container->get('extension.list.module'),
+      $container->get('request_stack')
     );
   }
 
@@ -168,8 +194,8 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
     ];
 
     // Build correct endpoint URL for rl.php.
-    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
-    $base_path = \Drupal::request()->getBasePath();
+    $rl_path = $this->moduleExtensionList->getPath('rl');
+    $base_path = $this->requestStack->getCurrentRequest()->getBasePath();
 
     // Attach JavaScript library for viewport tracking.
     $form['#attached']['library'][] = 'rl_example/tracking';

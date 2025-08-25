@@ -7,6 +7,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Link;
+use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
@@ -45,6 +46,13 @@ class ReportsController extends ControllerBase {
   protected $decoratorManager;
 
   /**
+   * The renderer service.
+   *
+   * @var \Drupal\Core\Render\RendererInterface
+   */
+  protected $renderer;
+
+  /**
    * Constructs a ReportsController object.
    *
    * @param \Drupal\Core\Database\Connection $database
@@ -55,12 +63,15 @@ class ReportsController extends ControllerBase {
    *   The date formatter service.
    * @param \Drupal\rl\Decorator\ExperimentDecoratorManager $decorator_manager
    *   The experiment decorator manager.
+   * @param \Drupal\Core\Render\RendererInterface $renderer
+   *   The renderer service.
    */
-  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager) {
+  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer) {
     $this->database = $database;
     $this->experimentStorage = $experiment_storage;
     $this->dateFormatter = $date_formatter;
     $this->decoratorManager = $decorator_manager;
+    $this->renderer = $renderer;
   }
 
   /**
@@ -71,7 +82,8 @@ class ReportsController extends ControllerBase {
           $container->get('database'),
           $container->get('rl.experiment_data_storage'),
           $container->get('date.formatter'),
-          $container->get('rl.experiment_decorator_manager')
+          $container->get('rl.experiment_decorator_manager'),
+          $container->get('renderer')
       );
   }
 
@@ -234,7 +246,7 @@ class ReportsController extends ControllerBase {
 
       // Get decorated arm name or fallback to arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_id, $arm->arm_id);
-      $arm_name = $arm_display ? \Drupal::service('renderer')->renderPlain($arm_display) : $arm->arm_id;
+      $arm_name = $arm_display ? $this->renderer->renderPlain($arm_display) : $arm->arm_id;
 
       $rows[] = [
         $arm_name,
