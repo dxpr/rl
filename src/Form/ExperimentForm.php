@@ -55,13 +55,13 @@ class ExperimentForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $experiment_uuid = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL) {
     $experiment = NULL;
 
-    if ($experiment_uuid) {
+    if ($experiment_id) {
       $experiment = $this->database->select('rl_experiment_registry', 'er')
         ->fields('er')
-        ->condition('uuid', $experiment_uuid)
+        ->condition('experiment_id', $experiment_id)
         ->execute()
         ->fetchObject();
 
@@ -71,13 +71,13 @@ class ExperimentForm extends FormBase {
       }
     }
 
-    $form['uuid'] = [
+    $form['experiment_id'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Experiment UUID'),
+      '#title' => $this->t('Experiment ID'),
       '#required' => TRUE,
-      '#default_value' => $experiment ? $experiment->uuid : '',
+      '#default_value' => $experiment ? $experiment->experiment_id : '',
       '#disabled' => (bool) $experiment,
-      '#description' => $experiment ? $this->t('UUID cannot be changed after creation.') : $this->t('Unique identifier for this experiment.'),
+      '#description' => $experiment ? $this->t('ID cannot be changed after creation.') : $this->t('Unique identifier for this experiment.'),
     ];
 
     $form['module'] = [
@@ -112,11 +112,11 @@ class ExperimentForm extends FormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    $uuid = $form_state->getValue('uuid');
-    $route_uuid = $this->getRouteMatch()->getParameter('experiment_uuid');
+    $experiment_id = $form_state->getValue('experiment_id');
+    $route_experiment_id = $this->getRouteMatch()->getParameter('experiment_id');
 
-    if (!$route_uuid && $this->experimentRegistry->isRegistered($uuid)) {
-      $form_state->setErrorByName('uuid', $this->t('An experiment with this UUID already exists.'));
+    if (!$route_experiment_id && $this->experimentRegistry->isRegistered($experiment_id)) {
+      $form_state->setErrorByName('experiment_id', $this->t('An experiment with this ID already exists.'));
     }
   }
 
@@ -124,20 +124,20 @@ class ExperimentForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $uuid = $form_state->getValue('uuid');
+    $experiment_id = $form_state->getValue('experiment_id');
     $module = $form_state->getValue('module');
-    $route_uuid = $this->getRouteMatch()->getParameter('experiment_uuid');
+    $route_experiment_id = $this->getRouteMatch()->getParameter('experiment_id');
 
-    if ($route_uuid) {
+    if ($route_experiment_id) {
       $this->database->update('rl_experiment_registry')
         ->fields(['module' => $module])
-        ->condition('uuid', $uuid)
+        ->condition('experiment_id', $experiment_id)
         ->execute();
 
       $this->messenger()->addStatus($this->t('Experiment updated successfully.'));
     }
     else {
-      $this->experimentRegistry->register($uuid, $module);
+      $this->experimentRegistry->register($experiment_id, $module);
       $this->messenger()->addStatus($this->t('Experiment created successfully.'));
     }
 

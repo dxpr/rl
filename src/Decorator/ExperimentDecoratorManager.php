@@ -27,17 +27,17 @@ class ExperimentDecoratorManager {
   }
 
   /**
-   * Decorate an experiment UUID with user-friendly information.
+   * Decorate an experiment ID with user-friendly information.
    *
-   * @param string $uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    *
    * @return array|null
    *   A render array with decorated information, or NULL if no decoration.
    */
-  public function decorateExperiment(string $uuid): ?array {
+  public function decorateExperiment(string $experiment_id): ?array {
     foreach ($this->decorators as $decorator) {
-      $result = $decorator->decorateExperiment($uuid);
+      $result = $decorator->decorateExperiment($experiment_id);
       if ($result !== NULL) {
         return $result;
       }
@@ -48,17 +48,17 @@ class ExperimentDecoratorManager {
   /**
    * Decorate an arm ID with user-friendly information.
    *
-   * @param string $experiment_uuid
-   *   The experiment UUID.
+   * @param string $experiment_id
+   *   The experiment ID.
    * @param string $arm_id
    *   The arm ID.
    *
    * @return array|null
    *   A render array with decorated information, or NULL if no decoration.
    */
-  public function decorateArm(string $experiment_uuid, string $arm_id): ?array {
+  public function decorateArm(string $experiment_id, string $arm_id): ?array {
     foreach ($this->decorators as $decorator) {
-      $result = $decorator->decorateArm($experiment_uuid, $arm_id);
+      $result = $decorator->decorateArm($experiment_id, $arm_id);
       if ($result !== NULL) {
         return $result;
       }

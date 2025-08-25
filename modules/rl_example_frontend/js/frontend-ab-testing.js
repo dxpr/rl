@@ -87,7 +87,7 @@
           };
           
           // Send request for Thompson scores
-          const params = 'action=scores&experiment_uuid=' + encodeURIComponent(experimentId) + 
+          const params = 'action=scores&experiment_id=' + encodeURIComponent(experimentId) + 
                         '&arm_ids=' + encodeURIComponent(armIds.join(','));
           xhr.send(params);
         });
@@ -103,7 +103,7 @@
               // Form is now visible - record the turn
               const formData = new FormData();
               formData.append('action', 'turns');
-              formData.append('experiment_uuid', config.experimentId);
+              formData.append('experiment_id', config.experimentId);
               formData.append('arm_ids', armId);
               
               // Send the turn signal
@@ -132,7 +132,7 @@
             // Send reward signal to RL - user clicked the button
             const formData = new FormData();
             formData.append('action', 'rewards');
-            formData.append('experiment_uuid', config.experimentId);
+            formData.append('experiment_id', config.experimentId);
             formData.append('arm_id', armId);
             
             // Use sendBeacon for non-blocking send

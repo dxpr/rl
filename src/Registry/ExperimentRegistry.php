@@ -2,7 +2,9 @@
 
 namespace Drupal\rl\Registry;
 
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Database\Connection;
+use Psr\Log\LoggerInterface;
 
 /**
  * Service for managing experiment registration.
@@ -16,13 +18,33 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
   protected $database;
 
   /**
+   * The time service.
+   *
+   * @var \Drupal\Component\Datetime\TimeInterface
+   */
+  protected $time;
+
+  /**
+   * The logger service.
+   *
+   * @var \Psr\Log\LoggerInterface
+   */
+  protected $logger;
+
+  /**
    * Constructs an ExperimentRegistry object.
    *
    * @param \Drupal\Core\Database\Connection $database
    *   The database connection.
+   * @param \Drupal\Component\Datetime\TimeInterface $time
+   *   The time service.
+   * @param \Psr\Log\LoggerInterface $logger
+   *   The logger service.
    */
-  public function __construct(Connection $database) {
+  public function __construct(Connection $database, TimeInterface $time, LoggerInterface $logger) {
     $this->database = $database;
+    $this->time = $time;
+    $this->logger = $logger;
   }
 
   /**
@@ -33,7 +55,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
       // Use merge to handle duplicate registrations gracefully.
       $fields = [
         'module' => $module,
-        'registered_at' => \Drupal::time()->getRequestTime(),
+        'registered_at' => $this->time->getRequestTime(),
       ];
 
       if ($experiment_name !== NULL) {
@@ -47,7 +69,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
     }
     catch (\Exception $e) {
       // Log error but don't break the page.
-      \Drupal::logger('rl')->error('Failed to register experiment @id: @message', [
+      $this->logger->error('Failed to register experiment @id: @message', [
         '@id' => $experiment_id,
         '@message' => $e->getMessage(),
       ]);

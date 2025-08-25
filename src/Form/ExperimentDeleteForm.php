@@ -21,11 +21,11 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   protected $database;
 
   /**
-   * The experiment UUID.
+   * The experiment ID.
    *
    * @var string
    */
-  protected $experimentUuid;
+  protected $experimentId;
 
   /**
    * Constructs an ExperimentDeleteForm object.
@@ -53,12 +53,12 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $experiment_uuid = NULL) {
-    $this->experimentUuid = $experiment_uuid;
+  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL) {
+    $this->experimentId = $experiment_id;
 
     $experiment = $this->database->select('rl_experiment_registry', 'er')
       ->fields('er')
-      ->condition('uuid', $experiment_uuid)
+      ->condition('experiment_id', $experiment_id)
       ->execute()
       ->fetchObject();
 
@@ -74,8 +74,8 @@ class ExperimentDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getQuestion() {
-    return $this->t('Are you sure you want to delete experiment %uuid?', [
-      '%uuid' => $this->experimentUuid,
+    return $this->t('Are you sure you want to delete experiment %id?', [
+      '%id' => $this->experimentId,
     ]);
   }
 
@@ -101,26 +101,26 @@ class ExperimentDeleteForm extends ConfirmFormBase {
 
     try {
       $this->database->delete('rl_arm_data')
-        ->condition('experiment_uuid', $this->experimentUuid)
+        ->condition('experiment_id', $this->experimentId)
         ->execute();
 
       $this->database->delete('rl_experiment_totals')
-        ->condition('experiment_uuid', $this->experimentUuid)
+        ->condition('experiment_id', $this->experimentId)
         ->execute();
 
       $this->database->delete('rl_experiment_registry')
-        ->condition('uuid', $this->experimentUuid)
+        ->condition('experiment_id', $this->experimentId)
         ->execute();
 
-      $this->messenger()->addStatus($this->t('Experiment %uuid has been deleted.', [
-        '%uuid' => $this->experimentUuid,
+      $this->messenger()->addStatus($this->t('Experiment %id has been deleted.', [
+        '%id' => $this->experimentId,
       ]));
     }
     catch (\Exception $e) {
       $transaction->rollBack();
       $this->messenger()->addError($this->t('An error occurred while deleting the experiment.'));
-      $this->getLogger('rl')->error('Error deleting experiment @uuid: @message', [
-        '@uuid' => $this->experimentUuid,
+      $this->getLogger('rl')->error('Error deleting experiment @id: @message', [
+        '@id' => $this->experimentId,
         '@message' => $e->getMessage(),
       ]);
     }

@@ -3,6 +3,7 @@
 namespace Drupal\rl\Storage;
 
 use Drupal\Core\Database\Connection;
+use Drupal\Component\Datetime\TimeInterface;
 
 /**
  * Storage handler for experiment data.
@@ -16,20 +17,30 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   protected $database;
 
   /**
+   * The time service.
+   *
+   * @var \Drupal\Component\Datetime\TimeInterface
+   */
+  protected $time;
+
+  /**
    * Constructs a new ExperimentDataStorage.
    *
    * @param \Drupal\Core\Database\Connection $database
    *   The database connection.
+   * @param \Drupal\Component\Datetime\TimeInterface $time
+   *   The time service.
    */
-  public function __construct(Connection $database) {
+  public function __construct(Connection $database, TimeInterface $time) {
     $this->database = $database;
+    $this->time = $time;
   }
 
   /**
    * {@inheritdoc}
    */
   public function recordTurn($experiment_id, $arm_id) {
-    $timestamp = \Drupal::time()->getRequestTime();
+    $timestamp = $this->time->getRequestTime();
 
     // Update arm data.
     $this->database->merge('rl_arm_data')
@@ -60,7 +71,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    * {@inheritdoc}
    */
   public function recordTurns($experiment_id, array $arm_ids) {
-    $timestamp = \Drupal::time()->getRequestTime();
+    $timestamp = $this->time->getRequestTime();
     $arm_count = count($arm_ids);
 
     // Record a turn for each arm (each arm gets exposure).
@@ -94,7 +105,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    * {@inheritdoc}
    */
   public function recordReward($experiment_id, $arm_id) {
-    $timestamp = \Drupal::time()->getRequestTime();
+    $timestamp = $this->time->getRequestTime();
 
     $this->database->merge('rl_arm_data')
       ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
@@ -140,7 +151,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->condition('experiment_id', $experiment_id);
 
     if ($time_window_seconds && $time_window_seconds > 0) {
-      $cutoff_timestamp = \Drupal::time()->getRequestTime() - $time_window_seconds;
+      $cutoff_timestamp = $this->time->getRequestTime() - $time_window_seconds;
       $query->condition('updated', $cutoff_timestamp, '>=');
     }
 
