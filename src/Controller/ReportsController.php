@@ -266,6 +266,7 @@ class ReportsController extends ControllerBase {
     ];
 
     $build = [
+      '#title' => $this->t('RL Experiment: @id', ['@id' => $experiment_id]),
       'table' => $table,
     ];
 

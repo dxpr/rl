@@ -122,7 +122,6 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     $this->database->merge('rl_experiment_totals')
       ->key('experiment_id', $experiment_id)
       ->fields([
-        'total_turns' => 0,
         'created' => $timestamp,
         'updated' => $timestamp,
       ])
