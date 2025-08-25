@@ -62,7 +62,7 @@ drush en rl</code></pre>
 <h4>Verify rl.php Access</h4>
 <p>The RL module includes a <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:</p>
 
-<pre><code>curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://your-site.com/modules/contrib/rl/rl.php</code></pre>
+<pre><code>curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/modules/contrib/rl/rl.php</code></pre>
 
 <p><strong>If the test fails:</strong></p>
 <ul>

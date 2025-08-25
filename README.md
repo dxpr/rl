@@ -44,7 +44,7 @@ The RL module includes a `.htaccess` file that allows direct access to `rl.php` 
 
 ```bash
 # Test if rl.php is accessible
-curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://your-site.com/modules/contrib/rl/rl.php
+curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/modules/contrib/rl/rl.php
 ```
 
 **If the test fails:**
