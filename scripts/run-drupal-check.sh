@@ -3,7 +3,7 @@ set -vo pipefail
 
 DRUPAL_RECOMMENDED_PROJECT=${DRUPAL_RECOMMENDED_PROJECT:-10.3.x-dev}
 PHP_EXTENSIONS="gd"
-DRUPAL_CHECK_TOOL="mglaman/drupal-check"
+DRUPAL_CHECK_TOOL="mglaman/drupal-check:^1.5"
 
 # Install required PHP extensions
 for ext in $PHP_EXTENSIONS; do
@@ -31,8 +31,8 @@ if [[ $DRUPAL_RECOMMENDED_PROJECT == 11.* ]]; then
   composer require drupal/statistics
 fi
 
-# Install drupal-check
-composer require $DRUPAL_CHECK_TOOL --dev
+# Install drupal-check with dependency resolution
+composer require $DRUPAL_CHECK_TOOL --dev --with-all-dependencies
 
 # Run drupal-check
 ./vendor/bin/drupal-check --drupal-root . -ad web/modules/contrib/rl 
