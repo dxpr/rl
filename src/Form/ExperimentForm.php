@@ -5,6 +5,7 @@ namespace Drupal\rl\Form;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Url;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -39,7 +40,7 @@ class ExperimentForm extends FormBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
-    return new static(
+    return new self(
       $container->get('database'),
       $container->get('rl.experiment_registry')
     );
@@ -101,7 +102,7 @@ class ExperimentForm extends FormBase {
     $form['actions']['cancel'] = [
       '#type' => 'link',
       '#title' => $this->t('Cancel'),
-      '#url' => $this->urlGenerator()->generateFromRoute('rl.reports.experiments'),
+      '#url' => Url::fromRoute('rl.reports.experiments'),
       '#attributes' => ['class' => ['button']],
     ];
 

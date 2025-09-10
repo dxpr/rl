@@ -78,7 +78,7 @@ class ReportsController extends ControllerBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
-    return new static(
+    return new self(
           $container->get('database'),
           $container->get('rl.experiment_data_storage'),
           $container->get('date.formatter'),
@@ -246,7 +246,7 @@ class ReportsController extends ControllerBase {
 
       // Get decorated arm name or fallback to arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_id, $arm->arm_id);
-      $arm_name = $arm_display ? $this->renderer->renderPlain($arm_display) : $arm->arm_id;
+      $arm_name = $arm_display ? $this->renderer->renderInIsolation($arm_display) : $arm->arm_id;
 
       $rows[] = [
         $arm_name,

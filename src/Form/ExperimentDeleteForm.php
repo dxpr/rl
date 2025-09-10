@@ -38,7 +38,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
-    return new static(
+    return new self(
       $container->get('database')
     );
   }
