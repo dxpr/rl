@@ -40,11 +40,14 @@ drush en rl
 
 ### Post-Installation: Verify rl.php Access
 
-The RL module includes a `.htaccess` file that allows direct access to `rl.php` (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:
+The RL module includes a `.htaccess` file that allows direct access to
+`rl.php` (following the same pattern as Drupal 11's contrib statistics
+module). Test that it's working:
 
 ```bash
 # Test if rl.php is accessible
-curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/modules/contrib/rl/rl.php
+curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" \
+  http://example.com/modules/contrib/rl/rl.php
 ```
 
 **If the test fails:**
@@ -53,7 +56,8 @@ curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/m
 - **Nginx**: Copy the rewrite rules from `.htaccess` to your server config
 - **Security modules**: Whitelist `/modules/contrib/rl/rl.php`
 
-If server policies prevent direct access to `rl.php`, use the Drupal Routes API instead.
+If server policies prevent direct access to `rl.php`, use the Drupal
+Routes API instead.
 
 ## API Usage
 

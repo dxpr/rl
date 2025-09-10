@@ -21,9 +21,9 @@ fi
 cd drupal
 mkdir -p web/modules/contrib/
 
-# Symlink analyze_ai_brand_voice if not already linked
-if [ ! -L "web/modules/contrib/analyze_ai_brand_voice" ]; then
-  ln -s /src web/modules/contrib/analyze_ai_brand_voice
+# Symlink rl if not already linked
+if [ ! -L "web/modules/contrib/rl" ]; then
+  ln -s /src web/modules/contrib/rl
 fi
 
 # Install the statistic modules if D11 (removed from core).
@@ -35,4 +35,4 @@ fi
 composer require $DRUPAL_CHECK_TOOL --dev
 
 # Run drupal-check
-./vendor/bin/drupal-check --drupal-root . -ad web/modules/contrib/analyze_ai_brand_voice 
+./vendor/bin/drupal-check --drupal-root . -ad web/modules/contrib/rl 
