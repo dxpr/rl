@@ -31,23 +31,25 @@ if [[ $DRUPAL_RECOMMENDED_PROJECT == 11.* ]]; then
   composer require drupal/statistics
 fi
 
-# Install drupal-check with dependency resolution
-composer require $DRUPAL_CHECK_TOOL --dev --with-all-dependencies --ignore-platform-reqs || \
-composer require mglaman/drupal-check --dev --ignore-platform-reqs || \
-echo "❌ Could not install drupal-check due to dependency conflicts with Drupal 11"
+# Try to install drupal-check latest version
+echo "Installing drupal-check..."
+if ! composer require mglaman/drupal-check:^1.5 --dev --no-interaction; then
+  echo "❌ Failed to install drupal-check due to dependency conflicts"
+  echo "Attempting to resolve conflicts..."
+  
+  # Try alternative installation methods
+  if ! composer require mglaman/drupal-check --dev --no-interaction --ignore-platform-reqs; then
+    echo "❌ Could not resolve drupal-check dependency conflicts"
+    echo "This indicates a real compatibility issue that needs to be addressed"
+    exit 1
+  fi
+fi
 
-# Run drupal-check if it was installed
+# Verify installation and run drupal-check
 if [ -f "./vendor/bin/drupal-check" ]; then
   echo "✅ Running drupal-check analysis..."
   ./vendor/bin/drupal-check --drupal-root . -ad web/modules/contrib/rl
 else
-  echo "⚠️ drupal-check not available - using alternative PHPStan analysis"
-  # Fallback to direct PHPStan analysis if available
-  if [ -f "./vendor/bin/phpstan" ]; then
-    ./vendor/bin/phpstan analyse web/modules/contrib/rl --level=1 --configuration=web/modules/contrib/rl/phpstan.neon || \
-    ./vendor/bin/phpstan analyse web/modules/contrib/rl --level=1 || \
-    echo "✅ PHPStan analysis completed"
-  else
-    echo "✅ Static analysis tools not available in this environment"
-  fi
+  echo "❌ drupal-check installation failed - binary not found"
+  exit 1
 fi 
