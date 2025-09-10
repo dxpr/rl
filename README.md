@@ -1,4 +1,4 @@
-# Reinforcement Learning (RL)
+# Reinforcement Learning (RL) :)
 
 Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
 efficient A/B testing that minimizes lost conversions.
