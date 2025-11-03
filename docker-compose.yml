@@ -27,6 +27,6 @@ services:
    command: bash -c "/src/scripts/run-drupal-check.sh"
    tty: true
    environment:
-     DRUPAL_RECOMMENDED_PROJECT: 11.2.x-dev
+     DRUPAL_RECOMMENDED_PROJECT: 11.x-dev
    volumes:
       - .:/src 
