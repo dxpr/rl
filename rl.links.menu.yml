@@ -3,7 +3,6 @@ rl.reports.experiments:
   description: 'View reinforcement learning experiments and their statistics.'
   route_name: rl.reports.experiments
   parent: system.admin_reports
-  weight: 10
 
 rl.settings:
   title: 'RL Settings'
