@@ -48,11 +48,7 @@ class ThompsonCalculator {
 
     foreach ($arms_data as $id => $arm) {
       $alpha = $arm->rewards + 1;
-
-      // Ensure failures (turns - rewards) cannot be negative.
-      // This can happen if data integrity is compromised.
-      $failures = max(0, $arm->turns - $arm->rewards);
-      $beta = $failures + 1;
+      $beta = ($arm->turns - $arm->rewards) + 1;
 
       $base_score = $this->randBeta($alpha, $beta);
 

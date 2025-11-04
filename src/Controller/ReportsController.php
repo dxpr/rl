@@ -204,7 +204,8 @@ class ReportsController extends ControllerBase {
       '#caption' => $this->t('All Reinforcement Learning experiments and their statistics.'),
     ];
 
-    $build['#prefix'] = '<p>' . $this->t('This page shows all active reinforcement learning experiments. Each experiment represents a multi-armed bandit test where different "arms" (options) are being evaluated based on user interactions (turns and rewards).') . '</p>';
+    $build['#prefix'] = '<p>' . $this->t('This page shows all active reinforcement learning experiments. Each experiment represents a multi-armed bandit test where different "arms" (options) are being evaluated based on user interactions (turns and rewards).') . '</p>'
+      . '<p>' . $this->t('<strong>Tip:</strong> Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>';
 
     return $build;
   }
@@ -255,8 +256,7 @@ class ReportsController extends ControllerBase {
 
       // Calculate Thompson Sampling score.
       $alpha_param = $arm->rewards + 1;
-      $failures = $arm->turns - $arm->rewards;
-      $beta_param = $failures + 1;
+      $beta_param = ($arm->turns - $arm->rewards) + 1;
       // Beta mean as approximation.
       $ts_score = $alpha_param / ($alpha_param + $beta_param);
 

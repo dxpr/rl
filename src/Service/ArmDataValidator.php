@@ -30,7 +30,7 @@ class ArmDataValidator {
   }
 
   /**
-   * Validates and sanitizes arm data.
+   * Validates arm data and throws exception if invalid.
    *
    * @param object $arm
    *   The arm data object with turns and rewards properties.
@@ -40,63 +40,58 @@ class ArmDataValidator {
    *   The arm ID for logging context.
    *
    * @return object
-   *   The sanitized arm data object.
+   *   The validated arm data object with normalized types.
+   *
+   * @throws \RuntimeException
+   *   If arm data is invalid.
    */
   public function validateAndSanitize($arm, string $experiment_id, string $arm_id) {
-    $original_turns = $arm->turns;
-    $original_rewards = $arm->rewards;
-    $was_modified = FALSE;
-
     // Ensure turns is a non-negative integer.
     if (!is_numeric($arm->turns) || $arm->turns < 0) {
-      $this->logger->error('Invalid turns value for experiment @exp_id, arm @arm_id: @value. Defaulting to 0.', [
-        '@exp_id' => $experiment_id,
-        '@arm_id' => $arm_id,
-        '@value' => var_export($arm->turns, TRUE),
+      $this->logger->critical('The %field field has invalid value %value for experiment %experiment_id, arm %arm_id.', [
+        '%field' => 'turns',
+        '%value' => var_export($arm->turns, TRUE),
+        '%experiment_id' => $experiment_id,
+        '%arm_id' => $arm_id,
       ]);
-      $arm->turns = 0;
-      $was_modified = TRUE;
+      throw new \RuntimeException(sprintf(
+        'Invalid turns value %s for experiment %s, arm %s. Expected non-negative integer.',
+        var_export($arm->turns, TRUE),
+        $experiment_id,
+        $arm_id
+      ));
     }
-    else {
-      $arm->turns = (int) $arm->turns;
-    }
+    $arm->turns = (int) $arm->turns;
 
     // Ensure rewards is a non-negative integer.
     if (!is_numeric($arm->rewards) || $arm->rewards < 0) {
-      $this->logger->error('Invalid rewards value for experiment @exp_id, arm @arm_id: @value. Defaulting to 0.', [
-        '@exp_id' => $experiment_id,
-        '@arm_id' => $arm_id,
-        '@value' => var_export($arm->rewards, TRUE),
+      $this->logger->critical('The %field field has invalid value %value for experiment %experiment_id, arm %arm_id.', [
+        '%field' => 'rewards',
+        '%value' => var_export($arm->rewards, TRUE),
+        '%experiment_id' => $experiment_id,
+        '%arm_id' => $arm_id,
       ]);
-      $arm->rewards = 0;
-      $was_modified = TRUE;
+      throw new \RuntimeException(sprintf(
+        'Invalid rewards value %s for experiment %s, arm %s. Expected non-negative integer.',
+        var_export($arm->rewards, TRUE),
+        $experiment_id,
+        $arm_id
+      ));
     }
-    else {
-      $arm->rewards = (int) $arm->rewards;
-    }
+    $arm->rewards = (int) $arm->rewards;
 
     // Critical validation: rewards cannot exceed turns.
+    // Note: We sanitize instead of throwing to prevent DoS attacks where
+    // malicious actors send reward requests to crash the site.
     if ($arm->rewards > $arm->turns) {
-      $this->logger->critical('Data integrity violation in experiment @exp_id, arm @arm_id: rewards (@rewards) exceeds turns (@turns). This indicates database corruption or a bug in reward tracking. Setting rewards = turns to prevent division by zero.', [
-        '@exp_id' => $experiment_id,
-        '@arm_id' => $arm_id,
-        '@rewards' => $arm->rewards,
-        '@turns' => $arm->turns,
+      $this->logger->critical('Data integrity violation: rewards (%rewards) exceeds turns (%turns) for experiment %experiment_id, arm %arm_id. This indicates database corruption, a bug in reward tracking, or malicious reward requests. Sanitizing to prevent site crash.', [
+        '%rewards' => $arm->rewards,
+        '%turns' => $arm->turns,
+        '%experiment_id' => $experiment_id,
+        '%arm_id' => $arm_id,
       ]);
+      // Sanitize: cap rewards at turns to maintain mathematical validity.
       $arm->rewards = $arm->turns;
-      $was_modified = TRUE;
-    }
-
-    // Log warning if data was sanitized.
-    if ($was_modified) {
-      $this->logger->warning('Arm data sanitized for experiment @exp_id, arm @arm_id. Original: turns=@orig_turns, rewards=@orig_rewards. Sanitized: turns=@new_turns, rewards=@new_rewards.', [
-        '@exp_id' => $experiment_id,
-        '@arm_id' => $arm_id,
-        '@orig_turns' => $original_turns,
-        '@orig_rewards' => $original_rewards,
-        '@new_turns' => $arm->turns,
-        '@new_rewards' => $arm->rewards,
-      ]);
     }
 
     return $arm;
