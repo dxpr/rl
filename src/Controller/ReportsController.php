@@ -53,6 +53,13 @@ class ReportsController extends ControllerBase {
   protected $renderer;
 
   /**
+   * The arm data validator.
+   *
+   * @var \Drupal\rl\Service\ArmDataValidator
+   */
+  protected $armDataValidator;
+
+  /**
    * Constructs a ReportsController object.
    *
    * @param \Drupal\Core\Database\Connection $database
@@ -65,13 +72,17 @@ class ReportsController extends ControllerBase {
    *   The experiment decorator manager.
    * @param \Drupal\Core\Render\RendererInterface $renderer
    *   The renderer service.
+   * @param \Drupal\rl\Service\ArmDataValidator $arm_data_validator
+   *   The arm data validator.
    */
-  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer) {
+  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, $arm_data_validator = NULL) {
     $this->database = $database;
     $this->experimentStorage = $experiment_storage;
     $this->dateFormatter = $date_formatter;
     $this->decoratorManager = $decorator_manager;
     $this->renderer = $renderer;
+    // Use service container if validator not injected (backward compatibility).
+    $this->armDataValidator = $arm_data_validator ?: \Drupal::service('rl.arm_data_validator');
   }
 
   /**
@@ -83,7 +94,8 @@ class ReportsController extends ControllerBase {
           $container->get('rl.experiment_data_storage'),
           $container->get('date.formatter'),
           $container->get('rl.experiment_decorator_manager'),
-          $container->get('renderer')
+          $container->get('renderer'),
+          $container->get('rl.arm_data_validator')
       );
   }
 
@@ -236,11 +248,15 @@ class ReportsController extends ControllerBase {
     $rows = [];
 
     foreach ($arms as $arm) {
+      // Validate and sanitize arm data.
+      $arm = $this->armDataValidator->validateAndSanitize($arm, $experiment_id, $arm->arm_id);
+
       $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
 
       // Calculate Thompson Sampling score.
       $alpha_param = $arm->rewards + 1;
-      $beta_param = ($arm->turns - $arm->rewards) + 1;
+      $failures = $arm->turns - $arm->rewards;
+      $beta_param = $failures + 1;
       // Beta mean as approximation.
       $ts_score = $alpha_param / ($alpha_param + $beta_param);
 

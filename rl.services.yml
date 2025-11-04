@@ -7,13 +7,17 @@ services:
     class: Drupal\rl\Storage\ExperimentDataStorage
     arguments: ['@database', '@datetime.time']
 
+  rl.arm_data_validator:
+    class: Drupal\rl\Service\ArmDataValidator
+    arguments: ['@logger.channel.rl']
+
   rl.ts_calculator:
     class: Drupal\rl\Service\ThompsonCalculator
     public: true
 
   rl.experiment_manager:
     class: Drupal\rl\Service\ExperimentManager
-    arguments: ['@rl.experiment_data_storage', '@rl.ts_calculator', '@config.factory', '@database', '@logger.factory']
+    arguments: ['@rl.experiment_data_storage', '@rl.ts_calculator', '@config.factory', '@database', '@logger.factory', '@rl.arm_data_validator']
 
   rl.experiment_registry:
     class: Drupal\rl\Registry\ExperimentRegistry
