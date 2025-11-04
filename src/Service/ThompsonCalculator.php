@@ -48,7 +48,12 @@ class ThompsonCalculator {
 
     foreach ($arms_data as $id => $arm) {
       $alpha = $arm->rewards + 1;
-      $beta = ($arm->turns - $arm->rewards) + 1;
+
+      // Ensure failures (turns - rewards) cannot be negative.
+      // This can happen if data integrity is compromised.
+      $failures = max(0, $arm->turns - $arm->rewards);
+      $beta = $failures + 1;
+
       $base_score = $this->randBeta($alpha, $beta);
 
       $tie_breaker = mt_rand(1, 999) / 1000000;
@@ -102,10 +107,22 @@ class ThompsonCalculator {
    *    U^{1/k}.  The scaling U^{1/k} converts the +1 shape back down.
    */
   private function randGamma(float $k): float {
+    /* ----- Case k ≤ 0 (invalid/edge case) ------------------------- */
+    if ($k <= 0.0) {
+      // This should never happen with proper data validation.
+      // If it does, we want to fail loudly to expose the bug.
+      throw new \InvalidArgumentException(sprintf(
+        'Invalid Gamma distribution shape parameter k=%f. ' .
+        'This indicates a critical bug in arm data validation. ' .
+        'Please check the ArmDataValidator service.',
+        $k
+      ));
+    }
+
     /* ----- Case 0 < k < 1  ----------------------------------------- */
     if ($k < 1.0) {
-      // Draw Γ(k+1) and shrink it.  The exponent 1/k acts like “take the
-      // k-th root” of a uniform number, redistributing mass toward zero.
+      // Draw Γ(k+1) and shrink it.  The exponent 1/k acts like "take the
+      // k-th root" of a uniform number, redistributing mass toward zero.
       return $this->randGamma($k + 1.0) * pow($this->u(), 1.0 / $k);
     }
 
