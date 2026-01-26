@@ -141,6 +141,7 @@ class ReportsController extends ControllerBase {
       $this->t('Experiment'),
       $this->t('Source'),
       $this->t('Impressions'),
+      $this->t('Conversions'),
       $this->t('Variants'),
       $this->t('Last Activity'),
     ];
@@ -158,12 +159,14 @@ class ReportsController extends ControllerBase {
     $experiments = $query->execute()->fetchAll();
 
     foreach ($experiments as $experiment) {
-      // Count arms for this experiment.
-      $arms_count = $this->database->select('rl_arm_data', 'ad')
-        ->condition('experiment_id', $experiment->experiment_id)
-        ->countQuery()
-        ->execute()
-        ->fetchField();
+      // Count arms and sum rewards for this experiment.
+      $arm_stats = $this->database->select('rl_arm_data', 'ad')
+        ->condition('experiment_id', $experiment->experiment_id);
+      $arm_stats->addExpression('COUNT(*)', 'arm_count');
+      $arm_stats->addExpression('COALESCE(SUM(rewards), 0)', 'total_rewards');
+      $stats = $arm_stats->execute()->fetchObject();
+      $arms_count = $stats->arm_count ?? 0;
+      $total_rewards = $stats->total_rewards ?? 0;
 
       $operations = [];
 
@@ -198,6 +201,7 @@ class ReportsController extends ControllerBase {
         $experiment_name,
         $experiment->module,
         $experiment->total_turns ?: 0,
+        $total_rewards,
         $arms_count,
         $last_activity,
       ];
