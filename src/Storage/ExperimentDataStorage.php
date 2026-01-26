@@ -24,16 +24,26 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   protected $time;
 
   /**
+   * The snapshot storage service.
+   *
+   * @var \Drupal\rl\Storage\SnapshotStorageInterface|null
+   */
+  protected $snapshotStorage;
+
+  /**
    * Constructs a new ExperimentDataStorage.
    *
    * @param \Drupal\Core\Database\Connection $database
    *   The database connection.
    * @param \Drupal\Component\Datetime\TimeInterface $time
    *   The time service.
+   * @param \Drupal\rl\Storage\SnapshotStorageInterface|null $snapshot_storage
+   *   The snapshot storage service.
    */
-  public function __construct(Connection $database, TimeInterface $time) {
+  public function __construct(Connection $database, TimeInterface $time, ?SnapshotStorageInterface $snapshot_storage = NULL) {
     $this->database = $database;
     $this->time = $time;
+    $this->snapshotStorage = $snapshot_storage;
   }
 
   /**
@@ -65,6 +75,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->expression('total_turns', 'total_turns + :inc', [':inc' => 1])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
+
+    // Record snapshot if enabled.
+    $this->maybeRecordSnapshots($experiment_id, [$arm_id]);
   }
 
   /**
@@ -99,6 +112,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->expression('total_turns', 'total_turns + :inc', [':inc' => $arm_count])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
+
+    // Record snapshots if enabled.
+    $this->maybeRecordSnapshots($experiment_id, $arm_ids);
   }
 
   /**
@@ -127,6 +143,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
+
+    // Record snapshot for reward if enabled.
+    $this->maybeRecordSnapshots($experiment_id, [$arm_id]);
   }
 
   /**
@@ -168,6 +187,35 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->fetchField();
 
     return $result ? (int) $result : 0;
+  }
+
+  /**
+   * Record snapshots for arms if event logging is enabled.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   * @param array $arm_ids
+   *   Array of arm IDs to snapshot.
+   */
+  protected function maybeRecordSnapshots(string $experiment_id, array $arm_ids): void {
+    if (!$this->snapshotStorage || !$this->snapshotStorage->isEnabled()) {
+      return;
+    }
+
+    $total_turns = $this->getTotalTurns($experiment_id);
+
+    foreach ($arm_ids as $arm_id) {
+      $arm_data = $this->getArmData($experiment_id, $arm_id);
+      if ($arm_data) {
+        $this->snapshotStorage->recordSnapshot(
+          $experiment_id,
+          $arm_id,
+          (int) $arm_data->turns,
+          (int) $arm_data->rewards,
+          $total_turns
+        );
+      }
+    }
   }
 
 }

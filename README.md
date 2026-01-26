@@ -166,6 +166,85 @@ RL provides optional cache management for web components:
 Full algorithm details available in source code:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php)
 
+## Experiment Decorators
+
+Decorators customize how experiments and arms are displayed in the RL reports
+interface. By default, experiments and arms show their raw IDs, but decorators
+can provide human-readable labels.
+
+### Creating a Decorator
+
+Implement the `ExperimentDecoratorInterface`:
+
+```php
+<?php
+
+namespace Drupal\my_module\Decorator;
+
+use Drupal\rl\Decorator\ExperimentDecoratorInterface;
+
+class MyExperimentDecorator implements ExperimentDecoratorInterface {
+
+  /**
+   * {@inheritdoc}
+   */
+  public function decorateExperiment(string $experiment_id): ?array {
+    // Return NULL to skip, or a render array for custom display.
+    if (!str_starts_with($experiment_id, 'my_module-')) {
+      return NULL;
+    }
+    return ['#markup' => 'My Custom Experiment Name'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function decorateArm(string $experiment_id, string $arm_id): ?array {
+    // Return NULL to skip, or a render array for custom display.
+    if (!str_starts_with($experiment_id, 'my_module-')) {
+      return NULL;
+    }
+    // Example: Load entity and return its label.
+    $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
+    if ($entity) {
+      return [
+        '#markup' => htmlspecialchars($entity->label()) .
+          ' <small>(' . htmlspecialchars($arm_id) . ')</small>',
+      ];
+    }
+    return NULL;
+  }
+
+}
+```
+
+### Registering the Decorator
+
+Add the decorator service to your module's `*.services.yml` with the
+`rl_experiment_decorator` tag:
+
+```yaml
+services:
+  my_module.experiment_decorator:
+    class: Drupal\my_module\Decorator\MyExperimentDecorator
+    arguments: ['@entity_type.manager']
+    tags:
+      - { name: rl_experiment_decorator }
+```
+
+The decorator manager automatically discovers all tagged services and calls
+them in order until one returns a non-NULL value.
+
+### Best Practices
+
+- **Check experiment prefix**: Return `NULL` early for experiments your
+  decorator doesn't handle.
+- **Handle missing entities**: Entities may be deleted; return `NULL` if the
+  entity can't be loaded.
+- **Use render arrays**: Return proper Drupal render arrays for consistent
+  theming and security.
+- **Escape output**: Use `htmlspecialchars()` for any user-provided content.
+
 ## Development
 
 ### Linting and Code Standards
