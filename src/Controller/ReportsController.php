@@ -467,50 +467,27 @@ class ReportsController extends ControllerBase {
       'rgba(99, 255, 132, 1)',
     ];
 
-    // Prepare line chart data for Plotly (up to 100 arms).
+    // Prepare chart data for both 2D line and 3D surface (single loop).
     $line_chart_data = ['arms' => []];
+    $surface_3d_data = ['xValues' => $x_values, 'armLabels' => [], 'zMatrix' => []];
     $i = 0;
     foreach ($top_arms_3d as $arm_id) {
       if (!isset($arms_data[$arm_id])) {
         continue;
       }
+      $label = $arm_labels[$arm_id];
       $color = $colors[$i % count($colors)];
       $data_points = [];
-      foreach ($x_values as $x) {
-        if (isset($arms_data[$arm_id][$x])) {
-          $data_points[] = [
-            'x' => $x,
-            'y' => round($arms_data[$arm_id][$x]['mean'] * 100, 2),
-          ];
-        }
-      }
-      $line_chart_data['arms'][] = [
-        'label' => $arm_labels[$arm_id],
-        'data' => $data_points,
-        'color' => $color,
-      ];
-      $i++;
-    }
-
-    // Prepare 3D surface data for loss-landscape style visualization.
-    // This creates a continuous surface from all arms' posteriors over time.
-    $surface_3d_data = [
-      'xValues' => $x_values,
-      'armLabels' => [],
-      'zMatrix' => [],
-    ];
-    foreach ($top_arms_3d as $arm_id) {
-      if (!isset($arms_data[$arm_id])) {
-        continue;
-      }
-      $surface_3d_data['armLabels'][] = $arm_labels[$arm_id];
       $z_row = [];
+
       foreach ($x_values as $x) {
         if (isset($arms_data[$arm_id][$x])) {
-          $z_row[] = round($arms_data[$arm_id][$x]['mean'] * 100, 2);
+          $rate = round($arms_data[$arm_id][$x]['mean'] * 100, 2);
+          $data_points[] = ['x' => $x, 'y' => $rate];
+          $z_row[] = $rate;
         }
         else {
-          // Find closest previous value.
+          // Find closest previous value for 3D surface interpolation.
           $closest = NULL;
           foreach ($arms_data[$arm_id] as $px => $point) {
             if ($px <= $x) {
@@ -520,7 +497,11 @@ class ReportsController extends ControllerBase {
           $z_row[] = $closest ? round($closest['mean'] * 100, 2) : 0;
         }
       }
+
+      $line_chart_data['arms'][] = ['label' => $label, 'data' => $data_points, 'color' => $color];
+      $surface_3d_data['armLabels'][] = $label;
       $surface_3d_data['zMatrix'][] = $z_row;
+      $i++;
     }
 
     // Plotly data (up to 100 arms for 3D visualizations).
@@ -576,75 +557,33 @@ class ReportsController extends ControllerBase {
   protected function calculateDateRange(string $preset, ?string $start_date, ?string $end_date): array {
     $today_end = strtotime('today 23:59:59');
 
-    // Handle presets.
-    switch ($preset) {
-      case 'last_1_day':
-        return [
-          'start' => strtotime('-1 day midnight'),
-          'end' => $today_end,
-        ];
+    // Handle relative presets (last_X_days, last_X_weeks).
+    if (preg_match('/^last_(\d+)_(day|days|week|weeks)$/', $preset, $matches)) {
+      $amount = $matches[1];
+      $unit = str_contains($matches[2], 'day') ? 'days' : 'weeks';
+      return [
+        'start' => strtotime("-{$amount} {$unit} midnight"),
+        'end' => $today_end,
+      ];
+    }
 
-      case 'last_5_days':
-        return [
-          'start' => strtotime('-5 days midnight'),
-          'end' => $today_end,
-        ];
+    // Handle named presets.
+    $named_presets = [
+      'this_month' => 'first day of this month midnight',
+      'this_year' => 'first day of January this year midnight',
+    ];
+    if (isset($named_presets[$preset])) {
+      return ['start' => strtotime($named_presets[$preset]), 'end' => $today_end];
+    }
 
-      case 'last_1_week':
-        return [
-          'start' => strtotime('-1 week midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'last_2_weeks':
-        return [
-          'start' => strtotime('-2 weeks midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'last_4_weeks':
-        return [
-          'start' => strtotime('-4 weeks midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'last_8_weeks':
-        return [
-          'start' => strtotime('-8 weeks midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'last_12_weeks':
-        return [
-          'start' => strtotime('-12 weeks midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'last_24_weeks':
-        return [
-          'start' => strtotime('-24 weeks midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'this_month':
-        return [
-          'start' => strtotime('first day of this month midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'this_quarter':
-        $month = (int) date('n');
-        $quarter_start_month = (int) (floor(($month - 1) / 3) * 3 + 1);
-        return [
-          'start' => strtotime(date('Y') . '-' . str_pad((string) $quarter_start_month, 2, '0', STR_PAD_LEFT) . '-01 midnight'),
-          'end' => $today_end,
-        ];
-
-      case 'this_year':
-        return [
-          'start' => strtotime('first day of January this year midnight'),
-          'end' => $today_end,
-        ];
+    // Handle this_quarter specially (requires calculation).
+    if ($preset === 'this_quarter') {
+      $month = (int) date('n');
+      $quarter_start_month = (int) (floor(($month - 1) / 3) * 3 + 1);
+      return [
+        'start' => strtotime(date('Y') . '-' . str_pad((string) $quarter_start_month, 2, '0', STR_PAD_LEFT) . '-01 midnight'),
+        'end' => $today_end,
+      ];
     }
 
     // Handle explicit dates.
@@ -802,26 +741,6 @@ class ReportsController extends ControllerBase {
       'this_year' => $this->t('This year'),
     ];
 
-    // Build preset dropdown options with URLs (preserve current axis).
-    $preset_options = [];
-    $preset_urls = [];
-    foreach ($presets as $key => $label) {
-      $url = clone $base_url;
-      $query = [];
-      if ($key) {
-        $query['preset'] = $key;
-      }
-      if ($current_axis !== 'trials') {
-        $query['axis'] = $current_axis;
-      }
-      if (!empty($query)) {
-        $url->setOption('query', $query);
-      }
-      $preset_options[$key] = $label;
-      $preset_urls[$key] = $url->toString();
-    }
-
-    // Time axis options for dropdown.
     $axes = [
       'trials' => $this->t('Impressions'),
       'daily' => $this->t('Daily'),
@@ -830,24 +749,29 @@ class ReportsController extends ControllerBase {
       'quarterly' => $this->t('Quarterly'),
     ];
 
-    // Build axis dropdown options with URLs as values.
-    $axis_options = [];
-    $axis_urls = [];
-    foreach ($axes as $key => $label) {
-      $url = clone $base_url;
-      $query = [];
-      if ($current_preset) {
-        $query['preset'] = $current_preset;
+    // Helper to build dropdown options with URLs.
+    $build_options = function (array $items, string $param, string $other_param, string $other_value, string $other_default) use ($base_url): array {
+      $options = $urls = [];
+      foreach ($items as $key => $label) {
+        $url = clone $base_url;
+        $query = [];
+        if ($key && $key !== $other_default) {
+          $query[$param] = $key;
+        }
+        if ($other_value && $other_value !== $other_default) {
+          $query[$other_param] = $other_value;
+        }
+        if (!empty($query)) {
+          $url->setOption('query', $query);
+        }
+        $options[$key] = $label;
+        $urls[$key] = $url->toString();
       }
-      if ($key !== 'trials') {
-        $query['axis'] = $key;
-      }
-      if (!empty($query)) {
-        $url->setOption('query', $query);
-      }
-      $axis_options[$key] = $label;
-      $axis_urls[$key] = $url->toString();
-    }
+      return ['options' => $options, 'urls' => $urls];
+    };
+
+    $preset_data = $build_options($presets, 'preset', 'axis', $current_axis, 'trials');
+    $axis_data = $build_options($axes, 'axis', 'preset', $current_preset, '');
 
     // Format available date range for display.
     $range_text = $this->t('Data available from @start to @end', [
@@ -866,11 +790,11 @@ class ReportsController extends ControllerBase {
         ],
         'select' => [
           '#type' => 'select',
-          '#options' => $preset_options,
+          '#options' => $preset_data['options'],
           '#value' => $current_preset,
           '#attributes' => [
             'class' => ['rl-preset-select', 'rl-filter-select'],
-            'data-urls' => json_encode($preset_urls),
+            'data-urls' => json_encode($preset_data['urls']),
           ],
         ],
       ],
@@ -882,11 +806,11 @@ class ReportsController extends ControllerBase {
         ],
         'select' => [
           '#type' => 'select',
-          '#options' => $axis_options,
+          '#options' => $axis_data['options'],
           '#value' => $current_axis,
           '#attributes' => [
             'class' => ['rl-axis-select', 'rl-filter-select'],
-            'data-urls' => json_encode($axis_urls),
+            'data-urls' => json_encode($axis_data['urls']),
           ],
         ],
       ],
