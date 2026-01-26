@@ -216,6 +216,14 @@ function rl_uninstall() {
   catch (SchemaObjectDoesNotExistException $e) {
     // Table doesn't exist, silently continue.
   }
+
+  // Drop the rl_arm_snapshots table if it exists.
+  try {
+    $schema->dropTable('rl_arm_snapshots');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    // Table doesn't exist, silently continue.
+  }
 }
 
 /**
@@ -447,11 +455,11 @@ function rl_requirements($phase) {
 
     try {
       $client = \Drupal::httpClient();
+      // Use read-only 'ping' action to verify endpoint accessibility
+      // without creating any database entries.
       $response = $client->post($rl_endpoint_url, [
         'form_params' => [
-          'action' => 'turns',
-          'experiment_id' => 'status_check',
-          'arm_ids' => '1',
+          'action' => 'ping',
         ],
         'timeout' => 5,
         'http_errors' => FALSE,
@@ -577,4 +585,17 @@ function rl_update_10001() {
   $config->save();
 
   return t('Created rl_arm_snapshots table and added event log configuration.');
+}
+
+/**
+ * Add chart_line_threshold configuration setting.
+ */
+function rl_update_10002() {
+  $config = \Drupal::configFactory()->getEditable('rl.settings');
+  if ($config->get('chart_line_threshold') === NULL) {
+    $config->set('chart_line_threshold', 10);
+  }
+  $config->save();
+
+  return t('Added chart_line_threshold configuration setting.');
 }

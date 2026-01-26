@@ -2,13 +2,14 @@
 
 namespace Drupal\rl\Controller;
 
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
 use Drupal\rl\Service\ArmDataValidator;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
@@ -109,19 +110,23 @@ class ReportsController extends ControllerBase {
 
   /**
    * {@inheritdoc}
+   *
+   * PHPStan note: The 'new.static' warning is suppressed because Drupal's
+   * dependency injection pattern requires static factories in non-final
+   * controller classes. This is standard Drupal architecture.
    */
   public static function create(ContainerInterface $container): static {
     // @phpstan-ignore new.static
     return new static(
-          $container->get('database'),
-          $container->get('rl.experiment_data_storage'),
-          $container->get('date.formatter'),
-          $container->get('rl.experiment_decorator_manager'),
-          $container->get('renderer'),
-          $container->get('rl.arm_data_validator'),
-          $container->get('rl.snapshot_storage'),
-          $container->get('request_stack')
-      );
+      $container->get('database'),
+      $container->get('rl.experiment_data_storage'),
+      $container->get('date.formatter'),
+      $container->get('rl.experiment_decorator_manager'),
+      $container->get('renderer'),
+      $container->get('rl.arm_data_validator'),
+      $container->get('rl.snapshot_storage'),
+      $container->get('request_stack')
+    );
   }
 
   /**
@@ -290,9 +295,9 @@ class ReportsController extends ControllerBase {
 
       $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
 
-      // Get decorated arm name or fallback to arm ID.
+      // Get decorated arm name or fallback to escaped arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_id, $arm->arm_id);
-      $arm_name = $arm_display ? $this->renderer->renderInIsolation($arm_display) : $arm->arm_id;
+      $arm_name = $arm_display ? $this->renderer->renderInIsolation($arm_display) : Html::escape($arm->arm_id);
 
       $arm_data[] = [
         'arm_id' => $arm->arm_id,
@@ -493,10 +498,12 @@ class ReportsController extends ControllerBase {
     }
 
     // Plotly data (up to 100 arms for 3D visualizations).
+    $chart_line_threshold = $this->config('rl.settings')->get('chart_line_threshold') ?? 10;
     $plotly_data = [
       'ridgelineData' => $ridgeline_data,
       'surface3d' => $surface_3d_data,
       'totalArms3d' => count($top_arms_3d),
+      'chartLineThreshold' => $chart_line_threshold,
     ];
 
     $build = [
@@ -521,128 +528,6 @@ class ReportsController extends ControllerBase {
     ];
 
     return $build;
-  }
-
-  /**
-   * Determine appropriate time granularity based on data span.
-   *
-   * @param array $timestamps
-   *   Array of Unix timestamps.
-   *
-   * @return array
-   *   Array with 'granularity', 'format', and 'label' keys.
-   */
-  protected function determineTimeGranularity(array $timestamps): array {
-    if (empty($timestamps)) {
-      return [
-        'granularity' => 'day',
-        'format' => 'M j',
-        'label' => 'Date',
-        'jsFormat' => 'MMM d',
-      ];
-    }
-
-    $min_time = min($timestamps);
-    $max_time = max($timestamps);
-    $span_days = ($max_time - $min_time) / 86400;
-
-    if ($span_days <= 14) {
-      // Up to 2 weeks: show days.
-      return [
-        'granularity' => 'day',
-        'format' => 'M j',
-        'label' => 'Date',
-        'jsFormat' => 'MMM d',
-      ];
-    }
-    elseif ($span_days <= 90) {
-      // Up to 3 months: show weeks.
-      return [
-        'granularity' => 'week',
-        'format' => '\WW, Y',
-        'label' => 'Week',
-        'jsFormat' => "''Week'' I",
-      ];
-    }
-    elseif ($span_days <= 365) {
-      // Up to 1 year: show months.
-      return [
-        'granularity' => 'month',
-        'format' => 'M Y',
-        'label' => 'Month',
-        'jsFormat' => 'MMM yyyy',
-      ];
-    }
-    else {
-      // Over 1 year: show quarters.
-      return [
-        'granularity' => 'quarter',
-        'format' => '\QQ Y',
-        'label' => 'Quarter',
-        'jsFormat' => "''Q''Q yyyy",
-      ];
-    }
-  }
-
-  /**
-   * Sample from Beta distribution using inverse transform.
-   *
-   * @param float $alpha
-   *   Alpha parameter.
-   * @param float $beta
-   *   Beta parameter.
-   *
-   * @return float
-   *   Sample from Beta(alpha, beta).
-   */
-  protected function sampleBeta(float $alpha, float $beta): float {
-    // Use gamma sampling: Beta(a,b) = Gamma(a,1) / (Gamma(a,1) + Gamma(b,1))
-    $x = $this->sampleGamma($alpha);
-    $y = $this->sampleGamma($beta);
-    return $x / ($x + $y);
-  }
-
-  /**
-   * Sample from Gamma distribution using Marsaglia and Tsang's method.
-   *
-   * @param float $shape
-   *   Shape parameter (k).
-   *
-   * @return float
-   *   Sample from Gamma(shape, 1).
-   */
-  protected function sampleGamma(float $shape): float {
-    if ($shape < 1) {
-      return $this->sampleGamma($shape + 1) * pow(mt_rand() / mt_getrandmax(), 1 / $shape);
-    }
-
-    $d = $shape - 1 / 3;
-    $c = 1 / sqrt(9 * $d);
-
-    while (TRUE) {
-      $x = $this->sampleNormal();
-      $v = pow(1 + $c * $x, 3);
-
-      if ($v > 0) {
-        $u = mt_rand() / mt_getrandmax();
-        if ($u < 1 - 0.0331 * pow($x, 4) ||
-            log($u) < 0.5 * pow($x, 2) + $d * (1 - $v + log($v))) {
-          return $d * $v;
-        }
-      }
-    }
-  }
-
-  /**
-   * Sample from standard normal distribution using Box-Muller.
-   *
-   * @return float
-   *   Sample from N(0,1).
-   */
-  protected function sampleNormal(): float {
-    $u1 = mt_rand() / mt_getrandmax();
-    $u2 = mt_rand() / mt_getrandmax();
-    return sqrt(-2 * log($u1)) * cos(2 * M_PI * $u2);
   }
 
 }

@@ -11,3 +11,6 @@ rl.settings:
     event_log_max_rows:
       type: integer
       label: 'Maximum rows in event log table'
+    chart_line_threshold:
+      type: integer
+      label: 'Maximum arms for 2D line chart'

@@ -7,12 +7,12 @@
         return;
       }
 
-      var containers = once('rl-plotly-charts', '.rl-plotly-container', context);
+      const containers = once('rl-plotly-charts', '.rl-plotly-container', context);
       if (!containers.length) {
         return;
       }
 
-      var data = settings.rlPlotly;
+      const data = settings.rlPlotly;
 
       // Small delay to ensure Plotly is ready
       setTimeout(function() {
@@ -25,9 +25,9 @@
    * Get the actual height of a chart container element.
    */
   function getContainerHeight(elementId) {
-    var el = document.getElementById(elementId);
+    const el = document.getElementById(elementId);
     if (el) {
-      var height = el.clientHeight || el.offsetHeight;
+      const height = el.clientHeight || el.offsetHeight;
       // Return at least a minimum height
       return Math.max(height, 200);
     }
@@ -39,11 +39,11 @@
    * Heights are calculated from container elements, not fixed values.
    */
   function getResponsiveConfig() {
-    var width = window.innerWidth;
+    const width = window.innerWidth;
 
     // Get actual container heights
-    var height3d = getContainerHeight('rl-plotly-3d-surface');
-    var height2d = getContainerHeight('rl-plotly-2d-lines');
+    const height3d = getContainerHeight('rl-plotly-3d-surface');
+    const height2d = getContainerHeight('rl-plotly-2d-lines');
 
     if (width <= 430) {
       // iPhone 13 mini and small phones
@@ -129,15 +129,15 @@
   function truncateLabel(label, maxLen) {
     if (!label && label !== 0) return 'Variant';
     // Convert to string if not already (handles numeric IDs)
-    var str = String(label);
+    const str = String(label);
     if (str.length <= maxLen) return str;
     return str.substring(0, maxLen - 3) + '...';
   }
 
   function initPlotlyCharts(data) {
-    var config = getResponsiveConfig();
+    const config = getResponsiveConfig();
 
-    var defaultLayout = {
+    const defaultLayout = {
       paper_bgcolor: 'rgba(255,255,255,1)',
       plot_bgcolor: 'rgba(255,255,255,1)',
       font: { size: config.fontSize, family: 'Arial, sans-serif' },
@@ -145,22 +145,23 @@
     };
 
     // Determine number of arms and which chart to show
-    var numArms = 0;
+    let numArms = 0;
     if (data.ridgelineData && data.ridgelineData.arms) {
       numArms = data.ridgelineData.arms.length;
     } else if (data.surface3d && data.surface3d.zMatrix) {
       numArms = data.surface3d.zMatrix.length;
     }
 
-    // Chart selection based on arm count:
-    // 1-10 arms: 2D line chart
-    // 11+ arms: 3D Posterior Landscape
-    var showLineChart = numArms >= 1 && numArms <= 10;
-    var showLandscape = numArms > 10;
+    // Chart selection based on arm count (threshold from config or default 10):
+    // 1-threshold arms: 2D line chart
+    // threshold+1 arms: 3D Posterior Landscape
+    const lineChartThreshold = data.chartLineThreshold || 10;
+    const showLineChart = numArms >= 1 && numArms <= lineChartThreshold;
+    const showLandscape = numArms > lineChartThreshold;
 
     // Hide unused chart containers
-    var lineChartEl = document.getElementById('rl-plotly-2d-lines');
-    var surface3dEl = document.getElementById('rl-plotly-3d-surface');
+    const lineChartEl = document.getElementById('rl-plotly-2d-lines');
+    const surface3dEl = document.getElementById('rl-plotly-3d-surface');
 
     if (lineChartEl) {
       lineChartEl.parentElement.parentElement.style.display = showLineChart ? 'block' : 'none';
@@ -169,20 +170,20 @@
       surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
     }
 
-    // 1. 2D Line Chart - Conversion Rate Over Time (1-7 arms)
+    // 1. 2D Line Chart - Conversion Rate Over Time (1-threshold arms)
     if (showLineChart && data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && lineChartEl) {
       try {
-        var traces2d = [];
-        var numArms = data.ridgelineData.arms.length;
-        var maxLineArms = Math.min(numArms, 20); // Limit to 20 arms for readability
+        const traces2d = [];
+        const lineChartNumArms = data.ridgelineData.arms.length;
+        const maxLineArms = Math.min(lineChartNumArms, 20); // Limit to 20 arms for readability
 
-        for (var idx = 0; idx < maxLineArms; idx++) {
-          var arm = data.ridgelineData.arms[idx];
-          var armLabel = arm.label || ('Variant #' + idx);
-          var truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
+        for (let idx = 0; idx < maxLineArms; idx++) {
+          const arm = data.ridgelineData.arms[idx];
+          const armLabel = arm.label || ('Variant #' + idx);
+          const truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
 
-          var xValues = [];
-          var yValues = [];
+          const xValues = [];
+          const yValues = [];
           arm.data.forEach(function(point) {
             xValues.push(point.x);
             yValues.push(point.y);
@@ -202,11 +203,11 @@
           });
         }
 
-        var lineChartHeight = config.height2d;
+        const lineChartHeight = config.height2d;
 
         Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
           title: {
-            text: 'Conversion Rate Over Time' + (numArms > maxLineArms ? ' (Top ' + maxLineArms + ' of ' + numArms + ')' : ''),
+            text: 'Conversion Rate Over Time' + (lineChartNumArms > maxLineArms ? ' (Top ' + maxLineArms + ' of ' + lineChartNumArms + ')' : ''),
             font: { size: config.titleSize }
           },
           xaxis: {
@@ -221,13 +222,13 @@
             rangemode: 'tozero'
           },
           height: lineChartHeight,
-          showlegend: numArms <= 10,
+          showlegend: lineChartNumArms <= lineChartThreshold,
           legend: {
-            orientation: numArms <= 5 ? 'v' : 'h',
-            yanchor: numArms <= 5 ? 'top' : 'bottom',
-            y: numArms <= 5 ? 1 : -0.2,
+            orientation: lineChartNumArms <= 5 ? 'v' : 'h',
+            yanchor: lineChartNumArms <= 5 ? 'top' : 'bottom',
+            y: lineChartNumArms <= 5 ? 1 : -0.2,
             xanchor: 'left',
-            x: numArms <= 5 ? 1.02 : 0,
+            x: lineChartNumArms <= 5 ? 1.02 : 0,
             font: { size: config.tickSize }
           },
           hovermode: 'closest'
@@ -237,49 +238,49 @@
       }
     }
 
-    // 2. 3D Posterior Landscape (loss-landscape style) - 16+ arms
+    // 2. 3D Posterior Landscape (loss-landscape style) - threshold+1 arms
     if (showLandscape && data.surface3d && data.surface3d.zMatrix && data.surface3d.zMatrix.length > 0 && surface3dEl) {
       try {
-        var numArms = data.surface3d.zMatrix.length;
-        var numTimePoints = data.surface3d.xValues.length;
+        const landscapeNumArms = data.surface3d.zMatrix.length;
+        const numTimePoints = data.surface3d.xValues.length;
 
         // Get current (latest) conversion rate for each arm to sort
-        var armRates = [];
-        for (var i = 0; i < numArms; i++) {
-          var lastRate = data.surface3d.zMatrix[i][numTimePoints - 1] || 0;
+        const armRates = [];
+        for (let i = 0; i < landscapeNumArms; i++) {
+          const lastRate = data.surface3d.zMatrix[i][numTimePoints - 1] || 0;
           armRates.push({ index: i, rate: lastRate });
         }
         // Sort by rate ASCENDING (lowest rate = lowest index = front, highest rate = back)
         armRates.sort(function(a, b) { return a.rate - b.rate; });
 
         // Reorder data based on sorted indices
-        var sortedZMatrix = [];
-        var sortedLabels = [];
-        var armLabels = data.surface3d.armLabels || [];
-        for (var i = 0; i < armRates.length; i++) {
-          var origIdx = armRates[i].index;
+        const sortedZMatrix = [];
+        const sortedLabels = [];
+        const armLabels = data.surface3d.armLabels || [];
+        for (let i = 0; i < armRates.length; i++) {
+          const origIdx = armRates[i].index;
           sortedZMatrix.push(data.surface3d.zMatrix[origIdx]);
           sortedLabels.push(armLabels[origIdx] || ('Variant #' + origIdx));
         }
 
-        var armIndices = [];
-        for (var i = 0; i < numArms; i++) {
+        const armIndices = [];
+        for (let i = 0; i < landscapeNumArms; i++) {
           armIndices.push(i);
         }
 
         // Build pre-formatted hovertext array (Plotly 3D surfaces don't support %{text} in hovertemplate)
-        var hoverTextData = [];
-        var truncatedLabels = [];
+        const hoverTextData = [];
+        const truncatedLabels = [];
 
-        for (var ai = 0; ai < numArms; ai++) {
-          var hoverRow = [];
-          var fullLabel = sortedLabels[ai] || ('Variant #' + ai);
-          var displayLabel = truncateLabel(fullLabel, config.maxLabelLength);
+        for (let ai = 0; ai < landscapeNumArms; ai++) {
+          const hoverRow = [];
+          const fullLabel = sortedLabels[ai] || ('Variant #' + ai);
+          const displayLabel = truncateLabel(fullLabel, config.maxLabelLength);
           truncatedLabels.push(displayLabel);
 
-          for (var ti = 0; ti < numTimePoints; ti++) {
-            var impressions = data.surface3d.xValues[ti];
-            var rate = sortedZMatrix[ai][ti];
+          for (let ti = 0; ti < numTimePoints; ti++) {
+            const impressions = data.surface3d.xValues[ti];
+            const rate = sortedZMatrix[ai][ti];
             // Build complete hover text for each point
             hoverRow.push('<b>' + fullLabel + '</b><br>Impressions: ' + impressions + '<br>Rate: ' + rate.toFixed(1) + '%');
           }
@@ -287,13 +288,13 @@
         }
 
         // Configure Y-axis based on number of arms
-        var yAxisConfig = {
+        const yAxisConfig = {
           title: { text: 'Variant', font: { size: config.axisTitleSize } },
           tickfont: { size: config.tickSize }
         };
 
         // Show arm labels on Y-axis for small number of arms
-        if (numArms <= 10) {
+        if (landscapeNumArms <= lineChartThreshold) {
           yAxisConfig.tickvals = armIndices;
           yAxisConfig.ticktext = truncatedLabels;
           yAxisConfig.tickangle = 0;
@@ -348,7 +349,7 @@
             len: config.colorbarLen
           }
         }], Object.assign({}, defaultLayout, {
-          title: { text: numArms + ' Variants Over Time', font: { size: config.titleSize } },
+          title: { text: landscapeNumArms + ' Variants Over Time', font: { size: config.titleSize } },
           scene: {
             xaxis: {
               title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
@@ -378,10 +379,10 @@
    * Debounce function for performance optimization.
    */
   function debounce(func, wait) {
-    var timeout;
+    let timeout;
     return function executedFunction() {
-      var context = this;
-      var args = arguments;
+      const context = this;
+      const args = arguments;
       clearTimeout(timeout);
       timeout = setTimeout(function() {
         func.apply(context, args);
@@ -392,8 +393,8 @@
   /**
    * Track last window dimensions to prevent unnecessary redraws.
    */
-  var lastWindowWidth = window.innerWidth;
-  var lastWindowHeight = window.innerHeight;
+  let lastWindowWidth = window.innerWidth;
+  let lastWindowHeight = window.innerHeight;
 
   /**
    * Handle chart resize - only triggers on actual window size changes.
@@ -401,8 +402,8 @@
    */
   function handleResize() {
     // Only resize if window dimensions actually changed
-    var currentWidth = window.innerWidth;
-    var currentHeight = window.innerHeight;
+    const currentWidth = window.innerWidth;
+    const currentHeight = window.innerHeight;
 
     if (currentWidth === lastWindowWidth && currentHeight === lastWindowHeight) {
       return;
@@ -411,14 +412,14 @@
     lastWindowWidth = currentWidth;
     lastWindowHeight = currentHeight;
 
-    var data = drupalSettings.rlPlotly;
+    const data = drupalSettings.rlPlotly;
     if (!data) return;
 
     // Use Plotly.Plots.resize() for responsive charts - it respects the container
-    var chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface'];
+    const chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface'];
 
     chartIds.forEach(function(chartId) {
-      var el = document.getElementById(chartId);
+      const el = document.getElementById(chartId);
       if (el && el.data && el.layout) {
         Plotly.Plots.resize(el);
       }
@@ -426,7 +427,7 @@
   }
 
   // Debounced resize handler (300ms delay for performance)
-  var debouncedResize = debounce(handleResize, 300);
+  const debouncedResize = debounce(handleResize, 300);
 
   // Only use window resize event - avoid ResizeObserver to prevent infinite loops
   window.addEventListener('resize', debouncedResize, { passive: true });

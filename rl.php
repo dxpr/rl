@@ -15,6 +15,12 @@ $action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS)
 $experiment_id = filter_input(INPUT_POST, 'experiment_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
+// Ping action is read-only and doesn't require experiment_id.
+if ($action === 'ping') {
+  http_response_code(200);
+  exit('pong');
+}
+
 if (!$action || !$experiment_id || !in_array($action, ['turn', 'turns', 'reward'])) {
   http_response_code(400);
   exit('Invalid request parameters');

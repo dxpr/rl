@@ -45,7 +45,7 @@ class ArmDataValidator {
    * @throws \RuntimeException
    *   If arm data is invalid.
    */
-  public function validateAndSanitize($arm, string $experiment_id, string $arm_id) {
+  public function validateAndSanitize(object $arm, string $experiment_id, string $arm_id): object {
     // Ensure turns is a non-negative integer.
     if (!is_numeric($arm->turns) || $arm->turns < 0) {
       $this->logger->critical('The %field field has invalid value %value for experiment %experiment_id, arm %arm_id.', [
