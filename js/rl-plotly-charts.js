@@ -40,87 +40,33 @@
    */
   function getResponsiveConfig() {
     const width = window.innerWidth;
-
-    // Get actual container heights
     const height3d = getContainerHeight('rl-plotly-3d-surface');
     const height2d = getContainerHeight('rl-plotly-2d-lines');
 
-    if (width <= 430) {
-      // iPhone 13 mini and small phones
-      return {
-        height: height3d,
-        height2d: height2d,
-        fontSize: 10,
-        titleSize: 13,
-        axisTitleSize: 11,
-        tickSize: 9,
-        margin: { l: 50, r: 30, t: 40, b: 60 },
-        camera: { eye: { x: 2.0, y: -2.0, z: 1.2 } },
-        colorbarLen: 0.6,
-        colorbarThickness: 15,
-        maxLabelLength: 20
-      };
-    } else if (width <= 768) {
-      // Tablets portrait
-      return {
-        height: height3d,
-        height2d: height2d,
-        fontSize: 11,
-        titleSize: 14,
-        axisTitleSize: 12,
-        tickSize: 10,
-        margin: { l: 60, r: 35, t: 45, b: 80 },
-        camera: { eye: { x: 1.8, y: -1.9, z: 1.0 } },
-        colorbarLen: 0.7,
-        colorbarThickness: 18,
-        maxLabelLength: 30
-      };
-    } else if (width <= 1200) {
-      // Tablets landscape / small laptops
-      return {
-        height: height3d,
-        height2d: height2d,
-        fontSize: 12,
-        titleSize: 15,
-        axisTitleSize: 13,
-        tickSize: 11,
-        margin: { l: 70, r: 40, t: 50, b: 90 },
-        camera: { eye: { x: 1.7, y: -1.8, z: 0.95 } },
-        colorbarLen: 0.75,
-        colorbarThickness: 20,
-        maxLabelLength: 40
-      };
-    } else if (width <= 1920) {
-      // Standard desktop / Full HD
-      return {
-        height: height3d,
-        height2d: height2d,
-        fontSize: 13,
-        titleSize: 16,
-        axisTitleSize: 14,
-        tickSize: 11,
-        margin: { l: 80, r: 40, t: 50, b: 100 },
-        camera: { eye: { x: 1.6, y: -1.8, z: 0.9 } },
-        colorbarLen: 0.8,
-        colorbarThickness: 20,
-        maxLabelLength: 50
-      };
-    } else {
-      // 4K and large displays
-      return {
-        height: height3d,
-        height2d: height2d,
-        fontSize: 14,
-        titleSize: 18,
-        axisTitleSize: 15,
-        tickSize: 12,
-        margin: { l: 100, r: 50, t: 60, b: 120 },
-        camera: { eye: { x: 1.5, y: -1.7, z: 0.85 } },
-        colorbarLen: 0.85,
-        colorbarThickness: 25,
-        maxLabelLength: 60
-      };
-    }
+    // Breakpoint table: [maxWidth, fontSize, titleSize, axisTitleSize, tickSize,
+    //   margins[l,r,t,b], camera[x,y,z], colorbarLen, colorbarThickness, maxLabelLength]
+    const breakpoints = [
+      [430,  10, 13, 11, 9,  [50, 30, 40, 60],   [2.0, -2.0, 1.2],  0.6,  15, 20],
+      [768,  11, 14, 12, 10, [60, 35, 45, 80],   [1.8, -1.9, 1.0],  0.7,  18, 30],
+      [1200, 12, 15, 13, 11, [70, 40, 50, 90],   [1.7, -1.8, 0.95], 0.75, 20, 40],
+      [1920, 13, 16, 14, 11, [80, 40, 50, 100],  [1.6, -1.8, 0.9],  0.8,  20, 50],
+      [Infinity, 14, 18, 15, 12, [100, 50, 60, 120], [1.5, -1.7, 0.85], 0.85, 25, 60]
+    ];
+
+    const bp = breakpoints.find(function(b) { return width <= b[0]; });
+    return {
+      height: height3d,
+      height2d: height2d,
+      fontSize: bp[1],
+      titleSize: bp[2],
+      axisTitleSize: bp[3],
+      tickSize: bp[4],
+      margin: { l: bp[5][0], r: bp[5][1], t: bp[5][2], b: bp[5][3] },
+      camera: { eye: { x: bp[6][0], y: bp[6][1], z: bp[6][2] } },
+      colorbarLen: bp[7],
+      colorbarThickness: bp[8],
+      maxLabelLength: bp[9]
+    };
   }
 
   /**
@@ -284,10 +230,7 @@
           sortedLabels.push(armLabels[origIdx] || ('Variant #' + origIdx));
         }
 
-        const armIndices = [];
-        for (let i = 0; i < landscapeNumArms; i++) {
-          armIndices.push(i);
-        }
+        const armIndices = [...Array(landscapeNumArms).keys()];
 
         // Build pre-formatted hovertext array (Plotly 3D surfaces don't support %{text} in hovertemplate)
         const hoverTextData = [];
@@ -338,32 +281,21 @@
           xAxis3dConfig.ticktext = tickText3d;
         }
 
-        // Calculate color bounds and surface statistics for adaptive lighting
-        let zMin = Infinity;
-        let zMax = -Infinity;
-        let zSum = 0;
-        let zCount = 0;
+        // Single pass for all statistics (min, max, sum, sumSq for variance)
+        let zMin = Infinity, zMax = -Infinity, zSum = 0, zSumSq = 0, zCount = 0;
         for (let ai = 0; ai < sortedZMatrix.length; ai++) {
           for (let ti = 0; ti < sortedZMatrix[ai].length; ti++) {
             const val = sortedZMatrix[ai][ti];
             if (val < zMin) zMin = val;
             if (val > zMax) zMax = val;
             zSum += val;
+            zSumSq += val * val;
             zCount++;
           }
         }
         const zMean = zSum / zCount;
-
-        // Calculate variance for adaptive lighting
-        let zVariance = 0;
-        for (let ai = 0; ai < sortedZMatrix.length; ai++) {
-          for (let ti = 0; ti < sortedZMatrix[ai].length; ti++) {
-            const diff = sortedZMatrix[ai][ti] - zMean;
-            zVariance += diff * diff;
-          }
-        }
-        zVariance = zVariance / zCount;
-        const zStdDev = Math.sqrt(zVariance);
+        const zVariance = (zSumSq / zCount) - (zMean * zMean);
+        const zStdDev = Math.sqrt(Math.max(0, zVariance));
 
         // Coefficient of variation: higher = more varied surface
         const coeffOfVar = zMean > 0 ? zStdDev / zMean : 0;
