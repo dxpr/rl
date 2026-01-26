@@ -1,0 +1,179 @@
+/**
+ * @file
+ * Styles for RL experiment charts.
+ */
+
+.rl-charts-container {
+  margin-bottom: 2em;
+}
+
+.rl-chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.rl-chart-box {
+  flex: 1 1 100%;
+  min-width: 280px;
+  background: #fff;
+  border: 2px solid #d0d0d0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.rl-chart-box h4 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.rl-chart-description {
+  font-size: 14px;
+  color: #444;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.rl-chart-area-2d {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 16px;
+  min-height: 300px;
+}
+
+.rl-chart-area-3d {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f4 100%);
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 16px;
+  height: 80vh;
+  width: calc(80vh * 4 / 3);
+  max-width: 100%;
+}
+
+.rl-help-text {
+  background: #f5f7fa;
+  border-left: 4px solid #4a90d9;
+  padding: 12px 16px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.6;
+  border-radius: 0 6px 6px 0;
+}
+
+.rl-help-text strong {
+  color: #333;
+}
+
+.rl-interaction-hint {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  padding: 8px 12px;
+  background: #fff8e1;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+/* Responsive styles - Small phones (iPhone 13 mini) */
+@media (max-width: 430px) {
+  .rl-chart-box {
+    padding: 12px;
+  }
+
+  .rl-chart-box h4 {
+    font-size: 15px;
+  }
+
+  .rl-chart-description {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .rl-chart-area-2d {
+    min-height: 250px;
+  }
+
+  .rl-chart-area-3d {
+    height: 60vh;
+    width: calc(60vh * 4 / 3);
+    max-width: 100%;
+  }
+
+  .rl-help-text {
+    font-size: 11px;
+    padding: 8px 12px;
+  }
+
+  .rl-interaction-hint {
+    font-size: 10px;
+    padding: 6px;
+  }
+}
+
+/* Responsive styles - Tablets portrait */
+@media (min-width: 431px) and (max-width: 768px) {
+  .rl-chart-box {
+    padding: 16px;
+  }
+
+  .rl-chart-box h4 {
+    font-size: 16px;
+  }
+
+  .rl-chart-area-2d {
+    min-height: 280px;
+  }
+
+  .rl-chart-area-3d {
+    height: 70vh;
+    width: calc(70vh * 4 / 3);
+    max-width: 100%;
+  }
+
+  .rl-help-text {
+    font-size: 12px;
+  }
+}
+
+/* Responsive styles - 4K and large displays */
+@media (min-width: 1921px) {
+  .rl-chart-box {
+    padding: 28px;
+  }
+
+  .rl-chart-box h4 {
+    font-size: 22px;
+  }
+
+  .rl-chart-description {
+    font-size: 16px;
+  }
+
+  .rl-chart-area-2d {
+    min-height: 400px;
+  }
+
+  .rl-chart-area-3d {
+    height: 80vh;
+    width: calc(80vh * 4 / 3);
+    max-width: 100%;
+  }
+
+  .rl-help-text {
+    font-size: 15px;
+    padding: 16px 20px;
+  }
+
+  .rl-interaction-hint {
+    font-size: 13px;
+  }
+}

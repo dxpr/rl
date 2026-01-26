@@ -1,0 +1,16 @@
+plotly:
+  version: 2.35.2
+  license:
+    name: MIT
+    url: https://github.com/plotly/plotly.js/blob/master/LICENSE
+    gpl-compatible: true
+  css:
+    component:
+      css/rl-charts.css: {}
+  js:
+    libraries/plotly/plotly.min.js: { minified: true, preprocess: false }
+    js/rl-plotly-charts.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once
