@@ -199,7 +199,7 @@
               color: arm.color,
               width: 2
             },
-            hovertemplate: '<b>' + armLabel + '</b><br>' + (data.xAxisLabel || 'Impressions') + ': %{x}<br>Rate: %{y:.1f}%<extra></extra>'
+            hovertemplate: '<b>' + armLabel + '</b><br>' + xAxisLabel + ': %{x}<br>Rate: %{y:.1f}%<extra></extra>'
           });
         }
 

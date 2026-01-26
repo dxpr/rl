@@ -10,13 +10,15 @@
           const urls = JSON.parse(this.dataset.urls);
           const url = urls[this.value];
 
-          // Find the chart box and add loading overlay
-          const chartBox = this.closest('.rl-chart-box');
-          if (chartBox) {
-            const loader = document.createElement('div');
-            loader.className = 'rl-chart-loading';
-            chartBox.appendChild(loader);
-          }
+          // Find visible chart boxes and add loading overlay
+          const chartBoxes = document.querySelectorAll('.rl-chart-box');
+          chartBoxes.forEach(function (chartBox) {
+            if (chartBox.offsetParent !== null) {
+              const loader = document.createElement('div');
+              loader.className = 'rl-chart-loading';
+              chartBox.appendChild(loader);
+            }
+          });
 
           // Navigate after a brief delay to show the spinner
           setTimeout(function () {

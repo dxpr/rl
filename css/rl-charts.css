@@ -27,8 +27,8 @@
 
 .rl-chart-filters {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
+  justify-content: flex-start;
+  margin-bottom: 20px;
 }
 
 /* Loading spinner for chart regeneration */
@@ -260,10 +260,6 @@
 
 /* Responsive date filter */
 @media (max-width: 768px) {
-  .rl-chart-filters {
-    justify-content: flex-start;
-  }
-
   .rl-date-filter {
     flex-direction: column;
     align-items: flex-start;

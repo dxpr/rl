@@ -310,7 +310,6 @@ class ReportsController extends ControllerBase {
     }
 
     // Sort by the selected column.
-    $request = $this->requestStack->getCurrentRequest();
     $order = $request ? $request->query->get('order', 'Rate') : 'Rate';
     $sort = $request ? $request->query->get('sort', 'desc') : 'desc';
 
