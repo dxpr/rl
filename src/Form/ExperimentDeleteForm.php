@@ -85,7 +85,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getDescription() {
-    return $this->t('This will permanently delete the experiment and all its data (turns, rewards, totals). This action cannot be undone.');
+    return $this->t('This will permanently delete the experiment and all its data (turns, rewards, totals, snapshots). This action cannot be undone.');
   }
 
   /**
@@ -107,6 +107,10 @@ class ExperimentDeleteForm extends ConfirmFormBase {
         ->execute();
 
       $this->database->delete('rl_experiment_totals')
+        ->condition('experiment_id', $this->experimentId)
+        ->execute();
+
+      $this->database->delete('rl_arm_snapshots')
         ->condition('experiment_id', $this->experimentId)
         ->execute();
 

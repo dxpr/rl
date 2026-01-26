@@ -146,8 +146,8 @@
 
     // Determine number of arms and which chart to show
     let numArms = 0;
-    if (data.ridgelineData && data.ridgelineData.arms) {
-      numArms = data.ridgelineData.arms.length;
+    if (data.lineChartData && data.lineChartData.arms) {
+      numArms = data.lineChartData.arms.length;
     } else if (data.surface3d && data.surface3d.zMatrix) {
       numArms = data.surface3d.zMatrix.length;
     }
@@ -170,15 +170,16 @@
       surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
     }
 
-    // 1. 2D Line Chart - Conversion Rate Over Time (1-threshold arms)
-    if (showLineChart && data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && lineChartEl) {
+    // 1. 2D Line Chart - Conversion Rate Over Time (up to threshold arms)
+    if (showLineChart && data.lineChartData && data.lineChartData.arms && data.lineChartData.arms.length > 0 && lineChartEl) {
       try {
         const traces2d = [];
-        const lineChartNumArms = data.ridgelineData.arms.length;
+        const lineChartNumArms = data.lineChartData.arms.length;
         const maxLineArms = Math.min(lineChartNumArms, 20); // Limit to 20 arms for readability
+        const xAxisLabel = data.xAxisLabel || 'Total Impressions';
 
         for (let idx = 0; idx < maxLineArms; idx++) {
-          const arm = data.ridgelineData.arms[idx];
+          const arm = data.lineChartData.arms[idx];
           const armLabel = arm.label || ('Variant #' + idx);
           const truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
 
@@ -204,7 +205,6 @@
         }
 
         const lineChartHeight = config.height2d;
-        const xAxisLabel = data.xAxisLabel || 'Total Impressions';
 
         // Configure x-axis based on time axis type
         const xAxisConfig = {

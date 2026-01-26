@@ -467,8 +467,8 @@ class ReportsController extends ControllerBase {
       'rgba(99, 255, 132, 1)',
     ];
 
-    // Prepare ridgeline data for Plotly 3D (up to 100 arms).
-    $ridgeline_data = ['arms' => []];
+    // Prepare line chart data for Plotly (up to 100 arms).
+    $line_chart_data = ['arms' => []];
     $i = 0;
     foreach ($top_arms_3d as $arm_id) {
       if (!isset($arms_data[$arm_id])) {
@@ -484,7 +484,7 @@ class ReportsController extends ControllerBase {
           ];
         }
       }
-      $ridgeline_data['arms'][] = [
+      $line_chart_data['arms'][] = [
         'label' => $arm_labels[$arm_id],
         'data' => $data_points,
         'color' => $color,
@@ -527,7 +527,7 @@ class ReportsController extends ControllerBase {
     $chart_line_threshold = $this->config('rl.settings')->get('chart_line_threshold') ?? 10;
     $total_arms_all = count($arm_totals);
     $plotly_data = [
-      'ridgelineData' => $ridgeline_data,
+      'lineChartData' => $line_chart_data,
       'surface3d' => $surface_3d_data,
       'totalArmsDisplayed' => count($top_arms_3d),
       'totalArmsAll' => $total_arms_all,

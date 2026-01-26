@@ -120,10 +120,6 @@
     padding: 12px;
   }
 
-  .rl-chart-box h4 {
-    font-size: 15px;
-  }
-
   .rl-chart-description {
     font-size: 12px;
     margin-bottom: 10px;
@@ -156,10 +152,6 @@
     padding: 16px;
   }
 
-  .rl-chart-box h4 {
-    font-size: 16px;
-  }
-
   .rl-chart-area-2d {
     min-height: 560px;
   }
@@ -179,10 +171,6 @@
 @media (min-width: 1921px) {
   .rl-chart-box {
     padding: 28px;
-  }
-
-  .rl-chart-box h4 {
-    font-size: 22px;
   }
 
   .rl-chart-description {
