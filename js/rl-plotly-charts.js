@@ -207,7 +207,7 @@
 
         Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
           title: {
-            text: 'Conversion Rate Over Time' + (lineChartNumArms > maxLineArms ? ' (Top ' + maxLineArms + ' of ' + lineChartNumArms + ')' : ''),
+            text: 'Conversion Rate Over Time',
             font: { size: config.titleSize }
           },
           xaxis: {
@@ -233,6 +233,14 @@
           },
           hovermode: 'closest'
         }), { responsive: true });
+
+        // Update tip text if showing subset of variants
+        if (lineChartNumArms > maxLineArms) {
+          const tipEl = lineChartEl.parentElement.querySelector('.rl-help-text');
+          if (tipEl) {
+            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + maxLineArms + ' active variants out of ' + lineChartNumArms + ' total. Hover for details.';
+          }
+        }
       } catch (e) {
         console.error('2D line chart error:', e);
       }
@@ -349,7 +357,7 @@
             len: config.colorbarLen
           }
         }], Object.assign({}, defaultLayout, {
-          title: { text: landscapeNumArms + ' Variants Over Time', font: { size: config.titleSize } },
+          title: { text: 'Conversion Rate Over Time', font: { size: config.titleSize } },
           scene: {
             xaxis: {
               title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
@@ -368,6 +376,15 @@
           },
           height: config.height
         }), { responsive: true });
+
+        // Update tip text if showing subset of variants
+        const totalArmsAll = data.totalArmsAll || landscapeNumArms;
+        if (landscapeNumArms < totalArmsAll) {
+          const tipEl = surface3dEl.parentElement.querySelector('.rl-help-text');
+          if (tipEl) {
+            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + landscapeNumArms + ' active variants out of ' + totalArmsAll + ' total. Taller/brighter = better conversion rate.';
+          }
+        }
       } catch (e) {
         console.error('3D posterior landscape error:', e);
       }

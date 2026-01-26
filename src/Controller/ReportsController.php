@@ -499,10 +499,12 @@ class ReportsController extends ControllerBase {
 
     // Plotly data (up to 100 arms for 3D visualizations).
     $chart_line_threshold = $this->config('rl.settings')->get('chart_line_threshold') ?? 10;
+    $total_arms_all = count($arm_totals);
     $plotly_data = [
       'ridgelineData' => $ridgeline_data,
       'surface3d' => $surface_3d_data,
-      'totalArms3d' => count($top_arms_3d),
+      'totalArmsDisplayed' => count($top_arms_3d),
+      'totalArmsAll' => $total_arms_all,
       'chartLineThreshold' => $chart_line_threshold,
     ];
 
@@ -523,8 +525,8 @@ class ReportsController extends ControllerBase {
       '#tip_hover' => $this->t('Hover for details. Higher = better.'),
       '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion rate.'),
       '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
-      '#chart_title_2d' => $this->t('Conversion Rate Trends'),
-      '#chart_title_3d_surface' => $this->t('All Variants'),
+      '#chart_title_2d' => $this->t('Conversion Rate Over Time'),
+      '#chart_title_3d_surface' => $this->t('Conversion Rate Over Time'),
     ];
 
     return $build;
