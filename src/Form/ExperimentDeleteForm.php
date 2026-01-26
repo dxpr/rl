@@ -37,8 +37,9 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
-    return new self(
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
+    return new static(
       $container->get('database')
     );
   }
@@ -53,7 +54,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL): array {
     $this->experimentId = $experiment_id;
 
     $experiment = $this->database->select('rl_experiment_registry', 'er')
@@ -64,7 +65,8 @@ class ExperimentDeleteForm extends ConfirmFormBase {
 
     if (!$experiment) {
       $this->messenger()->addError($this->t('Experiment not found.'));
-      return $this->redirect('rl.reports.experiments');
+      $form_state->setRedirect('rl.reports.experiments');
+      return [];
     }
 
     return parent::buildForm($form, $form_state);

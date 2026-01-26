@@ -39,8 +39,9 @@ class ExperimentForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
-    return new self(
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
+    return new static(
       $container->get('database'),
       $container->get('rl.experiment_registry')
     );
@@ -56,7 +57,7 @@ class ExperimentForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL): array {
     $experiment = NULL;
 
     if ($experiment_id) {
@@ -68,7 +69,8 @@ class ExperimentForm extends FormBase {
 
       if (!$experiment) {
         $this->messenger()->addError($this->t('Experiment not found.'));
-        return $this->redirect('rl.reports.experiments');
+        $form_state->setRedirect('rl.reports.experiments');
+        return [];
       }
     }
 

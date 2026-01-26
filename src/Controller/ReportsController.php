@@ -10,9 +10,11 @@ use Drupal\Core\Link;
 use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
+use Drupal\rl\Service\ArmDataValidator;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
 use Drupal\rl\Storage\SnapshotStorageInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * Controller for RL experiment reports.
@@ -58,14 +60,21 @@ class ReportsController extends ControllerBase {
    *
    * @var \Drupal\rl\Service\ArmDataValidator
    */
-  protected $armDataValidator;
+  protected ArmDataValidator $armDataValidator;
 
   /**
    * The snapshot storage.
    *
    * @var \Drupal\rl\Storage\SnapshotStorageInterface
    */
-  protected $snapshotStorage;
+  protected SnapshotStorageInterface $snapshotStorage;
+
+  /**
+   * The request stack.
+   *
+   * @var \Symfony\Component\HttpFoundation\RequestStack
+   */
+  protected RequestStack $requestStack;
 
   /**
    * Constructs a ReportsController object.
@@ -84,30 +93,34 @@ class ReportsController extends ControllerBase {
    *   The arm data validator.
    * @param \Drupal\rl\Storage\SnapshotStorageInterface $snapshot_storage
    *   The snapshot storage.
+   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
+   *   The request stack.
    */
-  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, $arm_data_validator = NULL, ?SnapshotStorageInterface $snapshot_storage = NULL) {
+  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, ArmDataValidator $arm_data_validator, SnapshotStorageInterface $snapshot_storage, RequestStack $request_stack) {
     $this->database = $database;
     $this->experimentStorage = $experiment_storage;
     $this->dateFormatter = $date_formatter;
     $this->decoratorManager = $decorator_manager;
     $this->renderer = $renderer;
-    // Use service container if validator not injected (backward compatibility).
-    $this->armDataValidator = $arm_data_validator ?: \Drupal::service('rl.arm_data_validator');
-    $this->snapshotStorage = $snapshot_storage ?: \Drupal::service('rl.snapshot_storage');
+    $this->armDataValidator = $arm_data_validator;
+    $this->snapshotStorage = $snapshot_storage;
+    $this->requestStack = $request_stack;
   }
 
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
-    return new self(
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
+    return new static(
           $container->get('database'),
           $container->get('rl.experiment_data_storage'),
           $container->get('date.formatter'),
           $container->get('rl.experiment_decorator_manager'),
           $container->get('renderer'),
           $container->get('rl.arm_data_validator'),
-          $container->get('rl.snapshot_storage')
+          $container->get('rl.snapshot_storage'),
+          $container->get('request_stack')
       );
   }
 
@@ -291,8 +304,9 @@ class ReportsController extends ControllerBase {
     }
 
     // Sort by the selected column.
-    $order = \Drupal::request()->query->get('order', 'Rate');
-    $sort = \Drupal::request()->query->get('sort', 'desc');
+    $request = $this->requestStack->getCurrentRequest();
+    $order = $request ? $request->query->get('order', 'Rate') : 'Rate';
+    $sort = $request ? $request->query->get('sort', 'desc') : 'desc';
 
     $sort_field = 'success_rate';
     if (stripos($order, 'Variant') !== FALSE) {
@@ -305,7 +319,8 @@ class ReportsController extends ControllerBase {
       $sort_field = 'rewards';
     }
 
-    usort($arm_data, function ($a, $b) use ($sort_field, $sort) {
+    // @phpstan-ignore argument.unresolvableType, argument.unresolvableType
+    usort($arm_data, static function (array $a, array $b) use ($sort_field, $sort): int {
       $cmp = $a[$sort_field] <=> $b[$sort_field];
       return $sort === 'desc' ? -$cmp : $cmp;
     });
@@ -449,7 +464,7 @@ class ReportsController extends ControllerBase {
     // Prepare 3D surface data for loss-landscape style visualization.
     // This creates a continuous surface from all arms' posteriors over time.
     $surface_3d_data = [
-      'xValues' => array_values($x_values),
+      'xValues' => $x_values,
       'armLabels' => [],
       'zMatrix' => [],
     ];
