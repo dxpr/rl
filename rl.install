@@ -434,6 +434,27 @@ function rl_requirements($phase) {
   $requirements = [];
 
   if ($phase == 'runtime') {
+    // Check if Plotly.js library is installed.
+    $plotly_path = DRUPAL_ROOT . '/libraries/plotly.js-dist-min/plotly.min.js';
+    if (!file_exists($plotly_path)) {
+      $requirements['rl_plotly_library'] = [
+        'title' => t('RL: Plotly.js library'),
+        'severity' => REQUIREMENT_ERROR,
+        'value' => t('Not installed'),
+        'description' => t('The Plotly.js library is required for charts. Install it via Composer: <code>composer require npm-asset/plotly.js-dist-min:^2.35</code>. Your project must have <a href="@packagist">Asset Packagist</a> configured and <code>oomphinc/composer-installers-extender</code> with npm-asset in installer-paths. See the <a href="@readme">README</a> for details.', [
+          '@packagist' => 'https://asset-packagist.org',
+          '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md',
+        ]),
+      ];
+    }
+    else {
+      $requirements['rl_plotly_library'] = [
+        'title' => t('RL: Plotly.js library'),
+        'severity' => REQUIREMENT_OK,
+        'value' => t('Installed'),
+      ];
+    }
+
     $module_handler = \Drupal::service('module_handler');
     if ($module_handler->moduleExists('page_cache')) {
       $requirements['rl_page_cache_conflict'] = [
