@@ -22,15 +22,34 @@
   };
 
   /**
+   * Get the actual height of a chart container element.
+   */
+  function getContainerHeight(elementId) {
+    var el = document.getElementById(elementId);
+    if (el) {
+      var height = el.clientHeight || el.offsetHeight;
+      // Return at least a minimum height
+      return Math.max(height, 200);
+    }
+    return 400; // Fallback
+  }
+
+  /**
    * Get responsive configuration based on screen width.
+   * Heights are calculated from container elements, not fixed values.
    */
   function getResponsiveConfig() {
     var width = window.innerWidth;
 
+    // Get actual container heights
+    var height3d = getContainerHeight('rl-plotly-3d-surface') || getContainerHeight('rl-plotly-ridgelines');
+    var height2d = getContainerHeight('rl-plotly-2d-lines');
+
     if (width <= 430) {
       // iPhone 13 mini and small phones
       return {
-        height: 400,
+        height: height3d,
+        height2d: height2d,
         fontSize: 10,
         titleSize: 13,
         axisTitleSize: 11,
@@ -44,7 +63,8 @@
     } else if (width <= 768) {
       // Tablets portrait
       return {
-        height: 500,
+        height: height3d,
+        height2d: height2d,
         fontSize: 11,
         titleSize: 14,
         axisTitleSize: 12,
@@ -58,7 +78,8 @@
     } else if (width <= 1200) {
       // Tablets landscape / small laptops
       return {
-        height: 600,
+        height: height3d,
+        height2d: height2d,
         fontSize: 12,
         titleSize: 15,
         axisTitleSize: 13,
@@ -72,7 +93,8 @@
     } else if (width <= 1920) {
       // Standard desktop / Full HD
       return {
-        height: 700,
+        height: height3d,
+        height2d: height2d,
         fontSize: 13,
         titleSize: 16,
         axisTitleSize: 14,
@@ -86,7 +108,8 @@
     } else {
       // 4K and large displays
       return {
-        height: 900,
+        height: height3d,
+        height2d: height2d,
         fontSize: 14,
         titleSize: 18,
         axisTitleSize: 15,
@@ -104,9 +127,11 @@
    * Truncate label to max length.
    */
   function truncateLabel(label, maxLen) {
-    if (!label) return 'Unknown';
-    if (label.length <= maxLen) return label;
-    return label.substring(0, maxLen - 3) + '...';
+    if (!label && label !== 0) return 'Variant';
+    // Convert to string if not already (handles numeric IDs)
+    var str = String(label);
+    if (str.length <= maxLen) return str;
+    return str.substring(0, maxLen - 3) + '...';
   }
 
   function initPlotlyCharts(data) {
@@ -119,37 +144,157 @@
       margin: config.margin
     };
 
-    // 1. 3D Posterior Landscape (loss-landscape style)
+    // Determine number of arms and which chart to show
+    var numArms = 0;
+    if (data.ridgelineData && data.ridgelineData.arms) {
+      numArms = data.ridgelineData.arms.length;
+    } else if (data.surface3d && data.surface3d.zMatrix) {
+      numArms = data.surface3d.zMatrix.length;
+    }
+
+    // Chart selection based on arm count:
+    // 1-7 arms: 2D line chart
+    // 8-15 arms: 3D Stacked Ridgelines
+    // 16+ arms: 3D Posterior Landscape
+    var showLineChart = numArms >= 1 && numArms <= 7;
+    var showRidgelines = numArms >= 8 && numArms <= 15;
+    var showLandscape = numArms >= 16;
+
+    // Hide unused chart containers
+    var lineChartEl = document.getElementById('rl-plotly-2d-lines');
+    var ridgelinesEl = document.getElementById('rl-plotly-ridgelines');
     var surface3dEl = document.getElementById('rl-plotly-3d-surface');
-    if (data.surface3d && data.surface3d.zMatrix && data.surface3d.zMatrix.length > 0 && surface3dEl) {
+
+    if (lineChartEl) {
+      lineChartEl.parentElement.parentElement.style.display = showLineChart ? 'block' : 'none';
+    }
+    if (ridgelinesEl) {
+      ridgelinesEl.parentElement.parentElement.style.display = showRidgelines ? 'block' : 'none';
+    }
+    if (surface3dEl) {
+      surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
+    }
+
+    // 1. 2D Line Chart - Conversion Rate Over Time (1-7 arms)
+    if (showLineChart && data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && lineChartEl) {
+      try {
+        var traces2d = [];
+        var numArms = data.ridgelineData.arms.length;
+        var maxLineArms = Math.min(numArms, 20); // Limit to 20 arms for readability
+
+        for (var idx = 0; idx < maxLineArms; idx++) {
+          var arm = data.ridgelineData.arms[idx];
+          var armLabel = arm.label || ('Variant #' + idx);
+          var truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
+
+          var xValues = [];
+          var yValues = [];
+          arm.data.forEach(function(point) {
+            xValues.push(point.x);
+            yValues.push(point.y);
+          });
+
+          traces2d.push({
+            type: 'scatter',
+            mode: 'lines',
+            name: truncatedLabel,
+            x: xValues,
+            y: yValues,
+            line: {
+              color: arm.color,
+              width: 2
+            },
+            hovertemplate: '<b>' + armLabel + '</b><br>Impressions: %{x}<br>Rate: %{y:.1f}%<extra></extra>'
+          });
+        }
+
+        var lineChartHeight = config.height2d;
+
+        Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
+          title: {
+            text: 'Conversion Rate Over Time' + (numArms > maxLineArms ? ' (Top ' + maxLineArms + ' of ' + numArms + ')' : ''),
+            font: { size: config.titleSize }
+          },
+          xaxis: {
+            title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
+            tickfont: { size: config.tickSize },
+            gridcolor: 'rgba(0,0,0,0.1)'
+          },
+          yaxis: {
+            title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } },
+            tickfont: { size: config.tickSize },
+            gridcolor: 'rgba(0,0,0,0.1)',
+            rangemode: 'tozero'
+          },
+          height: lineChartHeight,
+          showlegend: numArms <= 10,
+          legend: {
+            orientation: numArms <= 5 ? 'v' : 'h',
+            yanchor: numArms <= 5 ? 'top' : 'bottom',
+            y: numArms <= 5 ? 1 : -0.2,
+            xanchor: 'left',
+            x: numArms <= 5 ? 1.02 : 0,
+            font: { size: config.tickSize }
+          },
+          hovermode: 'closest'
+        }), { responsive: true });
+      } catch (e) {
+        console.error('2D line chart error:', e);
+      }
+    }
+
+    // 2. 3D Posterior Landscape (loss-landscape style) - 16+ arms
+    if (showLandscape && data.surface3d && data.surface3d.zMatrix && data.surface3d.zMatrix.length > 0 && surface3dEl) {
       try {
         var numArms = data.surface3d.zMatrix.length;
         var numTimePoints = data.surface3d.xValues.length;
+
+        // Get current (latest) conversion rate for each arm to sort
+        var armRates = [];
+        for (var i = 0; i < numArms; i++) {
+          var lastRate = data.surface3d.zMatrix[i][numTimePoints - 1] || 0;
+          armRates.push({ index: i, rate: lastRate });
+        }
+        // Sort by rate ASCENDING (lowest rate = lowest index = front, highest rate = back)
+        armRates.sort(function(a, b) { return a.rate - b.rate; });
+
+        // Reorder data based on sorted indices
+        var sortedZMatrix = [];
+        var sortedLabels = [];
+        var armLabels = data.surface3d.armLabels || [];
+        for (var i = 0; i < armRates.length; i++) {
+          var origIdx = armRates[i].index;
+          sortedZMatrix.push(data.surface3d.zMatrix[origIdx]);
+          sortedLabels.push(armLabels[origIdx] || ('Variant #' + origIdx));
+        }
+
         var armIndices = [];
         for (var i = 0; i < numArms; i++) {
           armIndices.push(i);
         }
 
-        // Build text array for human-readable arm labels in tooltips
-        var armLabels = data.surface3d.armLabels || [];
-        var textData = [];
+        // Build pre-formatted hovertext array (Plotly 3D surfaces don't support %{text} in hovertemplate)
+        var hoverTextData = [];
         var truncatedLabels = [];
 
         for (var ai = 0; ai < numArms; ai++) {
-          var labelRow = [];
-          var fullLabel = armLabels[ai] || ('Arm #' + ai);
+          var hoverRow = [];
+          var fullLabel = sortedLabels[ai] || ('Variant #' + ai);
           var displayLabel = truncateLabel(fullLabel, config.maxLabelLength);
           truncatedLabels.push(displayLabel);
 
           for (var ti = 0; ti < numTimePoints; ti++) {
-            labelRow.push(fullLabel);
+            var impressions = data.surface3d.xValues[ti];
+            var rate = sortedZMatrix[ai][ti];
+            // Build complete hover text for each point
+            hoverRow.push('<b>' + fullLabel + '</b><br>Impressions: ' + impressions + '<br>Rate: ' + rate.toFixed(1) + '%');
           }
-          textData.push(labelRow);
+          hoverTextData.push(hoverRow);
         }
 
         // Configure Y-axis based on number of arms
         var yAxisConfig = {
-          title: { text: numArms <= 10 ? 'Variant' : 'Arm Index', font: { size: config.axisTitleSize } },
+          title: { text: 'Variant', font: { size: config.axisTitleSize } },
           tickfont: { size: config.tickSize }
         };
 
@@ -162,12 +307,12 @@
 
         Plotly.newPlot('rl-plotly-3d-surface', [{
           type: 'surface',
-          z: data.surface3d.zMatrix,
+          z: sortedZMatrix,
           x: data.surface3d.xValues,
           y: armIndices,
-          text: textData,
+          surfacecolor: sortedZMatrix,
+          hovertext: hoverTextData,
           hoverinfo: 'text',
-          hovertemplate: '<b>%{text}</b><br>Turn: %{x}<br>Rate: %{z:.1f}%<extra></extra>',
           colorscale: [
             [0, 'rgb(68, 1, 84)'],
             [0.1, 'rgb(72, 35, 116)'],
@@ -204,15 +349,15 @@
             z: 100
           },
           colorbar: {
-            title: { text: 'Rate %', side: 'right', font: { size: config.axisTitleSize } },
+            title: { text: 'Conv. Rate', side: 'right', font: { size: config.axisTitleSize } },
             thickness: config.colorbarThickness,
             len: config.colorbarLen
           }
         }], Object.assign({}, defaultLayout, {
-          title: { text: 'Posterior Landscape: ' + numArms + ' Arms Over Time', font: { size: config.titleSize } },
+          title: { text: numArms + ' Variants Over Time', font: { size: config.titleSize } },
           scene: {
             xaxis: {
-              title: { text: 'Experiment Turns', font: { size: config.axisTitleSize } },
+              title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
               tickfont: { size: config.tickSize }
             },
             yaxis: yAxisConfig,
@@ -233,21 +378,30 @@
       }
     }
 
-    // 2. 3D Stacked Ridgelines
-    var ridgelinesEl = document.getElementById('rl-plotly-ridgelines');
-    if (data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && ridgelinesEl) {
+    // 3. 3D Stacked Ridgelines - 8-15 arms
+    if (showRidgelines && data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && ridgelinesEl) {
       try {
         var traces = [];
         var numArms = data.ridgelineData.arms.length;
 
         // Limit visible arms for ridgelines (too many makes it unreadable)
         var maxRidgelineArms = Math.min(numArms, 30);
+
+        // Sort arms by current (latest) conversion rate - ASCENDING (lowest in front, highest in back)
+        var armsWithRates = data.ridgelineData.arms.slice(0, maxRidgelineArms).map(function(arm, idx) {
+          var lastPoint = arm.data[arm.data.length - 1];
+          var currentRate = lastPoint ? lastPoint.y : 0;
+          return { arm: arm, originalIndex: idx, currentRate: currentRate };
+        });
+        armsWithRates.sort(function(a, b) { return a.currentRate - b.currentRate; });
+
         var armLabelsRidge = [];
         var armIndicesRidge = [];
 
-        for (var idx = 0; idx < maxRidgelineArms; idx++) {
-          var arm = data.ridgelineData.arms[idx];
-          var armLabel = arm.label || ('Arm #' + idx);
+        for (var idx = 0; idx < armsWithRates.length; idx++) {
+          var armData = armsWithRates[idx];
+          var arm = armData.arm;
+          var armLabel = arm.label || ('Variant #' + armData.originalIndex);
           var truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
           armLabelsRidge.push(truncatedLabel);
           armIndicesRidge.push(idx);
@@ -281,13 +435,13 @@
             showscale: false,
             opacity: 0.85,
             name: truncatedLabel,
-            hovertemplate: '<b>' + armLabel + '</b><br>Turn: %{x}<br>Rate: %{z:.1f}%<extra></extra>'
+            hovertemplate: '<b>' + armLabel + '</b><br>Impressions: %{x}<br>Rate: %{z:.1f}%<extra></extra>'
           });
         }
 
         // Configure Y-axis based on number of arms
         var yAxisConfigRidge = {
-          title: { text: maxRidgelineArms <= 10 ? 'Variant' : 'Arm Index', font: { size: config.axisTitleSize } },
+          title: { text: 'Variant', font: { size: config.axisTitleSize } },
           tickfont: { size: config.tickSize }
         };
 
@@ -299,14 +453,14 @@
         }
 
         Plotly.newPlot('rl-plotly-ridgelines', traces, Object.assign({}, defaultLayout, {
-          title: { text: 'Showing ' + maxRidgelineArms + ' of ' + numArms + ' arms', font: { size: config.titleSize, color: '#666' } },
+          title: { text: 'Showing ' + maxRidgelineArms + ' of ' + numArms + ' variants', font: { size: config.titleSize, color: '#666' } },
           scene: {
-            xaxis: { title: { text: 'Experiment Turns', font: { size: config.axisTitleSize } }, tickfont: { size: config.tickSize } },
+            xaxis: { title: { text: 'Total Impressions', font: { size: config.axisTitleSize } }, tickfont: { size: config.tickSize } },
             yaxis: yAxisConfigRidge,
             zaxis: { title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } }, tickfont: { size: config.tickSize } },
             camera: { eye: { x: config.camera.eye.x - 0.1, y: config.camera.eye.y + 0.3, z: config.camera.eye.z - 0.1 } }
           },
-          height: config.height - 50,
+          height: config.height,
           showlegend: false
         }), { responsive: true });
       } catch (e) {
@@ -315,16 +469,61 @@
     }
   }
 
-  // Debounced resize handler
-  var resizeTimeout;
-  window.addEventListener('resize', function() {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(function() {
-      var data = drupalSettings.rlPlotly;
-      if (data) {
-        initPlotlyCharts(data);
+  /**
+   * Debounce function for performance optimization.
+   */
+  function debounce(func, wait) {
+    var timeout;
+    return function executedFunction() {
+      var context = this;
+      var args = arguments;
+      clearTimeout(timeout);
+      timeout = setTimeout(function() {
+        func.apply(context, args);
+      }, wait);
+    };
+  }
+
+  /**
+   * Track last window dimensions to prevent unnecessary redraws.
+   */
+  var lastWindowWidth = window.innerWidth;
+  var lastWindowHeight = window.innerHeight;
+
+  /**
+   * Handle chart resize - only triggers on actual window size changes.
+   * Uses Plotly.Plots.resize() which is designed for responsive charts.
+   */
+  function handleResize() {
+    // Only resize if window dimensions actually changed
+    var currentWidth = window.innerWidth;
+    var currentHeight = window.innerHeight;
+
+    if (currentWidth === lastWindowWidth && currentHeight === lastWindowHeight) {
+      return;
+    }
+
+    lastWindowWidth = currentWidth;
+    lastWindowHeight = currentHeight;
+
+    var data = drupalSettings.rlPlotly;
+    if (!data) return;
+
+    // Use Plotly.Plots.resize() for responsive charts - it respects the container
+    var chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface', 'rl-plotly-ridgelines'];
+
+    chartIds.forEach(function(chartId) {
+      var el = document.getElementById(chartId);
+      if (el && el.data && el.layout) {
+        Plotly.Plots.resize(el);
       }
-    }, 300);
-  });
+    });
+  }
+
+  // Debounced resize handler (300ms delay for performance)
+  var debouncedResize = debounce(handleResize, 300);
+
+  // Only use window resize event - avoid ResizeObserver to prevent infinite loops
+  window.addEventListener('resize', debouncedResize, { passive: true });
 
 })(Drupal, drupalSettings, once);
