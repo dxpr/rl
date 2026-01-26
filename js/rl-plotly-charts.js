@@ -42,7 +42,7 @@
     var width = window.innerWidth;
 
     // Get actual container heights
-    var height3d = getContainerHeight('rl-plotly-3d-surface') || getContainerHeight('rl-plotly-ridgelines');
+    var height3d = getContainerHeight('rl-plotly-3d-surface');
     var height2d = getContainerHeight('rl-plotly-2d-lines');
 
     if (width <= 430) {
@@ -153,23 +153,17 @@
     }
 
     // Chart selection based on arm count:
-    // 1-7 arms: 2D line chart
-    // 8-15 arms: 3D Stacked Ridgelines
-    // 16+ arms: 3D Posterior Landscape
-    var showLineChart = numArms >= 1 && numArms <= 7;
-    var showRidgelines = numArms >= 8 && numArms <= 15;
-    var showLandscape = numArms >= 16;
+    // 1-10 arms: 2D line chart
+    // 11+ arms: 3D Posterior Landscape
+    var showLineChart = numArms >= 1 && numArms <= 10;
+    var showLandscape = numArms > 10;
 
     // Hide unused chart containers
     var lineChartEl = document.getElementById('rl-plotly-2d-lines');
-    var ridgelinesEl = document.getElementById('rl-plotly-ridgelines');
     var surface3dEl = document.getElementById('rl-plotly-3d-surface');
 
     if (lineChartEl) {
       lineChartEl.parentElement.parentElement.style.display = showLineChart ? 'block' : 'none';
-    }
-    if (ridgelinesEl) {
-      ridgelinesEl.parentElement.parentElement.style.display = showRidgelines ? 'block' : 'none';
     }
     if (surface3dEl) {
       surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
@@ -378,95 +372,6 @@
       }
     }
 
-    // 3. 3D Stacked Ridgelines - 8-15 arms
-    if (showRidgelines && data.ridgelineData && data.ridgelineData.arms && data.ridgelineData.arms.length > 0 && ridgelinesEl) {
-      try {
-        var traces = [];
-        var numArms = data.ridgelineData.arms.length;
-
-        // Limit visible arms for ridgelines (too many makes it unreadable)
-        var maxRidgelineArms = Math.min(numArms, 30);
-
-        // Sort arms by current (latest) conversion rate - ASCENDING (lowest in front, highest in back)
-        var armsWithRates = data.ridgelineData.arms.slice(0, maxRidgelineArms).map(function(arm, idx) {
-          var lastPoint = arm.data[arm.data.length - 1];
-          var currentRate = lastPoint ? lastPoint.y : 0;
-          return { arm: arm, originalIndex: idx, currentRate: currentRate };
-        });
-        armsWithRates.sort(function(a, b) { return a.currentRate - b.currentRate; });
-
-        var armLabelsRidge = [];
-        var armIndicesRidge = [];
-
-        for (var idx = 0; idx < armsWithRates.length; idx++) {
-          var armData = armsWithRates[idx];
-          var arm = armData.arm;
-          var armLabel = arm.label || ('Variant #' + armData.originalIndex);
-          var truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
-          armLabelsRidge.push(truncatedLabel);
-          armIndicesRidge.push(idx);
-
-          // Create a surface for each arm offset in the Y direction
-          var zData = [];
-          var xData = [];
-          var yData = [];
-
-          // Create two rows for each arm to form a ribbon
-          for (var row = 0; row < 2; row++) {
-            var zRow = [];
-            var xRow = [];
-            var yRow = [];
-            arm.data.forEach(function(point) {
-              xRow.push(point.x);
-              yRow.push(idx + row * 0.1);
-              zRow.push(point.y);
-            });
-            xData.push(xRow);
-            yData.push(yRow);
-            zData.push(zRow);
-          }
-
-          traces.push({
-            type: 'surface',
-            x: xData,
-            y: yData,
-            z: zData,
-            colorscale: [[0, arm.color], [1, arm.color]],
-            showscale: false,
-            opacity: 0.85,
-            name: truncatedLabel,
-            hovertemplate: '<b>' + armLabel + '</b><br>Impressions: %{x}<br>Rate: %{z:.1f}%<extra></extra>'
-          });
-        }
-
-        // Configure Y-axis based on number of arms
-        var yAxisConfigRidge = {
-          title: { text: 'Variant', font: { size: config.axisTitleSize } },
-          tickfont: { size: config.tickSize }
-        };
-
-        // Show arm labels on Y-axis for small number of arms
-        if (maxRidgelineArms <= 10) {
-          yAxisConfigRidge.tickvals = armIndicesRidge;
-          yAxisConfigRidge.ticktext = armLabelsRidge;
-          yAxisConfigRidge.tickangle = 0;
-        }
-
-        Plotly.newPlot('rl-plotly-ridgelines', traces, Object.assign({}, defaultLayout, {
-          title: { text: 'Showing ' + maxRidgelineArms + ' of ' + numArms + ' variants', font: { size: config.titleSize, color: '#666' } },
-          scene: {
-            xaxis: { title: { text: 'Total Impressions', font: { size: config.axisTitleSize } }, tickfont: { size: config.tickSize } },
-            yaxis: yAxisConfigRidge,
-            zaxis: { title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } }, tickfont: { size: config.tickSize } },
-            camera: { eye: { x: config.camera.eye.x - 0.1, y: config.camera.eye.y + 0.3, z: config.camera.eye.z - 0.1 } }
-          },
-          height: config.height,
-          showlegend: false
-        }), { responsive: true });
-      } catch (e) {
-        console.error('Plotly ridgelines error:', e);
-      }
-    }
   }
 
   /**
@@ -510,7 +415,7 @@
     if (!data) return;
 
     // Use Plotly.Plots.resize() for responsive charts - it respects the container
-    var chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface', 'rl-plotly-ridgelines'];
+    var chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface'];
 
     chartIds.forEach(function(chartId) {
       var el = document.getElementById(chartId);

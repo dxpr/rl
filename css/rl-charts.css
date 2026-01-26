@@ -44,7 +44,7 @@
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 16px;
-  min-height: 300px;
+  min-height: 600px;
 }
 
 .rl-chart-area-3d {
@@ -99,7 +99,7 @@
   }
 
   .rl-chart-area-2d {
-    min-height: 250px;
+    min-height: 500px;
   }
 
   .rl-chart-area-3d {
@@ -130,7 +130,7 @@
   }
 
   .rl-chart-area-2d {
-    min-height: 280px;
+    min-height: 560px;
   }
 
   .rl-chart-area-3d {
@@ -159,7 +159,7 @@
   }
 
   .rl-chart-area-2d {
-    min-height: 400px;
+    min-height: 800px;
   }
 
   .rl-chart-area-3d {

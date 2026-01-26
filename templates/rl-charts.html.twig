@@ -7,11 +7,9 @@
  * - title: The section title.
  * - tip_hover: Tip text for hover.
  * - tip_taller: Tip text for 3D landscape.
- * - tip_ribbons: Tip text for ridgelines.
  * - interaction_hint: Hint for 3D interaction.
  * - chart_title_2d: Title for 2D chart section.
  * - chart_title_3d_surface: Title for 3D surface section.
- * - chart_title_3d_ridgelines: Title for ridgelines section.
  */
 #}
 <h3>{{ title }}</h3>
@@ -33,17 +31,6 @@
     <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
     <div class="rl-help-text">
       <strong>{{ 'Tip:'|t }}</strong> {{ tip_taller }}
-    </div>
-  </div>
-</div>
-
-<div class="rl-chart-row">
-  <div class="rl-chart-box">
-    <h4>{{ chart_title_3d_ridgelines }}</h4>
-    <div class="rl-interaction-hint">{{ interaction_hint }}</div>
-    <div class="rl-chart-area-3d" id="rl-plotly-ridgelines"></div>
-    <div class="rl-help-text">
-      <strong>{{ 'Tip:'|t }}</strong> {{ tip_ribbons }}
     </div>
   </div>
 </div>

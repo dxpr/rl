@@ -515,11 +515,9 @@ class ReportsController extends ControllerBase {
       '#title' => $this->t('Performance Over Time'),
       '#tip_hover' => $this->t('Hover for details. Higher = better.'),
       '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion rate.'),
-      '#tip_ribbons' => $this->t('Hover for details. Higher ribbons = better performance.'),
       '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
       '#chart_title_2d' => $this->t('Conversion Rate Trends'),
       '#chart_title_3d_surface' => $this->t('All Variants'),
-      '#chart_title_3d_ridgelines' => $this->t('Variant Comparison'),
     ];
 
     return $build;
