@@ -1,1 +1,3 @@
 debug_mode: false
+enable_event_log: false
+event_log_max_rows: 100000

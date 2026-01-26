@@ -3,9 +3,13 @@ services:
     parent: logger.channel_base
     arguments: ['rl']
 
+  rl.snapshot_storage:
+    class: Drupal\rl\Storage\SnapshotStorage
+    arguments: ['@database', '@datetime.time', '@config.factory']
+
   rl.experiment_data_storage:
     class: Drupal\rl\Storage\ExperimentDataStorage
-    arguments: ['@database', '@datetime.time']
+    arguments: ['@database', '@datetime.time', '@rl.snapshot_storage']
 
   rl.arm_data_validator:
     class: Drupal\rl\Service\ArmDataValidator
