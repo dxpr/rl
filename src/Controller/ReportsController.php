@@ -374,7 +374,6 @@ class ReportsController extends ControllerBase {
     // Organize snapshots by arm and calculate chart data.
     $arms_data = [];
     $all_turns = [];
-    $all_timestamps = [];
 
     foreach ($snapshots as $snapshot) {
       $arm_id = $snapshot->arm_id;
@@ -388,43 +387,32 @@ class ReportsController extends ControllerBase {
       $turns = (int) $snapshot->turns;
       $rewards = (int) $snapshot->rewards;
 
-      // Calculate posterior mean and CI.
+      // Calculate posterior mean.
       $alpha = $rewards + 1;
       $beta = max(1, $turns - $rewards + 1);
       $mean = $alpha / ($alpha + $beta);
 
-      // Approximate 95% CI using normal approximation for Beta.
-      $variance = ($alpha * $beta) / (pow($alpha + $beta, 2) * ($alpha + $beta + 1));
-      $std = sqrt($variance);
-      $ci_low = max(0, $mean - 1.96 * $std);
-      $ci_high = min(1, $mean + 1.96 * $std);
-
       $arms_data[$arm_id][$total_turns] = [
         'mean' => $mean,
-        'ci_low' => $ci_low,
-        'ci_high' => $ci_high,
         'turns' => $turns,
         'rewards' => $rewards,
-        'created' => $created,
       ];
 
       $all_turns[$total_turns] = $created;
-      $all_timestamps[] = $created;
     }
 
     ksort($all_turns);
     $x_values = array_keys($all_turns);
 
-    // Determine time granularity based on date span.
-    $time_config = $this->determineTimeGranularity($all_timestamps);
-
-    // Limit to top 10 arms by final turns for line charts.
+    // Sort arms by total turns (activity).
     $arm_totals = [];
     foreach ($arms as $arm) {
       $arm_totals[$arm->arm_id] = (int) $arm->turns;
     }
     arsort($arm_totals);
-    $top_arms = array_slice(array_keys($arm_totals), 0, 10);
+
+    // Use up to 100 arms for 3D Plotly visualizations.
+    $top_arms_3d = array_slice(array_keys($arm_totals), 0, 100);
 
     // Build arm label map using decorators for human-readable names.
     $arm_labels = [];
@@ -433,12 +421,14 @@ class ReportsController extends ControllerBase {
       if ($arm_display) {
         // Render and strip HTML tags for chart labels.
         $label = strip_tags($this->renderer->renderInIsolation($arm_display));
-        // Truncate long labels for charts.
-        $arm_labels[$arm_id] = strlen($label) > 25 ? substr($label, 0, 22) . '...' : $label;
+        // Decode HTML entities to show proper quotes and special chars.
+        $label = html_entity_decode($label, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Full labels for 3D charts (up to 60 chars for better readability).
+        $arm_labels[$arm_id] = mb_strlen($label) > 60 ? mb_substr($label, 0, 57) . '...' : $label;
       }
       else {
         // Fallback to truncated arm ID.
-        $arm_labels[$arm_id] = strlen($arm_id) > 20 ? substr($arm_id, 0, 17) . '...' : $arm_id;
+        $arm_labels[$arm_id] = strlen($arm_id) > 40 ? substr($arm_id, 0, 37) . '...' : $arm_id;
       }
     }
 
@@ -456,257 +446,77 @@ class ReportsController extends ControllerBase {
       'rgba(99, 255, 132, 1)',
     ];
 
-    // Prepare line chart data.
-    $line_datasets = [];
+    // Prepare ridgeline data for Plotly 3D (up to 100 arms).
+    $ridgeline_data = ['arms' => []];
     $i = 0;
-    foreach ($top_arms as $arm_id) {
+    foreach ($top_arms_3d as $arm_id) {
       if (!isset($arms_data[$arm_id])) {
         continue;
       }
       $color = $colors[$i % count($colors)];
-      $bg_color = str_replace('1)', '0.2)', $color);
-
       $data_points = [];
-      $ci_low_points = [];
-      $ci_high_points = [];
-
       foreach ($x_values as $x) {
         if (isset($arms_data[$arm_id][$x])) {
-          $data_points[] = ['x' => $x, 'y' => round($arms_data[$arm_id][$x]['mean'] * 100, 2)];
-          $ci_low_points[] = ['x' => $x, 'y' => round($arms_data[$arm_id][$x]['ci_low'] * 100, 2)];
-          $ci_high_points[] = ['x' => $x, 'y' => round($arms_data[$arm_id][$x]['ci_high'] * 100, 2)];
-        }
-      }
-
-      $line_datasets[] = [
-        'label' => $arm_labels[$arm_id],
-        'data' => array_values($data_points),
-        'borderColor' => $color,
-        'backgroundColor' => $bg_color,
-        'fill' => FALSE,
-        'tension' => 0.1,
-      ];
-
-      $i++;
-    }
-
-    // Prepare heatmap data (for all arms).
-    $heatmap_data = [];
-    $arm_ids_sorted = array_keys($arm_totals);
-    foreach ($arm_ids_sorted as $idx => $arm_id) {
-      if (!isset($arms_data[$arm_id])) {
-        continue;
-      }
-      foreach ($arms_data[$arm_id] as $x => $point) {
-        $heatmap_data[] = [
-          'x' => $x,
-          'y' => $idx,
-          'v' => round($point['mean'] * 100, 1),
-        ];
-      }
-    }
-
-    // Prepare ranking data (track rank over time for top arms).
-    $ranking_data = [];
-    foreach ($x_values as $x) {
-      $scores_at_x = [];
-      foreach ($arms_data as $arm_id => $points) {
-        // Find closest point at or before x.
-        $closest = NULL;
-        foreach ($points as $px => $point) {
-          if ($px <= $x) {
-            $closest = $point;
-          }
-        }
-        if ($closest) {
-          $scores_at_x[$arm_id] = $closest['mean'];
-        }
-      }
-      arsort($scores_at_x);
-      $rank = 1;
-      foreach ($scores_at_x as $arm_id => $score) {
-        if (!isset($ranking_data[$arm_id])) {
-          $ranking_data[$arm_id] = [];
-        }
-        $ranking_data[$arm_id][$x] = $rank;
-        $rank++;
-      }
-    }
-
-    $ranking_datasets = [];
-    $i = 0;
-    foreach ($top_arms as $arm_id) {
-      if (!isset($ranking_data[$arm_id])) {
-        continue;
-      }
-      $color = $colors[$i % count($colors)];
-      $data_points = [];
-      foreach ($x_values as $x) {
-        if (isset($ranking_data[$arm_id][$x])) {
-          $data_points[] = ['x' => $x, 'y' => $ranking_data[$arm_id][$x]];
-        }
-      }
-      $ranking_datasets[] = [
-        'label' => $arm_labels[$arm_id],
-        'data' => array_values($data_points),
-        'borderColor' => $color,
-        'fill' => FALSE,
-        'tension' => 0.3,
-      ];
-      $i++;
-    }
-
-    // Prepare P(best) data using Monte Carlo simulation.
-    $pbest_data = [];
-    $num_samples = 1000;
-    foreach ($x_values as $x) {
-      $wins = [];
-      foreach ($top_arms as $arm_id) {
-        $wins[$arm_id] = 0;
-      }
-
-      // Get current state for each arm at this point.
-      $states = [];
-      foreach ($top_arms as $arm_id) {
-        if (!isset($arms_data[$arm_id])) {
-          continue;
-        }
-        $closest = NULL;
-        foreach ($arms_data[$arm_id] as $px => $point) {
-          if ($px <= $x) {
-            $closest = $point;
-          }
-        }
-        if ($closest) {
-          $states[$arm_id] = [
-            'alpha' => $closest['rewards'] + 1,
-            'beta' => max(1, $closest['turns'] - $closest['rewards'] + 1),
+          $data_points[] = [
+            'x' => $x,
+            'y' => round($arms_data[$arm_id][$x]['mean'] * 100, 2),
           ];
         }
       }
-
-      if (count($states) < 2) {
-        continue;
-      }
-
-      // Monte Carlo sampling.
-      for ($s = 0; $s < $num_samples; $s++) {
-        $best_arm = NULL;
-        $best_sample = -1;
-        foreach ($states as $arm_id => $state) {
-          // Sample from Beta distribution using inverse transform.
-          $sample = $this->sampleBeta($state['alpha'], $state['beta']);
-          if ($sample > $best_sample) {
-            $best_sample = $sample;
-            $best_arm = $arm_id;
-          }
-        }
-        if ($best_arm) {
-          $wins[$best_arm]++;
-        }
-      }
-
-      $pbest_data[$x] = [];
-      foreach ($top_arms as $arm_id) {
-        $pbest_data[$x][$arm_id] = isset($wins[$arm_id]) ? $wins[$arm_id] / $num_samples : 0;
-      }
-    }
-
-    // Prepare stacked area datasets for P(best).
-    $pbest_datasets = [];
-    $i = 0;
-    foreach ($top_arms as $arm_id) {
-      $color = $colors[$i % count($colors)];
-      $bg_color = str_replace('1)', '0.6)', $color);
-      $data_points = [];
-      foreach ($x_values as $x) {
-        if (isset($pbest_data[$x][$arm_id])) {
-          $data_points[] = ['x' => $x, 'y' => round($pbest_data[$x][$arm_id] * 100, 1)];
-        }
-      }
-      $pbest_datasets[] = [
+      $ridgeline_data['arms'][] = [
         'label' => $arm_labels[$arm_id],
-        'data' => array_values($data_points),
-        'borderColor' => $color,
-        'backgroundColor' => $bg_color,
-        'fill' => TRUE,
+        'data' => $data_points,
+        'color' => $color,
       ];
       $i++;
     }
 
-    // Prepare convergence data (average CI width over time).
-    $convergence_data = [];
-    foreach ($x_values as $x) {
-      $ci_widths = [];
-      foreach ($arms_data as $arm_id => $points) {
-        if (isset($points[$x])) {
-          $ci_widths[] = $points[$x]['ci_high'] - $points[$x]['ci_low'];
-        }
-      }
-      if (!empty($ci_widths)) {
-        $convergence_data[] = ['x' => $x, 'y' => round(array_sum($ci_widths) / count($ci_widths) * 100, 2)];
-      }
-    }
-
-    // Build time-based data for the timeline chart.
-    $timeline_datasets = [];
-    $i = 0;
-    foreach ($top_arms as $arm_id) {
+    // Prepare 3D surface data for loss-landscape style visualization.
+    // This creates a continuous surface from all arms' posteriors over time.
+    $surface_3d_data = [
+      'xValues' => array_values($x_values),
+      'armLabels' => [],
+      'zMatrix' => [],
+    ];
+    foreach ($top_arms_3d as $arm_id) {
       if (!isset($arms_data[$arm_id])) {
         continue;
       }
-      $color = $colors[$i % count($colors)];
-
-      $time_points = [];
-      foreach ($arms_data[$arm_id] as $total_turns => $point) {
-        // Use timestamp as x value (in milliseconds for Chart.js).
-        $time_points[] = [
-          'x' => $point['created'] * 1000,
-          'y' => round($point['mean'] * 100, 2),
-        ];
+      $surface_3d_data['armLabels'][] = $arm_labels[$arm_id];
+      $z_row = [];
+      foreach ($x_values as $x) {
+        if (isset($arms_data[$arm_id][$x])) {
+          $z_row[] = round($arms_data[$arm_id][$x]['mean'] * 100, 2);
+        }
+        else {
+          // Find closest previous value.
+          $closest = NULL;
+          foreach ($arms_data[$arm_id] as $px => $point) {
+            if ($px <= $x) {
+              $closest = $point;
+            }
+          }
+          $z_row[] = $closest ? round($closest['mean'] * 100, 2) : 0;
+        }
       }
-
-      // Sort by time.
-      usort($time_points, function ($a, $b) {
-        return $a['x'] - $b['x'];
-      });
-
-      $timeline_datasets[] = [
-        'label' => $arm_labels[$arm_id],
-        'data' => array_values($time_points),
-        'borderColor' => $color,
-        'fill' => FALSE,
-        'tension' => 0.1,
-      ];
-
-      $i++;
+      $surface_3d_data['zMatrix'][] = $z_row;
     }
 
-    // Build the render array.
-    // Use array_values() to ensure proper JSON array serialization.
-    $chart_data = [
-      'lineDatasets' => array_values($line_datasets),
-      'rankingDatasets' => array_values($ranking_datasets),
-      'pbestDatasets' => array_values($pbest_datasets),
-      'convergenceData' => array_values($convergence_data),
-      'heatmapData' => array_values($heatmap_data),
-      'timelineDatasets' => array_values($timeline_datasets),
-      'timeConfig' => $time_config,
-      'armLabels' => array_values(array_map(function ($id) {
-        return strlen($id) > 15 ? substr($id, 0, 12) . '...' : $id;
-      }, $arm_ids_sorted)),
-      'xValues' => array_values($x_values),
-      'totalArms' => count($arms),
+    // Plotly data (up to 100 arms for 3D visualizations).
+    $plotly_data = [
+      'ridgelineData' => $ridgeline_data,
+      'surface3d' => $surface_3d_data,
+      'totalArms3d' => count($top_arms_3d),
     ];
 
     $build = [
       '#type' => 'container',
-      '#attributes' => ['class' => ['rl-charts-container']],
+      '#attributes' => ['class' => ['rl-charts-container', 'rl-plotly-container']],
     ];
 
     $build['library'] = [
       '#attached' => [
-        'library' => ['rl/charts'],
+        'library' => ['rl/plotly'],
       ],
     ];
 
@@ -715,66 +525,114 @@ class ReportsController extends ControllerBase {
       '#template' => '
         <style>
           .rl-charts-container { margin-bottom: 2em; }
-          .rl-chart-row { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
-          .rl-chart-box { flex: 1 1 45%; min-width: 400px; background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; }
-          .rl-chart-box h4 { margin-top: 0; margin-bottom: 10px; font-size: 14px; color: #333; }
-          .rl-chart-box canvas { max-height: 300px; }
-          .rl-chart-box.full-width { flex: 1 1 100%; }
-          .rl-chart-description { font-size: 12px; color: #666; margin-bottom: 10px; }
+          .rl-chart-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
+          .rl-chart-box {
+            flex: 1 1 100%;
+            min-width: 280px;
+            background: #fff;
+            border: 2px solid #d0d0d0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          }
+          .rl-chart-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+          }
+          .rl-chart-description {
+            font-size: 14px;
+            color: #444;
+            margin-bottom: 16px;
+            line-height: 1.5;
+          }
+          .rl-chart-area-3d {
+            background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
+            border: 2px solid #c0c8d0;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 16px;
+            min-height: 50vh;
+          }
+          .rl-eli16 {
+            background: #f5f7fa;
+            border-left: 4px solid #4a90d9;
+            padding: 12px 16px;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #555;
+            line-height: 1.6;
+            border-radius: 0 6px 6px 0;
+          }
+          .rl-eli16 strong { color: #333; }
+          .rl-scroll-hint {
+            font-size: 11px;
+            color: #888;
+            text-align: center;
+            padding: 8px;
+            background: #fff8e1;
+            border-radius: 4px;
+            margin-bottom: 8px;
+          }
+          /* Responsive styles */
+          @media (max-width: 430px) {
+            .rl-chart-box { padding: 12px; }
+            .rl-chart-box h4 { font-size: 15px; }
+            .rl-chart-description { font-size: 12px; margin-bottom: 10px; }
+            .rl-chart-area-3d { min-height: 350px; padding: 4px; }
+            .rl-eli16 { font-size: 11px; padding: 8px 12px; }
+            .rl-scroll-hint { font-size: 10px; padding: 6px; }
+          }
+          @media (min-width: 431px) and (max-width: 768px) {
+            .rl-chart-box { padding: 16px; }
+            .rl-chart-box h4 { font-size: 16px; }
+            .rl-chart-area-3d { min-height: 400px; }
+            .rl-eli16 { font-size: 12px; }
+          }
+          @media (min-width: 1921px) {
+            .rl-chart-box { padding: 28px; }
+            .rl-chart-box h4 { font-size: 22px; }
+            .rl-chart-description { font-size: 16px; }
+            .rl-chart-area-3d { min-height: 70vh; padding: 16px; }
+            .rl-eli16 { font-size: 15px; padding: 16px 20px; }
+            .rl-scroll-hint { font-size: 13px; }
+          }
         </style>
         <h3>{{ title }}</h3>
         <p class="rl-chart-description">{{ description }}</p>
 
         <div class="rl-chart-row">
           <div class="rl-chart-box">
-            <h4>1. Conversion Rate Over Time (with 95% CI)</h4>
-            <p class="rl-chart-description">Shows estimated conversion rate for each arm as evidence accumulates.</p>
-            <canvas id="rl-line-chart"></canvas>
-          </div>
-          <div class="rl-chart-box">
-            <h4>2. Probability of Being Best</h4>
-            <p class="rl-chart-description">Shows which arm is most likely the winner at each point in time.</p>
-            <canvas id="rl-pbest-chart"></canvas>
-          </div>
-        </div>
-
-        <div class="rl-chart-row">
-          <div class="rl-chart-box">
-            <h4>3. Ranking Over Time</h4>
-            <p class="rl-chart-description">Shows how arm rankings changed as the experiment progressed.</p>
-            <canvas id="rl-ranking-chart"></canvas>
-          </div>
-          <div class="rl-chart-box">
-            <h4>4. Convergence (Uncertainty Reduction)</h4>
-            <p class="rl-chart-description">Shows how quickly we are becoming confident in results (lower = more confident).</p>
-            <canvas id="rl-convergence-chart"></canvas>
+            <h4>3D Posterior Landscape</h4>
+            <p class="rl-chart-description">A terrain map showing conversion rates for all variants over experiment progress.</p>
+            <div class="rl-scroll-hint">Scroll inside the chart to zoom. Drag to rotate. Scroll OUTSIDE the chart border to scroll the page.</div>
+            <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
+            <div class="rl-eli16">
+              <strong>What this shows:</strong> A 3D terrain map of all your variants over time. Mountains are high-performing variants, valleys are poor performers. The X-axis is experiment progress (total turns), the Y-axis represents different variants, and the height/color shows conversion rate percentage. You can rotate this view by dragging and zoom by scrolling inside the chart area. Hover over any point to see the variant name, turn number, and exact conversion rate.
+            </div>
           </div>
         </div>
 
         <div class="rl-chart-row">
-          <div class="rl-chart-box full-width">
-            <h4>5. Timeline: Conversion Rate by {{ time_label }}</h4>
-            <p class="rl-chart-description">Shows conversion rate evolution over calendar time. Useful for identifying seasonal patterns or external events.</p>
-            <canvas id="rl-timeline-chart"></canvas>
-          </div>
-        </div>
-
-        <div class="rl-chart-row">
-          <div class="rl-chart-box full-width">
-            <h4>6. Heatmap: All Arms Over Time</h4>
-            <p class="rl-chart-description">Color intensity shows conversion rate. Rows are arms (sorted by total activity), columns are experiment progress.</p>
-            <canvas id="rl-heatmap-chart"></canvas>
+          <div class="rl-chart-box">
+            <h4>3D Stacked Ridgelines</h4>
+            <p class="rl-chart-description">Each colored ribbon represents one variant\'s conversion rate evolution over time.</p>
+            <div class="rl-scroll-hint">Scroll inside the chart to zoom. Drag to rotate. Scroll OUTSIDE the chart border to scroll the page.</div>
+            <div class="rl-chart-area-3d" id="rl-plotly-ridgelines"></div>
+            <div class="rl-eli16">
+              <strong>What this shows:</strong> Each variant is displayed as a separate colored ribbon stacked in 3D space. This view makes it easier to track individual performance trends when you have many variants. Higher ribbons indicate better conversion rates. Hover over any ribbon to see the full variant name and exact conversion rate at that point in time.
+            </div>
           </div>
         </div>
       ',
       '#context' => [
         'title' => $this->t('Experiment Evolution Charts'),
-        'description' => $this->t('These charts show how the experiment evolved over time. Showing top 10 arms by activity.'),
-        'time_label' => $time_config['label'],
+        'description' => $this->t('Interactive 3D visualizations showing how the experiment evolved over time.'),
       ],
     ];
 
-    $build['#attached']['drupalSettings']['rlCharts'] = $chart_data;
+    $build['#attached']['drupalSettings']['rlPlotly'] = $plotly_data;
 
     return $build;
   }
@@ -817,7 +675,7 @@ class ReportsController extends ControllerBase {
         'granularity' => 'week',
         'format' => '\WW, Y',
         'label' => 'Week',
-        'jsFormat' => "'W'W, yyyy",
+        'jsFormat' => "''Week'' I",
       ];
     }
     elseif ($span_days <= 365) {
@@ -835,7 +693,7 @@ class ReportsController extends ControllerBase {
         'granularity' => 'quarter',
         'format' => '\QQ Y',
         'label' => 'Quarter',
-        'jsFormat' => "'Q'Q yyyy",
+        'jsFormat' => "''Q''Q yyyy",
       ];
     }
   }
