@@ -120,10 +120,10 @@ class ReportsController extends ControllerBase {
   public function experimentsOverview() {
     $header = [
       $this->t('Operations'),
-      $this->t('Experiment ID'),
-      $this->t('Ownership'),
-      $this->t('Total Turns'),
-      $this->t('Total Arms'),
+      $this->t('Experiment'),
+      $this->t('Source'),
+      $this->t('Impressions'),
+      $this->t('Variants'),
       $this->t('Last Activity'),
     ];
 
@@ -213,11 +213,9 @@ class ReportsController extends ControllerBase {
       '#header' => $header,
       '#rows' => $rows,
       '#empty' => $this->t('No experiments found.'),
-      '#caption' => $this->t('All Reinforcement Learning experiments and their statistics.'),
     ];
 
-    $build['#prefix'] = '<p>' . $this->t('This page shows all active reinforcement learning experiments. Each experiment represents a multi-armed bandit test where different "arms" (options) are being evaluated based on user interactions (turns and rewards).') . '</p>'
-      . '<p>' . $this->t('<strong>Tip:</strong> Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>';
+    $build['#prefix'] = '<p>' . $this->t('<strong>Tip:</strong> Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>';
 
     return $build;
   }
@@ -252,11 +250,6 @@ class ReportsController extends ControllerBase {
 
     $build = [];
 
-    // Add explanatory text.
-    $build['intro'] = [
-      '#markup' => '<p>' . $this->t('This page shows detailed information about a specific reinforcement learning experiment and all its arms (options being tested).') . '</p>',
-    ];
-
     // Add charts if we have snapshot data.
     $snapshots = $this->snapshotStorage->getSnapshotHistory($experiment_id);
     if (!empty($snapshots)) {
@@ -264,17 +257,16 @@ class ReportsController extends ControllerBase {
     }
     else {
       $build['no_charts'] = [
-        '#markup' => '<p><em>' . $this->t('No historical data available for charts. Enable event logging to track experiment evolution over time.') . '</em></p>',
+        '#markup' => '<p><em>' . $this->t('No data yet. Charts appear after the experiment receives traffic.') . '</em></p>',
       ];
     }
 
     // Build sortable header - use field specifier for tablesorter.
     $header = [
-      ['data' => $this->t('Arm ID'), 'field' => 'arm_id'],
-      ['data' => $this->t('Turns'), 'field' => 'turns', 'sort' => 'desc'],
-      ['data' => $this->t('Rewards'), 'field' => 'rewards'],
-      ['data' => $this->t('Success Rate'), 'field' => 'success_rate'],
-      ['data' => $this->t('TS Score'), 'field' => 'ts_score'],
+      ['data' => $this->t('Variant'), 'field' => 'arm_id'],
+      ['data' => $this->t('Impressions'), 'field' => 'turns'],
+      ['data' => $this->t('Conversions'), 'field' => 'rewards'],
+      ['data' => $this->t('Rate'), 'field' => 'success_rate', 'sort' => 'desc'],
     ];
 
     // Build row data with sortable values.
@@ -284,12 +276,6 @@ class ReportsController extends ControllerBase {
       $arm = $this->armDataValidator->validateAndSanitize($arm, $experiment_id, $arm->arm_id);
 
       $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
-
-      // Calculate Thompson Sampling score.
-      $alpha_param = $arm->rewards + 1;
-      $beta_param = ($arm->turns - $arm->rewards) + 1;
-      // Beta mean as approximation.
-      $ts_score = $alpha_param / ($alpha_param + $beta_param);
 
       // Get decorated arm name or fallback to arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_id, $arm->arm_id);
@@ -301,26 +287,22 @@ class ReportsController extends ControllerBase {
         'turns' => (int) $arm->turns,
         'rewards' => (int) $arm->rewards,
         'success_rate' => $success_rate,
-        'ts_score' => $ts_score,
       ];
     }
 
     // Sort by the selected column.
-    $order = \Drupal::request()->query->get('order', 'Turns');
+    $order = \Drupal::request()->query->get('order', 'Rate');
     $sort = \Drupal::request()->query->get('sort', 'desc');
 
-    $sort_field = 'turns';
-    if (stripos($order, 'Arm') !== FALSE) {
+    $sort_field = 'success_rate';
+    if (stripos($order, 'Variant') !== FALSE) {
       $sort_field = 'arm_id';
     }
-    elseif (stripos($order, 'Reward') !== FALSE) {
+    elseif (stripos($order, 'Impression') !== FALSE) {
+      $sort_field = 'turns';
+    }
+    elseif (stripos($order, 'Conversion') !== FALSE) {
       $sort_field = 'rewards';
-    }
-    elseif (stripos($order, 'Success') !== FALSE) {
-      $sort_field = 'success_rate';
-    }
-    elseif (stripos($order, 'TS') !== FALSE) {
-      $sort_field = 'ts_score';
     }
 
     usort($arm_data, function ($a, $b) use ($sort_field, $sort) {
@@ -336,7 +318,6 @@ class ReportsController extends ControllerBase {
         $data['turns'],
         $data['rewards'],
         number_format($data['success_rate'], 2) . '%',
-        number_format($data['ts_score'], 4),
       ];
     }
 
@@ -344,14 +325,8 @@ class ReportsController extends ControllerBase {
       '#theme' => 'table',
       '#header' => $header,
       '#rows' => $rows,
-      '#empty' => $this->t('No arms found for this experiment.'),
-      '#caption' => $this->t('All arms in this experiment with their performance data.'),
+      '#empty' => $this->t('No variants found.'),
       '#attributes' => ['class' => ['rl-sortable-table']],
-    ];
-
-    $build = [
-      '#title' => $this->t('RL Experiment: @id', ['@id' => $experiment_id]),
-      'table' => $table,
     ];
 
     return $build;
@@ -512,127 +487,25 @@ class ReportsController extends ControllerBase {
     $build = [
       '#type' => 'container',
       '#attributes' => ['class' => ['rl-charts-container', 'rl-plotly-container']],
-    ];
-
-    $build['library'] = [
       '#attached' => [
         'library' => ['rl/plotly'],
+        'drupalSettings' => [
+          'rlPlotly' => $plotly_data,
+        ],
       ],
     ];
 
-    $build['charts_markup'] = [
-      '#type' => 'inline_template',
-      '#template' => '
-        <style>
-          .rl-charts-container { margin-bottom: 2em; }
-          .rl-chart-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
-          .rl-chart-box {
-            flex: 1 1 100%;
-            min-width: 280px;
-            background: #fff;
-            border: 2px solid #d0d0d0;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-          }
-          .rl-chart-box h4 {
-            margin: 0 0 8px 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: #1a1a1a;
-          }
-          .rl-chart-description {
-            font-size: 14px;
-            color: #444;
-            margin-bottom: 16px;
-            line-height: 1.5;
-          }
-          .rl-chart-area-3d {
-            background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
-            border: 2px solid #c0c8d0;
-            border-radius: 8px;
-            padding: 8px;
-            margin-bottom: 16px;
-            min-height: 50vh;
-          }
-          .rl-eli16 {
-            background: #f5f7fa;
-            border-left: 4px solid #4a90d9;
-            padding: 12px 16px;
-            margin-top: 16px;
-            font-size: 13px;
-            color: #555;
-            line-height: 1.6;
-            border-radius: 0 6px 6px 0;
-          }
-          .rl-eli16 strong { color: #333; }
-          .rl-scroll-hint {
-            font-size: 11px;
-            color: #888;
-            text-align: center;
-            padding: 8px;
-            background: #fff8e1;
-            border-radius: 4px;
-            margin-bottom: 8px;
-          }
-          /* Responsive styles */
-          @media (max-width: 430px) {
-            .rl-chart-box { padding: 12px; }
-            .rl-chart-box h4 { font-size: 15px; }
-            .rl-chart-description { font-size: 12px; margin-bottom: 10px; }
-            .rl-chart-area-3d { min-height: 350px; padding: 4px; }
-            .rl-eli16 { font-size: 11px; padding: 8px 12px; }
-            .rl-scroll-hint { font-size: 10px; padding: 6px; }
-          }
-          @media (min-width: 431px) and (max-width: 768px) {
-            .rl-chart-box { padding: 16px; }
-            .rl-chart-box h4 { font-size: 16px; }
-            .rl-chart-area-3d { min-height: 400px; }
-            .rl-eli16 { font-size: 12px; }
-          }
-          @media (min-width: 1921px) {
-            .rl-chart-box { padding: 28px; }
-            .rl-chart-box h4 { font-size: 22px; }
-            .rl-chart-description { font-size: 16px; }
-            .rl-chart-area-3d { min-height: 70vh; padding: 16px; }
-            .rl-eli16 { font-size: 15px; padding: 16px 20px; }
-            .rl-scroll-hint { font-size: 13px; }
-          }
-        </style>
-        <h3>{{ title }}</h3>
-        <p class="rl-chart-description">{{ description }}</p>
-
-        <div class="rl-chart-row">
-          <div class="rl-chart-box">
-            <h4>3D Posterior Landscape</h4>
-            <p class="rl-chart-description">A terrain map showing conversion rates for all variants over experiment progress.</p>
-            <div class="rl-scroll-hint">Scroll inside the chart to zoom. Drag to rotate. Scroll OUTSIDE the chart border to scroll the page.</div>
-            <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
-            <div class="rl-eli16">
-              <strong>What this shows:</strong> A 3D terrain map of all your variants over time. Mountains are high-performing variants, valleys are poor performers. The X-axis is experiment progress (total turns), the Y-axis represents different variants, and the height/color shows conversion rate percentage. You can rotate this view by dragging and zoom by scrolling inside the chart area. Hover over any point to see the variant name, turn number, and exact conversion rate.
-            </div>
-          </div>
-        </div>
-
-        <div class="rl-chart-row">
-          <div class="rl-chart-box">
-            <h4>3D Stacked Ridgelines</h4>
-            <p class="rl-chart-description">Each colored ribbon represents one variant\'s conversion rate evolution over time.</p>
-            <div class="rl-scroll-hint">Scroll inside the chart to zoom. Drag to rotate. Scroll OUTSIDE the chart border to scroll the page.</div>
-            <div class="rl-chart-area-3d" id="rl-plotly-ridgelines"></div>
-            <div class="rl-eli16">
-              <strong>What this shows:</strong> Each variant is displayed as a separate colored ribbon stacked in 3D space. This view makes it easier to track individual performance trends when you have many variants. Higher ribbons indicate better conversion rates. Hover over any ribbon to see the full variant name and exact conversion rate at that point in time.
-            </div>
-          </div>
-        </div>
-      ',
-      '#context' => [
-        'title' => $this->t('Experiment Evolution Charts'),
-        'description' => $this->t('Interactive 3D visualizations showing how the experiment evolved over time.'),
-      ],
+    $build['charts'] = [
+      '#theme' => 'rl_charts',
+      '#title' => $this->t('Performance Over Time'),
+      '#tip_hover' => $this->t('Hover for details. Higher = better.'),
+      '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion rate.'),
+      '#tip_ribbons' => $this->t('Hover for details. Higher ribbons = better performance.'),
+      '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
+      '#chart_title_2d' => $this->t('Conversion Rate Trends'),
+      '#chart_title_3d_surface' => $this->t('All Variants'),
+      '#chart_title_3d_ridgelines' => $this->t('Variant Comparison'),
     ];
-
-    $build['#attached']['drupalSettings']['rlPlotly'] = $plotly_data;
 
     return $build;
   }
