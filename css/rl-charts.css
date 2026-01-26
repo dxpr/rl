@@ -22,13 +22,44 @@
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: relative;
 }
 
-.rl-chart-box h4 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a1a;
+.rl-chart-filters {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+/* Loading spinner for chart regeneration */
+.rl-chart-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 8px;
+}
+
+.rl-chart-loading::after {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e9ecef;
+  border-top-color: #0d6efd;
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+}
+
+@keyframes rl-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .rl-chart-description {
@@ -175,5 +206,72 @@
 
   .rl-interaction-hint {
     font-size: 13px;
+  }
+}
+
+/* Date filter styles - clean inline styling */
+.rl-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.rl-presets,
+.rl-axes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rl-presets strong,
+.rl-axes strong {
+  font-size: 12px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.rl-preset-select,
+.rl-axis-select {
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  color: #495057;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rl-preset-select:hover,
+.rl-axis-select:hover {
+  border-color: #adb5bd;
+}
+
+.rl-preset-select:focus,
+.rl-axis-select:focus {
+  border-color: #0d6efd;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.rl-range-info {
+  display: none;
+}
+
+/* Responsive date filter */
+@media (max-width: 768px) {
+  .rl-chart-filters {
+    justify-content: flex-start;
+  }
+
+  .rl-date-filter {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .rl-preset-select,
+  .rl-axis-select {
+    font-size: 11px;
   }
 }

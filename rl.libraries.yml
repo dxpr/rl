@@ -8,9 +8,20 @@ plotly:
     component:
       css/rl-charts.css: {}
   js:
-    libraries/plotly/plotly.min.js: { minified: true, preprocess: false }
+    https://cdn.plot.ly/plotly-2.35.2.min.js: { type: external, minified: true }
     js/rl-plotly-charts.js: {}
   dependencies:
     - core/drupal
     - core/drupalSettings
+    - core/once
+
+date-filter:
+  version: 1.0
+  css:
+    component:
+      css/rl-charts.css: {}
+  js:
+    js/rl-date-filter.js: {}
+  dependencies:
+    - core/drupal
     - core/once

@@ -9,6 +9,13 @@ use Psr\Log\LoggerInterface;
  *
  * Ensures arm data is valid before Thompson Sampling calculations
  * to prevent division by zero and other mathematical errors.
+ *
+ * Error handling strategy:
+ * - Type/range violations (non-numeric, negative): Throws exception since these
+ *   indicate programming errors or database corruption that need investigation.
+ * - Logical violations (rewards > turns): Sanitizes and logs since these
+ *   can occur from race conditions or malicious requests; throwing would
+ *   enable DoS.
  */
 class ArmDataValidator {
 

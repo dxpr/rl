@@ -8,15 +8,18 @@
  * - tip_hover: Tip text for hover.
  * - tip_taller: Tip text for 3D landscape.
  * - interaction_hint: Hint for 3D interaction.
- * - chart_title_2d: Title for 2D chart section.
- * - chart_title_3d_surface: Title for 3D surface section.
+ * - date_filter: Date filter dropdowns render array.
  */
 #}
 <h3>{{ title }}</h3>
 
 <div class="rl-chart-row">
   <div class="rl-chart-box">
-    <h4>{{ chart_title_2d }}</h4>
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
     <div class="rl-chart-area-2d" id="rl-plotly-2d-lines"></div>
     <div class="rl-help-text">
       <strong>{{ 'Tip:'|t }}</strong> {{ tip_hover }}
@@ -26,7 +29,11 @@
 
 <div class="rl-chart-row">
   <div class="rl-chart-box">
-    <h4>{{ chart_title_3d_surface }}</h4>
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
     <div class="rl-interaction-hint">{{ interaction_hint }}</div>
     <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
     <div class="rl-help-text">

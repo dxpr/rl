@@ -36,11 +36,26 @@ interface SnapshotStorageInterface {
    *
    * @param string $experiment_id
    *   The experiment ID.
+   * @param int|null $start_date
+   *   Optional start timestamp to filter snapshots.
+   * @param int|null $end_date
+   *   Optional end timestamp to filter snapshots.
    *
    * @return array
    *   Array of snapshot objects ordered by total_experiment_turns.
    */
-  public function getSnapshotHistory(string $experiment_id): array;
+  public function getSnapshotHistory(string $experiment_id, ?int $start_date = NULL, ?int $end_date = NULL): array;
+
+  /**
+   * Get the date range of available snapshots for an experiment.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   *
+   * @return array
+   *   Array with 'min' and 'max' timestamps, or empty if no snapshots.
+   */
+  public function getSnapshotDateRange(string $experiment_id): array;
 
   /**
    * Clean up old snapshots according to retention policy.

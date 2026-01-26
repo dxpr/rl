@@ -4,7 +4,6 @@ namespace Drupal\rl\Controller;
 
 use Drupal\Component\Utility\Html;
 use Drupal\Core\Controller\ControllerBase;
-use Drupal\Core\Database\Connection;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Render\RendererInterface;
@@ -21,12 +20,6 @@ use Symfony\Component\HttpFoundation\RequestStack;
  * Controller for RL experiment reports.
  */
 class ReportsController extends ControllerBase {
-  /**
-   * The database connection.
-   *
-   * @var \Drupal\Core\Database\Connection
-   */
-  protected $database;
 
   /**
    * The experiment data storage.
@@ -80,8 +73,6 @@ class ReportsController extends ControllerBase {
   /**
    * Constructs a ReportsController object.
    *
-   * @param \Drupal\Core\Database\Connection $database
-   *   The database connection.
    * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $experiment_storage
    *   The experiment data storage.
    * @param \Drupal\Core\Datetime\DateFormatterInterface $date_formatter
@@ -97,8 +88,7 @@ class ReportsController extends ControllerBase {
    * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
    *   The request stack.
    */
-  public function __construct(Connection $database, ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, ArmDataValidator $arm_data_validator, SnapshotStorageInterface $snapshot_storage, RequestStack $request_stack) {
-    $this->database = $database;
+  public function __construct(ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, ArmDataValidator $arm_data_validator, SnapshotStorageInterface $snapshot_storage, RequestStack $request_stack) {
     $this->experimentStorage = $experiment_storage;
     $this->dateFormatter = $date_formatter;
     $this->decoratorManager = $decorator_manager;
@@ -118,7 +108,6 @@ class ReportsController extends ControllerBase {
   public static function create(ContainerInterface $container): static {
     // @phpstan-ignore new.static
     return new static(
-      $container->get('database'),
       $container->get('rl.experiment_data_storage'),
       $container->get('date.formatter'),
       $container->get('rl.experiment_decorator_manager'),
@@ -148,25 +137,12 @@ class ReportsController extends ControllerBase {
 
     $rows = [];
 
-    // Get all registered experiments with their totals (if any)
-    $query = $this->database->select('rl_experiment_registry', 'er')
-      ->fields('er', ['experiment_id', 'module', 'experiment_name', 'registered_at']);
-    $query->leftJoin('rl_experiment_totals', 'et', 'er.experiment_id = et.experiment_id');
-    $query->addField('et', 'total_turns', 'total_turns');
-    $query->addField('et', 'created', 'totals_created');
-    $query->addField('et', 'updated', 'totals_updated');
-    $query->orderBy('er.registered_at', 'DESC');
-    $experiments = $query->execute()->fetchAll();
+    // Get all experiments with their statistics from storage.
+    $experiments = $this->experimentStorage->getExperimentsWithStats();
 
     foreach ($experiments as $experiment) {
-      // Count arms and sum rewards for this experiment.
-      $arm_stats = $this->database->select('rl_arm_data', 'ad')
-        ->condition('experiment_id', $experiment->experiment_id);
-      $arm_stats->addExpression('COUNT(*)', 'arm_count');
-      $arm_stats->addExpression('COALESCE(SUM(rewards), 0)', 'total_rewards');
-      $stats = $arm_stats->execute()->fetchObject();
-      $arms_count = $stats->arm_count ?? 0;
-      $total_rewards = $stats->total_rewards ?? 0;
+      $arms_count = $experiment->arm_count;
+      $total_rewards = $experiment->total_rewards;
 
       $operations = [];
 
@@ -252,30 +228,51 @@ class ReportsController extends ControllerBase {
    *   A render array.
    */
   public function experimentDetail($experiment_id) {
-    // Get experiment totals.
-    $experiment_totals = $this->database->select('rl_experiment_totals', 'et')
-      ->fields('et')
-      ->condition('experiment_id', $experiment_id)
-      ->execute()
-      ->fetchObject();
+    // Get experiment totals from storage.
+    $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
 
     if (!$experiment_totals) {
       throw new NotFoundHttpException();
     }
 
-    // Get all arms for this experiment.
-    $arms_query = $this->database->select('rl_arm_data', 'ad')
-      ->fields('ad')
-      ->condition('experiment_id', $experiment_id)
-      ->orderBy('updated', 'DESC');
-    $arms = $arms_query->execute()->fetchAll();
+    // Get all arms for this experiment from storage.
+    $arms = $this->experimentStorage->getArmsByExperiment($experiment_id);
 
     $build = [];
 
+    // Get date range from request or use defaults.
+    $request = $this->requestStack->getCurrentRequest();
+    $preset = $request ? $request->query->get('preset', '') : '';
+    $start_date = $request ? $request->query->get('start') : NULL;
+    $end_date = $request ? $request->query->get('end') : NULL;
+    $time_axis = $request ? $request->query->get('axis', 'trials') : 'trials';
+
+    // Validate time axis value.
+    $valid_axes = ['trials', 'daily', 'weekly', 'monthly', 'quarterly'];
+    if (!in_array($time_axis, $valid_axes)) {
+      $time_axis = 'trials';
+    }
+
+    // Calculate date range from preset if provided.
+    $date_range = $this->calculateDateRange($preset, $start_date, $end_date);
+
+    // Get available date range for this experiment.
+    $available_range = $this->snapshotStorage->getSnapshotDateRange($experiment_id);
+
+    // Build date filter form for charts.
+    $date_filter = NULL;
+    if (!empty($available_range)) {
+      $date_filter = $this->buildDateFilterForm($experiment_id, $date_range, $available_range, $preset, $time_axis);
+    }
+
     // Add charts if we have snapshot data.
-    $snapshots = $this->snapshotStorage->getSnapshotHistory($experiment_id);
+    $snapshots = $this->snapshotStorage->getSnapshotHistory(
+      $experiment_id,
+      $date_range['start'] ?? NULL,
+      $date_range['end'] ?? NULL
+    );
     if (!empty($snapshots)) {
-      $build['charts'] = $this->buildCharts($experiment_id, $snapshots, $arms);
+      $build['charts'] = $this->buildCharts($experiment_id, $snapshots, $arms, $time_axis, $date_filter);
     }
     else {
       $build['no_charts'] = [
@@ -365,19 +362,33 @@ class ReportsController extends ControllerBase {
    *   Array of snapshot objects.
    * @param array $arms
    *   Array of arm objects with current state.
+   * @param string $time_axis
+   *   Time axis type: 'trials', 'daily', 'weekly', 'monthly',
+   *   or 'quarterly'.
+   * @param array|null $date_filter
+   *   Optional date filter render array.
    *
    * @return array
    *   Render array with charts.
    */
-  protected function buildCharts(string $experiment_id, array $snapshots, array $arms): array {
+  protected function buildCharts(string $experiment_id, array $snapshots, array $arms, string $time_axis = 'trials', ?array $date_filter = NULL): array {
     // Organize snapshots by arm and calculate chart data.
     $arms_data = [];
-    $all_turns = [];
+    $all_x_values = [];
+    $x_axis_label = $this->t('Total Impressions');
+    $x_labels = [];
 
     foreach ($snapshots as $snapshot) {
       $arm_id = $snapshot->arm_id;
-      $total_turns = (int) $snapshot->total_experiment_turns;
       $created = (int) $snapshot->created;
+
+      // Calculate x-axis value based on time axis type.
+      if ($time_axis === 'trials') {
+        $x_value = (int) $snapshot->total_experiment_turns;
+      }
+      else {
+        $x_value = $this->getTimeBucket($created, $time_axis);
+      }
 
       if (!isset($arms_data[$arm_id])) {
         $arms_data[$arm_id] = [];
@@ -391,17 +402,29 @@ class ReportsController extends ControllerBase {
       $beta = max(1, $turns - $rewards + 1);
       $mean = $alpha / ($alpha + $beta);
 
-      $arms_data[$arm_id][$total_turns] = [
-        'mean' => $mean,
-        'turns' => $turns,
-        'rewards' => $rewards,
-      ];
+      // For time-based axes, keep the latest snapshot per bucket.
+      if (!isset($arms_data[$arm_id][$x_value]) || $created > $arms_data[$arm_id][$x_value]['created']) {
+        $arms_data[$arm_id][$x_value] = [
+          'mean' => $mean,
+          'turns' => $turns,
+          'rewards' => $rewards,
+          'created' => $created,
+        ];
+      }
 
-      $all_turns[$total_turns] = $created;
+      $all_x_values[$x_value] = $created;
     }
 
-    ksort($all_turns);
-    $x_values = array_keys($all_turns);
+    ksort($all_x_values);
+    $x_values = array_keys($all_x_values);
+
+    // Generate x-axis labels for time-based axes.
+    if ($time_axis !== 'trials') {
+      $x_axis_label = $this->getTimeAxisLabel($time_axis);
+      foreach ($x_values as $x_value) {
+        $x_labels[$x_value] = $this->formatTimeBucket($x_value, $time_axis);
+      }
+    }
 
     // Sort arms by total turns (activity).
     $arm_totals = [];
@@ -510,6 +533,9 @@ class ReportsController extends ControllerBase {
       'totalArmsDisplayed' => count($top_arms_3d),
       'totalArmsAll' => $total_arms_all,
       'chartLineThreshold' => $chart_line_threshold,
+      'timeAxis' => $time_axis,
+      'xAxisLabel' => (string) $x_axis_label,
+      'xLabels' => !empty($x_labels) ? $x_labels : NULL,
     ];
 
     $build = [
@@ -529,11 +555,349 @@ class ReportsController extends ControllerBase {
       '#tip_hover' => $this->t('Hover for details. Higher = better.'),
       '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion rate.'),
       '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
-      '#chart_title_2d' => $this->t('Conversion Rate Over Time'),
-      '#chart_title_3d_surface' => $this->t('Conversion Rate Over Time'),
+      '#date_filter' => $date_filter,
     ];
 
     return $build;
+  }
+
+  /**
+   * Calculate date range from preset or explicit dates.
+   *
+   * @param string $preset
+   *   Preset name (e.g., 'last_4_weeks', 'this_month').
+   * @param string|null $start_date
+   *   Explicit start date (Y-m-d format).
+   * @param string|null $end_date
+   *   Explicit end date (Y-m-d format).
+   *
+   * @return array
+   *   Array with 'start' and 'end' timestamps, or empty for all data.
+   */
+  protected function calculateDateRange(string $preset, ?string $start_date, ?string $end_date): array {
+    $today_end = strtotime('today 23:59:59');
+
+    // Handle presets.
+    switch ($preset) {
+      case 'last_1_day':
+        return [
+          'start' => strtotime('-1 day midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_5_days':
+        return [
+          'start' => strtotime('-5 days midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_1_week':
+        return [
+          'start' => strtotime('-1 week midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_2_weeks':
+        return [
+          'start' => strtotime('-2 weeks midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_4_weeks':
+        return [
+          'start' => strtotime('-4 weeks midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_8_weeks':
+        return [
+          'start' => strtotime('-8 weeks midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_12_weeks':
+        return [
+          'start' => strtotime('-12 weeks midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'last_24_weeks':
+        return [
+          'start' => strtotime('-24 weeks midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'this_month':
+        return [
+          'start' => strtotime('first day of this month midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'this_quarter':
+        $month = (int) date('n');
+        $quarter_start_month = (int) (floor(($month - 1) / 3) * 3 + 1);
+        return [
+          'start' => strtotime(date('Y') . '-' . str_pad((string) $quarter_start_month, 2, '0', STR_PAD_LEFT) . '-01 midnight'),
+          'end' => $today_end,
+        ];
+
+      case 'this_year':
+        return [
+          'start' => strtotime('first day of January this year midnight'),
+          'end' => $today_end,
+        ];
+    }
+
+    // Handle explicit dates.
+    if ($start_date || $end_date) {
+      $range = [];
+      if ($start_date && preg_match('/^\d{4}-\d{2}-\d{2}$/', $start_date)) {
+        $range['start'] = strtotime($start_date . ' 00:00:00');
+      }
+      if ($end_date && preg_match('/^\d{4}-\d{2}-\d{2}$/', $end_date)) {
+        $range['end'] = strtotime($end_date . ' 23:59:59');
+      }
+      return $range;
+    }
+
+    // No filter - return empty array for all data.
+    return [];
+  }
+
+  /**
+   * Get the time bucket for a timestamp based on granularity.
+   *
+   * @param int $timestamp
+   *   The Unix timestamp.
+   * @param string $granularity
+   *   The granularity: 'hourly', 'daily', 'weekly', 'monthly', 'quarterly'.
+   *
+   * @return int
+   *   A bucket identifier (timestamp of bucket start).
+   */
+  protected function getTimeBucket(int $timestamp, string $granularity): int {
+    switch ($granularity) {
+      case 'hourly':
+        return (int) strtotime(date('Y-m-d H:00:00', $timestamp));
+
+      case 'daily':
+        return (int) strtotime(date('Y-m-d', $timestamp));
+
+      case 'weekly':
+        // Start of week (Monday).
+        return (int) strtotime('monday this week', $timestamp);
+
+      case 'monthly':
+        return (int) strtotime(date('Y-m-01', $timestamp));
+
+      case 'quarterly':
+        $month = (int) date('n', $timestamp);
+        $quarter_month = (int) (floor(($month - 1) / 3) * 3 + 1);
+        return (int) strtotime(date('Y', $timestamp) . '-' . str_pad((string) $quarter_month, 2, '0', STR_PAD_LEFT) . '-01');
+
+      default:
+        return $timestamp;
+    }
+  }
+
+  /**
+   * Format a time bucket for display.
+   *
+   * @param int $bucket
+   *   The bucket timestamp.
+   * @param string $granularity
+   *   The granularity.
+   *
+   * @return string
+   *   Formatted label.
+   */
+  protected function formatTimeBucket(int $bucket, string $granularity): string {
+    switch ($granularity) {
+      case 'hourly':
+        return date('M j, H:00', $bucket);
+
+      case 'daily':
+        return date('M j', $bucket);
+
+      case 'weekly':
+        return 'W' . date('W', $bucket) . ' ' . date('M j', $bucket);
+
+      case 'monthly':
+        return date('M Y', $bucket);
+
+      case 'quarterly':
+        $month = (int) date('n', $bucket);
+        $quarter = (int) ceil($month / 3);
+        return 'Q' . $quarter . ' ' . date('Y', $bucket);
+
+      default:
+        return (string) $bucket;
+    }
+  }
+
+  /**
+   * Get the x-axis label for a time axis type.
+   *
+   * @param string $time_axis
+   *   The time axis type.
+   *
+   * @return \Drupal\Core\StringTranslation\TranslatableMarkup
+   *   The axis label.
+   */
+  protected function getTimeAxisLabel(string $time_axis) {
+    switch ($time_axis) {
+      case 'hourly':
+        return $this->t('Hour');
+
+      case 'daily':
+        return $this->t('Date');
+
+      case 'weekly':
+        return $this->t('Week');
+
+      case 'monthly':
+        return $this->t('Month');
+
+      case 'quarterly':
+        return $this->t('Quarter');
+
+      default:
+        return $this->t('Total Impressions');
+    }
+  }
+
+  /**
+   * Build the date filter form.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   * @param array $current_range
+   *   Currently selected date range.
+   * @param array $available_range
+   *   Available date range from snapshots.
+   * @param string $current_preset
+   *   Currently selected preset.
+   * @param string $current_axis
+   *   Currently selected time axis.
+   *
+   * @return array
+   *   Render array for date filter.
+   */
+  protected function buildDateFilterForm(string $experiment_id, array $current_range, array $available_range, string $current_preset, string $current_axis = 'trials'): array {
+    $base_url = Url::fromRoute('rl.reports.experiment_detail', [
+      'experiment_id' => $experiment_id,
+    ]);
+
+    $presets = [
+      '' => $this->t('All time'),
+      'last_1_day' => $this->t('Last 1 day'),
+      'last_5_days' => $this->t('Last 5 days'),
+      'last_1_week' => $this->t('Last 1 week'),
+      'last_2_weeks' => $this->t('Last 2 weeks'),
+      'last_4_weeks' => $this->t('Last 4 weeks'),
+      'last_8_weeks' => $this->t('Last 8 weeks'),
+      'last_12_weeks' => $this->t('Last 12 weeks'),
+      'last_24_weeks' => $this->t('Last 24 weeks'),
+      'this_month' => $this->t('This month'),
+      'this_quarter' => $this->t('This quarter'),
+      'this_year' => $this->t('This year'),
+    ];
+
+    // Build preset dropdown options with URLs (preserve current axis).
+    $preset_options = [];
+    $preset_urls = [];
+    foreach ($presets as $key => $label) {
+      $url = clone $base_url;
+      $query = [];
+      if ($key) {
+        $query['preset'] = $key;
+      }
+      if ($current_axis !== 'trials') {
+        $query['axis'] = $current_axis;
+      }
+      if (!empty($query)) {
+        $url->setOption('query', $query);
+      }
+      $preset_options[$key] = $label;
+      $preset_urls[$key] = $url->toString();
+    }
+
+    // Time axis options for dropdown.
+    $axes = [
+      'trials' => $this->t('Impressions'),
+      'daily' => $this->t('Daily'),
+      'weekly' => $this->t('Weekly'),
+      'monthly' => $this->t('Monthly'),
+      'quarterly' => $this->t('Quarterly'),
+    ];
+
+    // Build axis dropdown options with URLs as values.
+    $axis_options = [];
+    $axis_urls = [];
+    foreach ($axes as $key => $label) {
+      $url = clone $base_url;
+      $query = [];
+      if ($current_preset) {
+        $query['preset'] = $current_preset;
+      }
+      if ($key !== 'trials') {
+        $query['axis'] = $key;
+      }
+      if (!empty($query)) {
+        $url->setOption('query', $query);
+      }
+      $axis_options[$key] = $label;
+      $axis_urls[$key] = $url->toString();
+    }
+
+    // Format available date range for display.
+    $range_text = $this->t('Data available from @start to @end', [
+      '@start' => $this->dateFormatter->format($available_range['min'], 'short'),
+      '@end' => $this->dateFormatter->format($available_range['max'], 'short'),
+    ]);
+
+    return [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['rl-date-filter']],
+      'presets' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rl-presets']],
+        'label' => [
+          '#markup' => '<strong>' . $this->t('Time range:') . '</strong> ',
+        ],
+        'select' => [
+          '#type' => 'select',
+          '#options' => $preset_options,
+          '#value' => $current_preset,
+          '#attributes' => [
+            'class' => ['rl-preset-select', 'rl-filter-select'],
+            'data-urls' => json_encode($preset_urls),
+          ],
+        ],
+      ],
+      'axes' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rl-axes']],
+        'label' => [
+          '#markup' => '<strong>' . $this->t('X-axis:') . '</strong> ',
+        ],
+        'select' => [
+          '#type' => 'select',
+          '#options' => $axis_options,
+          '#value' => $current_axis,
+          '#attributes' => [
+            'class' => ['rl-axis-select', 'rl-filter-select'],
+            'data-urls' => json_encode($axis_urls),
+          ],
+        ],
+      ],
+      'range_info' => [
+        '#markup' => '<div class="rl-range-info">' . $range_text . '</div>',
+      ],
+      '#attached' => [
+        'library' => ['rl/date-filter'],
+      ],
+    ];
   }
 
 }

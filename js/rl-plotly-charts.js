@@ -199,22 +199,35 @@
               color: arm.color,
               width: 2
             },
-            hovertemplate: '<b>' + armLabel + '</b><br>Impressions: %{x}<br>Rate: %{y:.1f}%<extra></extra>'
+            hovertemplate: '<b>' + armLabel + '</b><br>' + (data.xAxisLabel || 'Impressions') + ': %{x}<br>Rate: %{y:.1f}%<extra></extra>'
           });
         }
 
         const lineChartHeight = config.height2d;
+        const xAxisLabel = data.xAxisLabel || 'Total Impressions';
+
+        // Configure x-axis based on time axis type
+        const xAxisConfig = {
+          title: { text: xAxisLabel, font: { size: config.axisTitleSize } },
+          tickfont: { size: config.tickSize },
+          gridcolor: 'rgba(0,0,0,0.1)'
+        };
+
+        // Use custom tick labels for time-based axes
+        if (data.xLabels && data.timeAxis !== 'trials') {
+          const tickVals = Object.keys(data.xLabels).map(Number);
+          const tickText = Object.values(data.xLabels);
+          xAxisConfig.tickvals = tickVals;
+          xAxisConfig.ticktext = tickText;
+          xAxisConfig.tickangle = -45;
+        }
 
         Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
           title: {
             text: 'Conversion Rate Over Time',
             font: { size: config.titleSize }
           },
-          xaxis: {
-            title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
-            tickfont: { size: config.tickSize },
-            gridcolor: 'rgba(0,0,0,0.1)'
-          },
+          xaxis: xAxisConfig,
           yaxis: {
             title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } },
             tickfont: { size: config.tickSize },
@@ -279,6 +292,7 @@
         // Build pre-formatted hovertext array (Plotly 3D surfaces don't support %{text} in hovertemplate)
         const hoverTextData = [];
         const truncatedLabels = [];
+        const xAxisLabel3d = data.xAxisLabel || 'Impressions';
 
         for (let ai = 0; ai < landscapeNumArms; ai++) {
           const hoverRow = [];
@@ -287,10 +301,12 @@
           truncatedLabels.push(displayLabel);
 
           for (let ti = 0; ti < numTimePoints; ti++) {
-            const impressions = data.surface3d.xValues[ti];
+            const xValue = data.surface3d.xValues[ti];
             const rate = sortedZMatrix[ai][ti];
+            // Use custom label if available for time-based axes
+            const xDisplay = (data.xLabels && data.xLabels[xValue]) ? data.xLabels[xValue] : xValue;
             // Build complete hover text for each point
-            hoverRow.push('<b>' + fullLabel + '</b><br>Impressions: ' + impressions + '<br>Rate: ' + rate.toFixed(1) + '%');
+            hoverRow.push('<b>' + fullLabel + '</b><br>' + xAxisLabel3d + ': ' + xDisplay + '<br>Rate: ' + rate.toFixed(1) + '%');
           }
           hoverTextData.push(hoverRow);
         }
@@ -308,6 +324,67 @@
           yAxisConfig.tickangle = 0;
         }
 
+        // Configure X-axis based on time axis type
+        const xAxis3dConfig = {
+          title: { text: xAxisLabel3d, font: { size: config.axisTitleSize } },
+          tickfont: { size: config.tickSize }
+        };
+
+        // Use custom tick labels for time-based axes
+        if (data.xLabels && data.timeAxis !== 'trials') {
+          const tickVals3d = Object.keys(data.xLabels).map(Number);
+          const tickText3d = Object.values(data.xLabels);
+          xAxis3dConfig.tickvals = tickVals3d;
+          xAxis3dConfig.ticktext = tickText3d;
+        }
+
+        // Calculate color bounds and surface statistics for adaptive lighting
+        let zMin = Infinity;
+        let zMax = -Infinity;
+        let zSum = 0;
+        let zCount = 0;
+        for (let ai = 0; ai < sortedZMatrix.length; ai++) {
+          for (let ti = 0; ti < sortedZMatrix[ai].length; ti++) {
+            const val = sortedZMatrix[ai][ti];
+            if (val < zMin) zMin = val;
+            if (val > zMax) zMax = val;
+            zSum += val;
+            zCount++;
+          }
+        }
+        const zMean = zSum / zCount;
+
+        // Calculate variance for adaptive lighting
+        let zVariance = 0;
+        for (let ai = 0; ai < sortedZMatrix.length; ai++) {
+          for (let ti = 0; ti < sortedZMatrix[ai].length; ti++) {
+            const diff = sortedZMatrix[ai][ti] - zMean;
+            zVariance += diff * diff;
+          }
+        }
+        zVariance = zVariance / zCount;
+        const zStdDev = Math.sqrt(zVariance);
+
+        // Coefficient of variation: higher = more varied surface
+        const coeffOfVar = zMean > 0 ? zStdDev / zMean : 0;
+
+        // Ensure minimum range for color differentiation
+        if (zMax - zMin < 0.1) {
+          zMax = zMin + 0.1;
+        }
+
+        // Adaptive lighting based on surface variance
+        // Low variance (flat surface): high ambient to brighten dark areas
+        // High variance (ridged surface): moderate ambient, keep good contrast
+        const varianceFactor = Math.min(1, coeffOfVar * 2); // Normalize to 0-1
+        const adaptiveLighting = {
+          ambient: 0.9 - (varianceFactor * 0.25),   // 0.9 for flat, 0.65 for ridged
+          diffuse: 0.8,                              // Keep constant
+          specular: 0.15 + (varianceFactor * 0.1),  // 0.15 for flat, 0.25 for ridged
+          roughness: 0.5,                            // Keep constant
+          fresnel: 0.2                               // Keep constant
+        };
+
         Plotly.newPlot('rl-plotly-3d-surface', [{
           type: 'surface',
           z: sortedZMatrix,
@@ -316,19 +393,10 @@
           surfacecolor: sortedZMatrix,
           hovertext: hoverTextData,
           hoverinfo: 'text',
-          colorscale: [
-            [0, 'rgb(68, 1, 84)'],
-            [0.1, 'rgb(72, 35, 116)'],
-            [0.2, 'rgb(64, 67, 135)'],
-            [0.3, 'rgb(52, 94, 141)'],
-            [0.4, 'rgb(41, 120, 142)'],
-            [0.5, 'rgb(32, 144, 140)'],
-            [0.6, 'rgb(34, 167, 132)'],
-            [0.7, 'rgb(68, 190, 112)'],
-            [0.8, 'rgb(121, 209, 81)'],
-            [0.9, 'rgb(189, 222, 38)'],
-            [1, 'rgb(253, 231, 36)']
-          ],
+          cmin: zMin,
+          cmax: zMax,
+          cauto: false,
+          colorscale: 'Viridis',
           contours: {
             z: {
               show: true,
@@ -339,13 +407,7 @@
             x: { show: false },
             y: { show: false }
           },
-          lighting: {
-            ambient: 0.6,
-            diffuse: 0.8,
-            specular: 0.3,
-            roughness: 0.5,
-            fresnel: 0.2
-          },
+          lighting: adaptiveLighting,
           lightposition: {
             x: 100,
             y: 200,
@@ -359,10 +421,7 @@
         }], Object.assign({}, defaultLayout, {
           title: { text: 'Conversion Rate Over Time', font: { size: config.titleSize } },
           scene: {
-            xaxis: {
-              title: { text: 'Total Impressions', font: { size: config.axisTitleSize } },
-              tickfont: { size: config.tickSize }
-            },
+            xaxis: xAxis3dConfig,
             yaxis: yAxisConfig,
             zaxis: {
               title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } },

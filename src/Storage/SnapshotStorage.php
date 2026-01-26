@@ -99,13 +99,40 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function getSnapshotHistory(string $experiment_id): array {
-    return $this->database->select('rl_arm_snapshots', 's')
+  public function getSnapshotHistory(string $experiment_id, ?int $start_date = NULL, ?int $end_date = NULL): array {
+    $query = $this->database->select('rl_arm_snapshots', 's')
       ->fields('s', ['arm_id', 'turns', 'rewards', 'total_experiment_turns', 'created'])
-      ->condition('experiment_id', $experiment_id)
-      ->orderBy('total_experiment_turns', 'ASC')
+      ->condition('experiment_id', $experiment_id);
+
+    if ($start_date !== NULL) {
+      $query->condition('created', $start_date, '>=');
+    }
+    if ($end_date !== NULL) {
+      $query->condition('created', $end_date, '<=');
+    }
+
+    return $query->orderBy('total_experiment_turns', 'ASC')
       ->execute()
       ->fetchAll();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getSnapshotDateRange(string $experiment_id): array {
+    $query = $this->database->select('rl_arm_snapshots', 's')
+      ->condition('experiment_id', $experiment_id);
+    $query->addExpression('MIN(created)', 'min_date');
+    $query->addExpression('MAX(created)', 'max_date');
+    $result = $query->execute()->fetchObject();
+
+    if ($result && $result->min_date && $result->max_date) {
+      return [
+        'min' => (int) $result->min_date,
+        'max' => (int) $result->max_date,
+      ];
+    }
+    return [];
   }
 
   /**

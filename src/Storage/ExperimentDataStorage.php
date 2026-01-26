@@ -218,4 +218,54 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function getExperimentsWithStats(): array {
+    $query = $this->database->select('rl_experiment_registry', 'er')
+      ->fields('er', ['experiment_id', 'module', 'experiment_name', 'registered_at']);
+    $query->leftJoin('rl_experiment_totals', 'et', 'er.experiment_id = et.experiment_id');
+    $query->addField('et', 'total_turns', 'total_turns');
+    $query->addField('et', 'created', 'totals_created');
+    $query->addField('et', 'updated', 'totals_updated');
+    $query->orderBy('er.registered_at', 'DESC');
+    $experiments = $query->execute()->fetchAll();
+
+    // Add arm counts and total rewards for each experiment.
+    foreach ($experiments as $experiment) {
+      $arm_stats = $this->database->select('rl_arm_data', 'ad')
+        ->condition('experiment_id', $experiment->experiment_id);
+      $arm_stats->addExpression('COUNT(*)', 'arm_count');
+      $arm_stats->addExpression('COALESCE(SUM(rewards), 0)', 'total_rewards');
+      $stats = $arm_stats->execute()->fetchObject();
+      $experiment->arm_count = $stats->arm_count ?? 0;
+      $experiment->total_rewards = $stats->total_rewards ?? 0;
+    }
+
+    return $experiments;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getExperimentTotals(string $experiment_id): ?object {
+    return $this->database->select('rl_experiment_totals', 'et')
+      ->fields('et')
+      ->condition('experiment_id', $experiment_id)
+      ->execute()
+      ->fetchObject() ?: NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getArmsByExperiment(string $experiment_id): array {
+    return $this->database->select('rl_arm_data', 'ad')
+      ->fields('ad')
+      ->condition('experiment_id', $experiment_id)
+      ->orderBy('updated', 'DESC')
+      ->execute()
+      ->fetchAll();
+  }
+
 }
