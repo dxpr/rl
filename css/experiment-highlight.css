@@ -1,0 +1,50 @@
+/**
+ * @file
+ * Styles for highlighting RL experiments in the UI.
+ *
+ * This CSS is only loaded for users with 'view rl reports' permission.
+ * Integrating modules can add the 'rl-experiment' class to their elements
+ * to apply the animated rainbow border branding.
+ */
+
+:root {
+  --rl-color-1: #0077B6;
+  --rl-color-2: #0096C7;
+  --rl-color-3: #00B4D8;
+  --rl-color-4: #48CAE4;
+  --rl-color-5: #26828E;
+  --rl-color-6: #1F9E89;
+  --rl-color-7: #35B779;
+  --rl-color-8: #6CCE59;
+  --rl-color-9: #B4DE2C;
+  --rl-color-10: #DAE319;
+}
+
+@keyframes rl-rainbow-border {
+  0% {
+    border-image: linear-gradient(90deg, var(--rl-color-1), var(--rl-color-2), var(--rl-color-3), var(--rl-color-4), var(--rl-color-5), var(--rl-color-6), var(--rl-color-7), var(--rl-color-8), var(--rl-color-9), var(--rl-color-10)) 1;
+  }
+  20% {
+    border-image: linear-gradient(90deg, var(--rl-color-3), var(--rl-color-4), var(--rl-color-5), var(--rl-color-6), var(--rl-color-7), var(--rl-color-8), var(--rl-color-9), var(--rl-color-10), var(--rl-color-1), var(--rl-color-2)) 1;
+  }
+  40% {
+    border-image: linear-gradient(90deg, var(--rl-color-5), var(--rl-color-6), var(--rl-color-7), var(--rl-color-8), var(--rl-color-9), var(--rl-color-10), var(--rl-color-1), var(--rl-color-2), var(--rl-color-3), var(--rl-color-4)) 1;
+  }
+  60% {
+    border-image: linear-gradient(90deg, var(--rl-color-7), var(--rl-color-8), var(--rl-color-9), var(--rl-color-10), var(--rl-color-1), var(--rl-color-2), var(--rl-color-3), var(--rl-color-4), var(--rl-color-5), var(--rl-color-6)) 1;
+  }
+  80% {
+    border-image: linear-gradient(90deg, var(--rl-color-9), var(--rl-color-10), var(--rl-color-1), var(--rl-color-2), var(--rl-color-3), var(--rl-color-4), var(--rl-color-5), var(--rl-color-6), var(--rl-color-7), var(--rl-color-8)) 1;
+  }
+  100% {
+    border-image: linear-gradient(90deg, var(--rl-color-1), var(--rl-color-2), var(--rl-color-3), var(--rl-color-4), var(--rl-color-5), var(--rl-color-6), var(--rl-color-7), var(--rl-color-8), var(--rl-color-9), var(--rl-color-10)) 1;
+  }
+}
+
+.rl-experiment,
+.contextual-links li a[href*="/admin/reports/rl/experiment/"],
+.rl-admin-page .page-title {
+  animation: rl-rainbow-border 10s linear infinite !important;
+  border-width: 3px !important;
+  border-style: solid !important;
+}

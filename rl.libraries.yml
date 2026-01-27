@@ -1,3 +1,9 @@
+experiment-highlight:
+  version: 1.0
+  css:
+    theme:
+      css/experiment-highlight.css: {}
+
 plotly:
   version: 2.35.2
   license:

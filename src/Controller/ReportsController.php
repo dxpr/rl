@@ -219,6 +219,21 @@ class ReportsController extends ControllerBase {
   }
 
   /**
+   * Title callback for the experiment detail page.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   *
+   * @return string
+   *   The page title.
+   */
+  public function experimentDetailTitle($experiment_id) {
+    $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
+    $experiment_name = $experiment_totals->experiment_name ?? $experiment_id;
+    return $this->t('Experiment: @name', ['@name' => $experiment_name]);
+  }
+
+  /**
    * Detail page for a specific experiment showing all arms.
    *
    * @param string $experiment_id
