@@ -8,6 +8,39 @@
 use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
+ * Implements hook_cron().
+ */
+function rl_cron() {
+  // Clean up old snapshots if event logging is enabled.
+  /** @var \Drupal\rl\Storage\SnapshotStorageInterface $snapshot_storage */
+  $snapshot_storage = \Drupal::service('rl.snapshot_storage');
+  if ($snapshot_storage->isEnabled()) {
+    $deleted = $snapshot_storage->cleanup();
+    if ($deleted > 0) {
+      \Drupal::logger('rl')->info('Cleaned up @count old snapshots.', ['@count' => $deleted]);
+    }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function rl_theme() {
+  return [
+    'rl_charts' => [
+      'variables' => [
+        'title' => NULL,
+        'tip_hover' => NULL,
+        'tip_taller' => NULL,
+        'interaction_hint' => NULL,
+        'date_filter' => NULL,
+      ],
+      'template' => 'rl-charts',
+    ],
+  ];
+}
+
+/**
  * Implements hook_help().
  */
 function rl_help($route_name, RouteMatchInterface $route_match) {

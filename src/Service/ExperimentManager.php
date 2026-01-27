@@ -47,6 +47,13 @@ class ExperimentManager implements ExperimentManagerInterface {
   protected $loggerFactory;
 
   /**
+   * The arm data validator.
+   *
+   * @var \Drupal\rl\Service\ArmDataValidator
+   */
+  protected $armDataValidator;
+
+  /**
    * Constructs a new ExperimentManager.
    *
    * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
@@ -59,13 +66,16 @@ class ExperimentManager implements ExperimentManagerInterface {
    *   The database connection.
    * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger_factory
    *   The logger factory.
+   * @param \Drupal\rl\Service\ArmDataValidator $arm_data_validator
+   *   The arm data validator.
    */
-  public function __construct(ExperimentDataStorageInterface $storage, ThompsonCalculator $ts_calculator, ConfigFactoryInterface $config_factory, Connection $database, LoggerChannelFactoryInterface $logger_factory) {
+  public function __construct(ExperimentDataStorageInterface $storage, ThompsonCalculator $ts_calculator, ConfigFactoryInterface $config_factory, Connection $database, LoggerChannelFactoryInterface $logger_factory, ArmDataValidator $arm_data_validator) {
     $this->storage = $storage;
     $this->tsCalculator = $ts_calculator;
     $this->configFactory = $config_factory;
     $this->database = $database;
     $this->loggerFactory = $logger_factory;
+    $this->armDataValidator = $arm_data_validator;
   }
 
   /**
@@ -148,6 +158,9 @@ class ExperimentManager implements ExperimentManagerInterface {
         ];
       }
     }
+
+    // Validate and sanitize arm data before Thompson Sampling.
+    $arms_data = $this->armDataValidator->validateArmsData($arms_data, $experiment_id);
 
     $scores = $this->tsCalculator->calculateThompsonScores($arms_data);
 

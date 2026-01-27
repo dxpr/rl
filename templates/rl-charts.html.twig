@@ -1,0 +1,43 @@
+{#
+/**
+ * @file
+ * Template for RL experiment charts.
+ *
+ * Available variables:
+ * - title: The section title.
+ * - tip_hover: Tip text for hover.
+ * - tip_taller: Tip text for 3D landscape.
+ * - interaction_hint: Hint for 3D interaction.
+ * - date_filter: Date filter dropdowns render array.
+ */
+#}
+<h3>{{ title }}</h3>
+
+<div class="rl-chart-row">
+  <div class="rl-chart-box">
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
+    <div class="rl-chart-area-2d" id="rl-plotly-2d-lines"></div>
+    <div class="form-item__description rl-chart-tip">
+      <strong>{{ 'Tip:'|t }}</strong> {{ tip_hover }}
+    </div>
+  </div>
+</div>
+
+<div class="rl-chart-row">
+  <div class="rl-chart-box">
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
+    <div class="form-item__description rl-chart-tip">{{ interaction_hint }}</div>
+    <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
+    <div class="form-item__description rl-chart-tip">
+      <strong>{{ 'Tip:'|t }}</strong> {{ tip_taller }}
+    </div>
+  </div>
+</div>

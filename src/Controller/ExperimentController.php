@@ -32,7 +32,8 @@ class ExperimentController extends ControllerBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
     return new static(
           $container->get('rl.experiment_manager')
       );

@@ -5,3 +5,12 @@ rl.settings:
     debug_mode:
       type: boolean
       label: 'Debug mode'
+    enable_event_log:
+      type: boolean
+      label: 'Enable event log for historical visualization'
+    event_log_max_rows:
+      type: integer
+      label: 'Maximum rows in event log table'
+    chart_line_threshold:
+      type: integer
+      label: 'Maximum arms for 2D line chart'

@@ -1,0 +1,27 @@
+plotly:
+  version: 2.35.2
+  license:
+    name: MIT
+    url: https://github.com/plotly/plotly.js/blob/master/LICENSE
+    gpl-compatible: true
+  css:
+    component:
+      css/rl-charts.css: {}
+  js:
+    /libraries/plotly.js-dist-min/plotly.min.js: { minified: true }
+    js/rl-plotly-charts.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once
+
+date-filter:
+  version: 1.0
+  css:
+    component:
+      css/rl-charts.css: {}
+  js:
+    js/rl-date-filter.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

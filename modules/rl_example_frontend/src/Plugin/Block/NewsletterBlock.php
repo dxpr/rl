@@ -115,7 +115,8 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
+    // @phpstan-ignore new.static
     return new static(
       $configuration,
       $plugin_id,

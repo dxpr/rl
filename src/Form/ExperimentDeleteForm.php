@@ -37,7 +37,8 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
     return new static(
       $container->get('database')
     );
@@ -53,7 +54,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, $experiment_id = NULL): array {
     $this->experimentId = $experiment_id;
 
     $experiment = $this->database->select('rl_experiment_registry', 'er')
@@ -64,7 +65,8 @@ class ExperimentDeleteForm extends ConfirmFormBase {
 
     if (!$experiment) {
       $this->messenger()->addError($this->t('Experiment not found.'));
-      return $this->redirect('rl.reports.experiments');
+      $form_state->setRedirect('rl.reports.experiments');
+      return [];
     }
 
     return parent::buildForm($form, $form_state);
@@ -83,7 +85,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getDescription() {
-    return $this->t('This will permanently delete the experiment and all its data (turns, rewards, totals). This action cannot be undone.');
+    return $this->t('This will permanently delete the experiment and all its data (turns, rewards, totals, snapshots). This action cannot be undone.');
   }
 
   /**
@@ -105,6 +107,10 @@ class ExperimentDeleteForm extends ConfirmFormBase {
         ->execute();
 
       $this->database->delete('rl_experiment_totals')
+        ->condition('experiment_id', $this->experimentId)
+        ->execute();
+
+      $this->database->delete('rl_arm_snapshots')
         ->condition('experiment_id', $this->experimentId)
         ->execute();
 

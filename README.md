@@ -40,20 +40,50 @@ drush en rl
 
 ### Post-Installation: Verify rl.php Access
 
-The RL module includes a `.htaccess` file that allows direct access to `rl.php` (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:
+The RL module includes a `.htaccess` file that allows direct access to
+`rl.php` (following the same pattern as Drupal 11's contrib statistics
+module). Test that it's working:
 
 ```bash
 # Test if rl.php is accessible
-curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/modules/contrib/rl/rl.php
+curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" \
+  http://example.com/modules/contrib/rl/rl.php
 ```
 
 **If the test fails:**
 
 - **Apache**: Ensure `.htaccess` files are processed (`AllowOverride All`)
-- **Nginx**: Copy the rewrite rules from `.htaccess` to your server config
+- **Nginx**: Add the configuration rules below to your server block
 - **Security modules**: Whitelist `/modules/contrib/rl/rl.php`
 
-If server policies prevent direct access to `rl.php`, use the Drupal Routes API instead.
+#### Nginx Configuration
+
+Add these rules to your Nginx server block, **before** the main Drupal location block:
+
+```nginx
+# Allow direct access to rl.php for performance
+location ~ ^/modules/contrib/rl/rl\.php$ {
+    fastcgi_split_path_info ^(.+?\.php)(|/.*)$;
+    try_files $uri =404;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param PATH_INFO $fastcgi_path_info;
+    fastcgi_param QUERY_STRING $query_string;
+    fastcgi_pass unix:/var/run/php/php-fpm.sock;  # Adjust to your PHP-FPM socket
+}
+
+# Block access to other PHP files in modules (except rl.php)
+location ~ ^/modules/.*\.php$ {
+    deny all;
+}
+```
+
+**Note:** Adjust `fastcgi_pass` to match your PHP-FPM configuration:
+- Socket: `unix:/var/run/php/php8.1-fpm.sock` (or your PHP version)
+- TCP: `127.0.0.1:9000`
+
+If server policies prevent direct access to `rl.php`, use the Drupal
+Routes API instead.
 
 ## API Usage
 
@@ -135,6 +165,85 @@ RL provides optional cache management for web components:
 
 Full algorithm details available in source code:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php)
+
+## Experiment Decorators
+
+Decorators customize how experiments and arms are displayed in the RL reports
+interface. By default, experiments and arms show their raw IDs, but decorators
+can provide human-readable labels.
+
+### Creating a Decorator
+
+Implement the `ExperimentDecoratorInterface`:
+
+```php
+<?php
+
+namespace Drupal\my_module\Decorator;
+
+use Drupal\rl\Decorator\ExperimentDecoratorInterface;
+
+class MyExperimentDecorator implements ExperimentDecoratorInterface {
+
+  /**
+   * {@inheritdoc}
+   */
+  public function decorateExperiment(string $experiment_id): ?array {
+    // Return NULL to skip, or a render array for custom display.
+    if (!str_starts_with($experiment_id, 'my_module-')) {
+      return NULL;
+    }
+    return ['#markup' => 'My Custom Experiment Name'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function decorateArm(string $experiment_id, string $arm_id): ?array {
+    // Return NULL to skip, or a render array for custom display.
+    if (!str_starts_with($experiment_id, 'my_module-')) {
+      return NULL;
+    }
+    // Example: Load entity and return its label.
+    $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
+    if ($entity) {
+      return [
+        '#markup' => htmlspecialchars($entity->label()) .
+          ' <small>(' . htmlspecialchars($arm_id) . ')</small>',
+      ];
+    }
+    return NULL;
+  }
+
+}
+```
+
+### Registering the Decorator
+
+Add the decorator service to your module's `*.services.yml` with the
+`rl_experiment_decorator` tag:
+
+```yaml
+services:
+  my_module.experiment_decorator:
+    class: Drupal\my_module\Decorator\MyExperimentDecorator
+    arguments: ['@entity_type.manager']
+    tags:
+      - { name: rl_experiment_decorator }
+```
+
+The decorator manager automatically discovers all tagged services and calls
+them in order until one returns a non-NULL value.
+
+### Best Practices
+
+- **Check experiment prefix**: Return `NULL` early for experiments your
+  decorator doesn't handle.
+- **Handle missing entities**: Entities may be deleted; return `NULL` if the
+  entity can't be loaded.
+- **Use render arrays**: Return proper Drupal render arrays for consistent
+  theming and security.
+- **Escape output**: Use `htmlspecialchars()` for any user-provided content.
 
 ## Development
 

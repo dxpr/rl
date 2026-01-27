@@ -75,4 +75,34 @@ interface ExperimentDataStorageInterface {
    */
   public function getTotalTurns($experiment_id);
 
+  /**
+   * Gets all experiments with their statistics for the overview page.
+   *
+   * @return array
+   *   Array of experiment objects with stats.
+   */
+  public function getExperimentsWithStats(): array;
+
+  /**
+   * Gets the experiment totals record.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   *
+   * @return object|null
+   *   The experiment totals object or NULL if not found.
+   */
+  public function getExperimentTotals(string $experiment_id): ?object;
+
+  /**
+   * Gets all arms for an experiment with their data.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   *
+   * @return array
+   *   Array of arm data objects.
+   */
+  public function getArmsByExperiment(string $experiment_id): array;
+
 }

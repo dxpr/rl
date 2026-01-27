@@ -1,0 +1,131 @@
+/**
+ * @file
+ * Styles for RL experiment charts.
+ */
+
+.rl-charts-container {
+  margin-bottom: 2em;
+}
+
+.rl-chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5em;
+  margin-bottom: 1.5em;
+}
+
+.rl-chart-box {
+  flex: 1 1 100%;
+  min-width: 0;
+  background: #f8f9fa;
+  border: 2px solid #d0d0d0;
+  border-radius: 8px;
+  padding: clamp(8px, 1.5vw, 20px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: relative;
+}
+
+.rl-chart-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-bottom: 1em;
+  position: relative;
+  z-index: 10;
+}
+
+/* Loading spinner for chart regeneration */
+.rl-chart-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 8px;
+}
+
+.rl-chart-loading::after {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e9ecef;
+  border-top-color: #0d6efd;
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+}
+
+@keyframes rl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rl-chart-description {
+  color: #444;
+  margin-bottom: 1em;
+  line-height: 1.5;
+}
+
+.rl-chart-area-2d,
+.rl-chart-area-3d {
+  min-height: 70vh;
+  max-height: 90vh;
+  width: 100%;
+}
+
+.rl-chart-tip {
+  position: relative;
+  z-index: 10;
+}
+
+/* Date filter styles */
+.rl-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75em;
+}
+
+.rl-presets,
+.rl-axes {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.rl-presets strong,
+.rl-axes strong {
+  color: #555;
+  white-space: nowrap;
+}
+
+.rl-preset-select,
+.rl-axis-select {
+  padding: 0.25em 0.5em;
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  color: #495057;
+  cursor: pointer;
+}
+
+.rl-preset-select:hover,
+.rl-axis-select:hover {
+  border-color: #adb5bd;
+}
+
+.rl-preset-select:focus,
+.rl-axis-select:focus {
+  border-color: #0d6efd;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.rl-range-info {
+  display: none;
+}

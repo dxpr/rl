@@ -1,13 +1,12 @@
 rl.reports.experiments:
-  title: 'RL Experiments'
+  title: 'Reinforcement Learning'
   description: 'View reinforcement learning experiments and their statistics.'
   route_name: rl.reports.experiments
   parent: system.admin_reports
-  weight: 10
 
 rl.settings:
-  title: 'RL Settings'
+  title: 'Reinforcement Learning'
   description: 'Configure reinforcement learning module settings.'
   route_name: rl.settings
-  parent: system.admin_config_development
+  parent: system.admin_config_services
   weight: 10

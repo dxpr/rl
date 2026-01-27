@@ -216,6 +216,14 @@ function rl_uninstall() {
   catch (SchemaObjectDoesNotExistException $e) {
     // Table doesn't exist, silently continue.
   }
+
+  // Drop the rl_arm_snapshots table if it exists.
+  try {
+    $schema->dropTable('rl_arm_snapshots');
+  }
+  catch (SchemaObjectDoesNotExistException $e) {
+    // Table doesn't exist, silently continue.
+  }
 }
 
 /**
@@ -359,6 +367,63 @@ function rl_schema() {
     ],
   ];
 
+  $schema['rl_arm_snapshots'] = [
+    'description' => 'Stores historical snapshots of arm state for visualization.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ],
+      'arm_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ],
+      'turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Cumulative turns for this arm at snapshot time.',
+      ],
+      'rewards' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Cumulative rewards for this arm at snapshot time.',
+      ],
+      'total_experiment_turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Total experiment turns at snapshot time (x-axis).',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when snapshot was created.',
+      ],
+      'is_milestone' => [
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Whether this is a permanent milestone (1) or recent window (0).',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'experiment_lookup' => ['experiment_id', 'total_experiment_turns'],
+    ],
+  ];
+
   return $schema;
 }
 
@@ -369,6 +434,27 @@ function rl_requirements($phase) {
   $requirements = [];
 
   if ($phase == 'runtime') {
+    // Check if Plotly.js library is installed.
+    $plotly_path = DRUPAL_ROOT . '/libraries/plotly.js-dist-min/plotly.min.js';
+    if (!file_exists($plotly_path)) {
+      $requirements['rl_plotly_library'] = [
+        'title' => t('RL: Plotly.js library'),
+        'severity' => REQUIREMENT_ERROR,
+        'value' => t('Not installed'),
+        'description' => t('The Plotly.js library is required for charts. Install it via Composer: <code>composer require npm-asset/plotly.js-dist-min:^2.35</code>. Your project must have <a href="@packagist">Asset Packagist</a> configured and <code>oomphinc/composer-installers-extender</code> with npm-asset in installer-paths. See the <a href="@readme">README</a> for details.', [
+          '@packagist' => 'https://asset-packagist.org',
+          '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md',
+        ]),
+      ];
+    }
+    else {
+      $requirements['rl_plotly_library'] = [
+        'title' => t('RL: Plotly.js library'),
+        'severity' => REQUIREMENT_OK,
+        'value' => t('Installed'),
+      ];
+    }
+
     $module_handler = \Drupal::service('module_handler');
     if ($module_handler->moduleExists('page_cache')) {
       $requirements['rl_page_cache_conflict'] = [
@@ -381,7 +467,156 @@ function rl_requirements($phase) {
         ]),
       ];
     }
+
+    // Check if rl.php is accessible via HTTP.
+    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
+    $base_url = \Drupal::request()->getSchemeAndHttpHost();
+    $base_path = \Drupal::request()->getBasePath();
+    $rl_endpoint_url = $base_url . $base_path . '/' . $rl_path . '/rl.php';
+
+    try {
+      $client = \Drupal::httpClient();
+      // Use read-only 'ping' action to verify endpoint accessibility
+      // without creating any database entries.
+      $response = $client->post($rl_endpoint_url, [
+        'form_params' => [
+          'action' => 'ping',
+        ],
+        'timeout' => 5,
+        'http_errors' => FALSE,
+      ]);
+
+      $status_code = $response->getStatusCode();
+
+      if ($status_code === 200) {
+        $requirements['rl_php_accessibility'] = [
+          'title' => t('RL: rl.php accessibility'),
+          'severity' => REQUIREMENT_OK,
+          'value' => t('rl.php is accessible (HTTP @code)', ['@code' => $status_code]),
+          'description' => t('The rl.php endpoint is correctly configured and accessible at <code>@url</code>.', [
+            '@url' => $rl_endpoint_url,
+          ]),
+        ];
+      }
+      else {
+        $requirements['rl_php_accessibility'] = [
+          'title' => t('RL: rl.php accessibility'),
+          'severity' => REQUIREMENT_ERROR,
+          'value' => t('rl.php returned HTTP @code', ['@code' => $status_code]),
+          'description' => t('The rl.php endpoint at <code>@url</code> is not responding correctly. Expected HTTP 200 but got @code. Check your web server configuration (.htaccess for Apache, or add rewrite rules for Nginx). See the <a href="@readme" target="_blank">README</a> for details.', [
+            '@url' => $rl_endpoint_url,
+            '@code' => $status_code,
+            '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
+          ]),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['rl_php_accessibility'] = [
+        'title' => t('RL: rl.php accessibility'),
+        'severity' => REQUIREMENT_ERROR,
+        'value' => t('rl.php is not accessible'),
+        'description' => t('Failed to connect to rl.php at <code>@url</code>. Error: @error. Ensure .htaccess files are being processed (Apache) or rewrite rules are configured (Nginx). See the <a href="@readme" target="_blank">README</a> for configuration instructions.', [
+          '@url' => $rl_endpoint_url,
+          '@error' => $e->getMessage(),
+          '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
+        ]),
+      ];
+    }
   }
 
   return $requirements;
+}
+
+/**
+ * Add rl_arm_snapshots table for event log visualization.
+ */
+function rl_update_10001() {
+  $schema = \Drupal::database()->schema();
+
+  $spec = [
+    'description' => 'Stores historical snapshots of arm state for visualization.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'experiment_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ],
+      'arm_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ],
+      'turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Cumulative turns for this arm at snapshot time.',
+      ],
+      'rewards' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Cumulative rewards for this arm at snapshot time.',
+      ],
+      'total_experiment_turns' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Total experiment turns at snapshot time (x-axis).',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when snapshot was created.',
+      ],
+      'is_milestone' => [
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Whether this is a permanent milestone (1) or recent window (0).',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'experiment_lookup' => ['experiment_id', 'total_experiment_turns'],
+    ],
+  ];
+
+  if (!$schema->tableExists('rl_arm_snapshots')) {
+    $schema->createTable('rl_arm_snapshots', $spec);
+  }
+
+  // Add new config settings.
+  $config = \Drupal::configFactory()->getEditable('rl.settings');
+  if ($config->get('enable_event_log') === NULL) {
+    $config->set('enable_event_log', TRUE);
+  }
+  if ($config->get('event_log_max_rows') === NULL) {
+    $config->set('event_log_max_rows', 100000);
+  }
+  $config->save();
+
+  return t('Created rl_arm_snapshots table and added event log configuration.');
+}
+
+/**
+ * Add chart_line_threshold configuration setting.
+ */
+function rl_update_10002() {
+  $config = \Drupal::configFactory()->getEditable('rl.settings');
+  if ($config->get('chart_line_threshold') === NULL) {
+    $config->set('chart_line_threshold', 10);
+  }
+  $config->save();
+
+  return t('Added chart_line_threshold configuration setting.');
 }
