@@ -195,7 +195,7 @@
 
         // Update tip text if showing subset of variants
         if (lineChartNumArms > maxLineArms) {
-          const tipEl = lineChartEl.parentElement.querySelector('.rl-help-text');
+          const tipEl = lineChartEl.parentElement.querySelector('.rl-chart-tip');
           if (tipEl) {
             tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + maxLineArms + ' active variants out of ' + lineChartNumArms + ' total. Hover for details.';
           }
@@ -346,7 +346,7 @@
             z: 100
           },
           colorbar: {
-            title: { text: 'Conv. Rate', side: 'right', font: { size: config.axisTitleSize } },
+            title: { text: 'Conversion Rate', side: 'right', font: { size: config.axisTitleSize } },
             thickness: config.colorbarThickness,
             len: config.colorbarLen
           }
@@ -371,7 +371,7 @@
         // Update tip text if showing subset of variants
         const totalArmsAll = data.totalArmsAll || landscapeNumArms;
         if (landscapeNumArms < totalArmsAll) {
-          const tipEl = surface3dEl.parentElement.querySelector('.rl-help-text');
+          const tipEl = surface3dEl.parentElement.querySelector('.rl-chart-tip');
           if (tipEl) {
             tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + landscapeNumArms + ' active variants out of ' + totalArmsAll + ' total. Taller/brighter = better conversion rate.';
           }

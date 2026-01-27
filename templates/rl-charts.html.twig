@@ -13,16 +13,15 @@
 #}
 <h3>{{ title }}</h3>
 
-{% if date_filter %}
-  <div class="rl-chart-filters">
-    {{ date_filter }}
-  </div>
-{% endif %}
-
 <div class="rl-chart-row">
   <div class="rl-chart-box">
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
     <div class="rl-chart-area-2d" id="rl-plotly-2d-lines"></div>
-    <div class="rl-help-text">
+    <div class="form-item__description rl-chart-tip">
       <strong>{{ 'Tip:'|t }}</strong> {{ tip_hover }}
     </div>
   </div>
@@ -30,9 +29,14 @@
 
 <div class="rl-chart-row">
   <div class="rl-chart-box">
-    <div class="rl-interaction-hint">{{ interaction_hint }}</div>
+    {% if date_filter %}
+      <div class="rl-chart-filters">
+        {{ date_filter }}
+      </div>
+    {% endif %}
+    <div class="form-item__description rl-chart-tip">{{ interaction_hint }}</div>
     <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
-    <div class="rl-help-text">
+    <div class="form-item__description rl-chart-tip">
       <strong>{{ 'Tip:'|t }}</strong> {{ tip_taller }}
     </div>
   </div>

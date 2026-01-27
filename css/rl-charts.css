@@ -16,11 +16,11 @@
 
 .rl-chart-box {
   flex: 1 1 100%;
-  min-width: 280px;
-  background: #fff;
+  min-width: 0;
+  background: #f8f9fa;
   border: 2px solid #d0d0d0;
   border-radius: 8px;
-  padding: clamp(12px, 2vw, 28px);
+  padding: clamp(8px, 1.5vw, 20px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   position: relative;
 }
@@ -71,30 +71,16 @@
   line-height: 1.5;
 }
 
-.rl-chart-area-2d {
-  min-height: 50vh;
-}
-
+.rl-chart-area-2d,
 .rl-chart-area-3d {
-  height: 70vh;
-  max-height: 800px;
-  aspect-ratio: 4 / 3;
-  max-width: 100%;
+  min-height: 70vh;
+  max-height: 90vh;
+  width: 100%;
 }
 
-.rl-chart-tip,
-.rl-interaction-hint {
+.rl-chart-tip {
   position: relative;
   z-index: 10;
-}
-
-.rl-interaction-hint {
-  color: #666;
-  text-align: center;
-  padding: 0.5em 1em;
-  background: #fff8e1;
-  border-radius: 4px;
-  margin-bottom: 0.75em;
 }
 
 /* Date filter styles */
