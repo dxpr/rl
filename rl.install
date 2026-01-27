@@ -598,7 +598,7 @@ function rl_update_10001() {
   // Add new config settings.
   $config = \Drupal::configFactory()->getEditable('rl.settings');
   if ($config->get('enable_event_log') === NULL) {
-    $config->set('enable_event_log', FALSE);
+    $config->set('enable_event_log', TRUE);
   }
   if ($config->get('event_log_max_rows') === NULL) {
     $config->set('event_log_max_rows', 100000);
