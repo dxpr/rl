@@ -83,6 +83,13 @@
   function initPlotlyCharts(data) {
     const config = getResponsiveConfig();
 
+    // Y-axis metric: 'score' (Bayesian) or 'rate' (raw)
+    const metric = data.metric || 'score';
+    const metricLabel = metric === 'score' ? 'Conversion Score' : 'Conversion Rate';
+    const chartTitle = metric === 'score'
+      ? 'Learning-adjusted Conversion Rate (Conversion Score) Over Time'
+      : 'Conversion Rate Over Time';
+
     const defaultLayout = {
       paper_bgcolor: 'rgba(255,255,255,1)',
       plot_bgcolor: 'rgba(255,255,255,1)',
@@ -94,14 +101,14 @@
     let numArms = 0;
     if (data.lineChartData && data.lineChartData.arms) {
       numArms = data.lineChartData.arms.length;
-    } else if (data.surface3d && data.surface3d.zMatrix) {
-      numArms = data.surface3d.zMatrix.length;
+    } else if (data.surface3d && data.surface3d.zMatrixScore) {
+      numArms = data.surface3d.zMatrixScore.length;
     }
 
     // Chart selection based on arm count (threshold from config or default 10):
     // 1-threshold arms: 2D line chart
     // threshold+1 arms: 3D Posterior Landscape
-    const lineChartThreshold = data.chartLineThreshold || 10;
+    const lineChartThreshold = data.chartLineThreshold || 9;
     const showLineChart = numArms >= 1 && numArms <= lineChartThreshold;
     const showLandscape = numArms > lineChartThreshold;
 
@@ -116,7 +123,7 @@
       surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
     }
 
-    // 1. 2D Line Chart - Conversion Rate Over Time (up to threshold arms)
+    // 1. 2D Line Chart (up to threshold arms)
     if (showLineChart && data.lineChartData && data.lineChartData.arms && data.lineChartData.arms.length > 0 && lineChartEl) {
       try {
         const traces2d = [];
@@ -133,7 +140,8 @@
           const yValues = [];
           arm.data.forEach(function(point) {
             xValues.push(point.x);
-            yValues.push(point.y);
+            // Use score or rate based on metric setting
+            yValues.push(metric === 'score' ? point.score : point.rate);
           });
 
           traces2d.push({
@@ -146,7 +154,7 @@
               color: arm.color,
               width: 2
             },
-            hovertemplate: '<b>' + armLabel + '</b><br>' + xAxisLabel + ': %{x}<br>Rate: %{y:.1f}%<extra></extra>'
+            hovertemplate: '<b>' + armLabel + '</b><br>' + xAxisLabel + ': %{x}<br>' + metricLabel + ': %{y:.1f}%<extra></extra>'
           });
         }
 
@@ -170,12 +178,12 @@
 
         Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
           title: {
-            text: 'Conversion Rate Over Time',
+            text: chartTitle,
             font: { size: config.titleSize }
           },
           xaxis: xAxisConfig,
           yaxis: {
-            title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } },
+            title: { text: metricLabel + ' (%)', font: { size: config.axisTitleSize } },
             tickfont: { size: config.tickSize },
             gridcolor: 'rgba(0,0,0,0.1)',
             rangemode: 'tozero'
@@ -206,15 +214,16 @@
     }
 
     // 2. 3D Posterior Landscape (loss-landscape style) - threshold+1 arms
-    if (showLandscape && data.surface3d && data.surface3d.zMatrix && data.surface3d.zMatrix.length > 0 && surface3dEl) {
+    const zMatrix = metric === 'score' ? data.surface3d.zMatrixScore : data.surface3d.zMatrixRate;
+    if (showLandscape && data.surface3d && zMatrix && zMatrix.length > 0 && surface3dEl) {
       try {
-        const landscapeNumArms = data.surface3d.zMatrix.length;
+        const landscapeNumArms = zMatrix.length;
         const numTimePoints = data.surface3d.xValues.length;
 
-        // Get current (latest) conversion rate for each arm to sort
+        // Get current (latest) value for each arm to sort
         const armRates = [];
         for (let i = 0; i < landscapeNumArms; i++) {
-          const lastRate = data.surface3d.zMatrix[i][numTimePoints - 1] || 0;
+          const lastRate = zMatrix[i][numTimePoints - 1] || 0;
           armRates.push({ index: i, rate: lastRate });
         }
         // Sort by rate ASCENDING (lowest rate = lowest index = front, highest rate = back)
@@ -226,7 +235,7 @@
         const armLabels = data.surface3d.armLabels || [];
         for (let i = 0; i < armRates.length; i++) {
           const origIdx = armRates[i].index;
-          sortedZMatrix.push(data.surface3d.zMatrix[origIdx]);
+          sortedZMatrix.push(zMatrix[origIdx]);
           sortedLabels.push(armLabels[origIdx] || ('Variant #' + origIdx));
         }
 
@@ -245,11 +254,11 @@
 
           for (let ti = 0; ti < numTimePoints; ti++) {
             const xValue = data.surface3d.xValues[ti];
-            const rate = sortedZMatrix[ai][ti];
+            const val = sortedZMatrix[ai][ti];
             // Use custom label if available for time-based axes
             const xDisplay = (data.xLabels && data.xLabels[xValue]) ? data.xLabels[xValue] : xValue;
             // Build complete hover text for each point
-            hoverRow.push('<b>' + fullLabel + '</b><br>' + xAxisLabel3d + ': ' + xDisplay + '<br>Rate: ' + rate.toFixed(1) + '%');
+            hoverRow.push('<b>' + fullLabel + '</b><br>' + xAxisLabel3d + ': ' + xDisplay + '<br>' + metricLabel + ': ' + val.toFixed(1) + '%');
           }
           hoverTextData.push(hoverRow);
         }
@@ -346,17 +355,17 @@
             z: 100
           },
           colorbar: {
-            title: { text: 'Conversion Rate', side: 'right', font: { size: config.axisTitleSize } },
+            title: { text: metricLabel, side: 'right', font: { size: config.axisTitleSize } },
             thickness: config.colorbarThickness,
             len: config.colorbarLen
           }
         }], Object.assign({}, defaultLayout, {
-          title: { text: 'Conversion Rate Over Time', font: { size: config.titleSize } },
+          title: { text: chartTitle, font: { size: config.titleSize } },
           scene: {
             xaxis: xAxis3dConfig,
             yaxis: yAxisConfig,
             zaxis: {
-              title: { text: 'Conversion Rate (%)', font: { size: config.axisTitleSize } },
+              title: { text: metricLabel + ' (%)', font: { size: config.axisTitleSize } },
               tickfont: { size: config.tickSize }
             },
             camera: {
@@ -373,7 +382,7 @@
         if (landscapeNumArms < totalArmsAll) {
           const tipEl = surface3dEl.parentElement.querySelector('.rl-chart-tip');
           if (tipEl) {
-            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + landscapeNumArms + ' active variants out of ' + totalArmsAll + ' total. Taller/brighter = better conversion rate.';
+            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + landscapeNumArms + ' active variants out of ' + totalArmsAll + ' total. Taller/brighter = better ' + metricLabel.toLowerCase() + '.';
           }
         }
       } catch (e) {
