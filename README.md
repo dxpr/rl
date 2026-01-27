@@ -38,6 +38,26 @@ composer require drupal/rl
 drush en rl
 ```
 
+### Plotly.js Library (Required for Charts)
+
+The RL module uses Plotly.js for experiment charts. Install it via Composer using
+[Asset Packagist](https://asset-packagist.org):
+
+```bash
+# Add Asset Packagist repository (if not already configured)
+composer config repositories.asset-packagist composer https://asset-packagist.org
+
+# Install the Composer plugin for npm assets (if not already installed)
+composer require oomphinc/composer-installers-extender
+composer config extra.installer-types --json '["npm-asset"]'
+composer config extra.installer-paths.web/libraries/\{\$name\} --json '["type:npm-asset"]'
+
+# Install Plotly.js
+composer require npm-asset/plotly.js-dist-min:^2.35
+```
+
+This installs the library to `web/libraries/plotly.js-dist-min/`.
+
 ### Post-Installation: Verify rl.php Access
 
 The RL module includes a `.htaccess` file that allows direct access to

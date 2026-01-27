@@ -243,6 +243,15 @@ class ReportsController extends ControllerBase {
    *   A render array.
    */
   public function experimentDetail($experiment_id) {
+    // Check if Plotly.js library is installed.
+    $library_finder = \Drupal::service('library.libraries_directory_file_finder');
+    if (!$library_finder->find('plotly.js-dist-min/plotly.min.js')) {
+      $status_url = Url::fromRoute('system.status')->toString();
+      $this->messenger()->addWarning($this->t('Charts require the Plotly.js library. See <a href="@url">Status report</a> for installation instructions.', [
+        '@url' => $status_url,
+      ]));
+    }
+
     // Get experiment totals from storage.
     $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
 

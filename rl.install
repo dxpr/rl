@@ -435,8 +435,8 @@ function rl_requirements($phase) {
 
   if ($phase == 'runtime') {
     // Check if Plotly.js library is installed.
-    $plotly_path = DRUPAL_ROOT . '/libraries/plotly.js-dist-min/plotly.min.js';
-    if (!file_exists($plotly_path)) {
+    $library_finder = \Drupal::service('library.libraries_directory_file_finder');
+    if (!$library_finder->find('plotly.js-dist-min/plotly.min.js')) {
       $requirements['rl_plotly_library'] = [
         'title' => t('RL: Plotly.js library'),
         'severity' => REQUIREMENT_ERROR,
