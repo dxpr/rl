@@ -53,7 +53,7 @@ class RlSettingsForm extends ConfigFormBase {
     $form['event_log']['event_log_max_rows'] = [
       '#type' => 'number',
       '#title' => $this->t('Maximum event log rows'),
-      '#description' => $this->t('Maximum total rows in the event log table. Older non-milestone entries are deleted during cron to stay within this limit.'),
+      '#description' => $this->t('Maximum rows in rl_arm_snapshots. Cron deletes non-milestone rows when over limit. Preserved: early trials (40% of per-arm budget, permanent), recent trials (40%, rotating), and periodic milestone samples at adaptive intervals.'),
       '#default_value' => $config->get('event_log_max_rows') ?? 100000,
       '#min' => 1000,
       '#max' => 10000000,
