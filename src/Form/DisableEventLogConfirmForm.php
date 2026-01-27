@@ -50,7 +50,6 @@ class DisableEventLogConfirmForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getQuestion() {
-    $count = $this->snapshotStorage->getCount();
     return $this->t('Are you sure you want to disable event logging?');
   }
 
