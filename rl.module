@@ -41,6 +41,27 @@ function rl_theme() {
 }
 
 /**
+ * Implements hook_page_attachments().
+ */
+function rl_page_attachments(array &$attachments) {
+  // Attach experiment highlight styles for users who can view RL reports.
+  if (\Drupal::currentUser()->hasPermission('view rl reports')) {
+    $attachments['#attached']['library'][] = 'rl/experiment-highlight';
+  }
+}
+
+/**
+ * Implements hook_preprocess_html().
+ */
+function rl_preprocess_html(&$variables) {
+  // Add body class on RL admin pages for styling.
+  $route_name = \Drupal::routeMatch()->getRouteName();
+  if ($route_name && str_starts_with($route_name, 'rl.')) {
+    $variables['attributes']['class'][] = 'rl-admin-page';
+  }
+}
+
+/**
  * Implements hook_help().
  */
 function rl_help($route_name, RouteMatchInterface $route_match) {

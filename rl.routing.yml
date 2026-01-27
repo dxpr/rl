@@ -50,7 +50,7 @@ rl.reports.experiment_detail:
   path: '/admin/reports/rl/experiment/{experiment_id}'
   defaults:
     _controller: '\Drupal\rl\Controller\ReportsController::experimentDetail'
-    _title: 'Experiment Detail'
+    _title_callback: '\Drupal\rl\Controller\ReportsController::experimentDetailTitle'
   requirements:
     _permission: 'view rl reports'
     experiment_id: '.+'
