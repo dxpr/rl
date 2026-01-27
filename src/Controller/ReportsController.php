@@ -275,8 +275,21 @@ class ReportsController extends ControllerBase {
       $build['charts'] = $this->buildCharts($experiment_id, $snapshots, $arms, $time_axis, $date_filter);
     }
     else {
+      // Show appropriate message based on whether event logging is enabled.
+      if ($this->snapshotStorage->isEnabled()) {
+        $message = $this->t('No data yet. Charts appear after the experiment receives traffic.');
+      }
+      elseif ($this->currentUser()->hasPermission('administer site configuration')) {
+        $settings_url = Url::fromRoute('rl.settings')->toString();
+        $message = $this->t('Event logging is disabled. Enable it in <a href="@url">Reinforcement Learning settings</a> to see historical charts.', [
+          '@url' => $settings_url,
+        ]);
+      }
+      else {
+        $message = $this->t('Historical charts are not available for this experiment.');
+      }
       $build['no_charts'] = [
-        '#markup' => '<p><em>' . $this->t('No data yet. Charts appear after the experiment receives traffic.') . '</em></p>',
+        '#markup' => '<p><em>' . $message . '</em></p>',
       ];
     }
 

@@ -352,4 +352,21 @@ class SnapshotStorage implements SnapshotStorageInterface {
     return (int) $count ?: 1;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteAll(): int {
+    return (int) $this->database->truncate('rl_arm_snapshots')->execute();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCount(): int {
+    return (int) $this->database->select('rl_arm_snapshots', 's')
+      ->countQuery()
+      ->execute()
+      ->fetchField();
+  }
+
 }

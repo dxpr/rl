@@ -65,4 +65,20 @@ interface SnapshotStorageInterface {
    */
   public function cleanup(): int;
 
+  /**
+   * Delete all snapshots.
+   *
+   * @return int
+   *   Number of rows deleted.
+   */
+  public function deleteAll(): int;
+
+  /**
+   * Get the total count of snapshots.
+   *
+   * @return int
+   *   Total number of snapshot rows.
+   */
+  public function getCount(): int;
+
 }

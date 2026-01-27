@@ -4,6 +4,7 @@ namespace Drupal\rl\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 
 /**
  * Configure RL module settings.
@@ -86,9 +87,20 @@ class RlSettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
+    $config = $this->config('rl.settings');
+    $was_enabled = $config->get('enable_event_log') ?? FALSE;
+    $is_enabled = (bool) $form_state->getValue('enable_event_log');
+
+    // If disabling event log, redirect to confirmation form.
+    if ($was_enabled && !$is_enabled) {
+      $form_state->setRedirectUrl(Url::fromRoute('rl.settings.disable_event_log'));
+      return;
+    }
+
+    // Save all settings normally.
     $this->config('rl.settings')
       ->set('debug_mode', $form_state->getValue('debug_mode'))
-      ->set('enable_event_log', $form_state->getValue('enable_event_log'))
+      ->set('enable_event_log', $is_enabled)
       ->set('event_log_max_rows', (int) $form_state->getValue('event_log_max_rows'))
       ->set('chart_line_threshold', (int) $form_state->getValue('chart_line_threshold'))
       ->save();

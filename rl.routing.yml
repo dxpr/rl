@@ -88,3 +88,11 @@ rl.settings:
     _title: 'Reinforcement Learning'
   requirements:
     _permission: 'administer site configuration'
+
+rl.settings.disable_event_log:
+  path: '/admin/config/services/reinforcement-learning/disable-event-log'
+  defaults:
+    _form: '\Drupal\rl\Form\DisableEventLogConfirmForm'
+    _title: 'Disable Event Log'
+  requirements:
+    _permission: 'administer site configuration'
