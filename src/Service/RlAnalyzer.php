@@ -299,9 +299,6 @@ class RlAnalyzer implements RlAnalyzerInterface {
       $trendDirection = 'declining';
     }
 
-    $firstRate = $data[0]['rate'];
-    $lastRate = end($data)['rate'];
-
     return [
       'experiment_id' => $experimentId,
       'period' => $period,
@@ -309,10 +306,10 @@ class RlAnalyzer implements RlAnalyzerInterface {
       'data' => $data,
       'analysis' => [
         'trend_direction' => $trendDirection,
-        'first_period_rate' => $firstRate,
-        'last_period_rate' => $lastRate,
+        'first_period_rate' => $data[0]['rate'] ?? 0,
+        'last_period_rate' => end($data)['rate'] ?? 0,
         'overall_change_pct' => count($data) >= 2
-          ? round(($lastRate - $firstRate) * 100 / max(0.01, $firstRate), 1)
+          ? round((end($data)['rate'] - $data[0]['rate']) * 100 / max(0.01, $data[0]['rate']), 1)
           : 0,
       ],
     ];
@@ -674,6 +671,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
     $p = $conversions / $impressions;
     $z = 1.96;
     $denominator = 1 + $z * $z / $impressions;
+    $center = ($p + $z * $z / (2 * $impressions)) / $denominator;
     $spread = $z * sqrt(($p * (1 - $p) + $z * $z / (4 * $impressions)) / $impressions) / $denominator;
 
     // Narrower interval = higher confidence.
