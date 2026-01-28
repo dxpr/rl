@@ -3,7 +3,6 @@
 namespace Drupal\rl\Service;
 
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
-use Drupal\rl\Service\ThompsonCalculator;
 
 /**
  * Service for managing reinforcement learning experiments.

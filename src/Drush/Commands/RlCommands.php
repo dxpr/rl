@@ -77,6 +77,8 @@ final class RlCommands extends DrushCommands {
    *
    * @param string $experimentId
    *   The experiment ID (e.g., 'ab_test_button_color').
+   * @param array $options
+   *   Command options including format.
    *
    * @return array
    *   Detailed experiment status.
@@ -126,7 +128,10 @@ final class RlCommands extends DrushCommands {
     'vs_average' => 'vs Avg',
     'confidence' => 'Confidence',
   ])]
-  #[CLI\DefaultFields(fields: ['label', 'impressions', 'conversions', 'conversion_rate', 'traffic_share_pct', 'vs_average'])]
+  #[CLI\DefaultFields(fields: [
+    'label', 'impressions', 'conversions',
+    'conversion_rate', 'traffic_share_pct', 'vs_average',
+  ])]
   #[CLI\Usage(name: 'drush rl:performance mock_10_arm_test', description: 'Get arm performance')]
   #[CLI\Usage(name: 'drush rl:perf ai_sorting-help_center_categories-block_1 --limit=10 --format=json', description: 'Get top 10 performers as JSON')]
   #[CLI\Usage(name: 'drush rl:perf ab_test_headline_variants --sort=impressions', description: 'Sort by traffic volume')]
@@ -228,6 +233,8 @@ final class RlCommands extends DrushCommands {
    *
    * @param string $experimentId
    *   The experiment ID.
+   * @param array $options
+   *   Command options including format.
    *
    * @return array
    *   Full analysis data.
