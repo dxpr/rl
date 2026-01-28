@@ -40,3 +40,7 @@ services:
     class: Drupal\rl\EventSubscriber\CacheResponseSubscriber
     tags:
       - { name: event_subscriber }
+
+  rl.analyzer:
+    class: Drupal\rl\Service\RlAnalyzer
+    arguments: ['@database', '@entity_type.manager']
