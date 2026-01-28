@@ -47,7 +47,7 @@ interface RlAnalyzerInterface {
    *   - distribution: Traffic allocation info
    *   - value_generated: Comparison vs equal distribution
    *
-   * @throws \InvalidArgumentException
+   * @throws \Drupal\rl\Exception\ExperimentNotFoundException
    *   If experiment not found.
    */
   public function getStatus(string $experimentId): array;
@@ -68,7 +68,7 @@ interface RlAnalyzerInterface {
    *   - arms: Array of arm data with labels, stats, and insights
    *   - summary: Aggregate insights about top/bottom performers
    *
-   * @throws \InvalidArgumentException
+   * @throws \Drupal\rl\Exception\ExperimentNotFoundException
    *   If experiment not found.
    */
   public function getPerformance(string $experimentId, int $limit = 20, string $sortBy = 'rate'): array;
@@ -90,7 +90,7 @@ interface RlAnalyzerInterface {
    *   - data: Array of period data with impressions, conversions, rates
    *   - analysis: Trend analysis (direction, anomalies)
    *
-   * @throws \InvalidArgumentException
+   * @throws \Drupal\rl\Exception\ExperimentNotFoundException
    *   If experiment not found.
    */
   public function getTrends(string $experimentId, string $period = 'weekly', int $periods = 8): array;
@@ -107,7 +107,7 @@ interface RlAnalyzerInterface {
    *   Complete experiment data including all arms, metadata, and optionally
    *   historical snapshots.
    *
-   * @throws \InvalidArgumentException
+   * @throws \Drupal\rl\Exception\ExperimentNotFoundException
    *   If experiment not found.
    */
   public function export(string $experimentId, bool $includeSnapshots = FALSE): array;

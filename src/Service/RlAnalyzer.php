@@ -6,6 +6,7 @@ namespace Drupal\rl\Service;
 
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\rl\Exception\ExperimentNotFoundException;
 
 /**
  * Service for analyzing RL experiment data.
@@ -14,6 +15,13 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
  * with human-readable labels and pre-computed analytics.
  */
 class RlAnalyzer implements RlAnalyzerInterface {
+
+  /**
+   * Cache of resolved arm labels to avoid repeated entity loads.
+   *
+   * @var array
+   */
+  protected array $armLabelCache = [];
 
   /**
    * Constructs a new RlAnalyzer.
@@ -156,6 +164,9 @@ class RlAnalyzer implements RlAnalyzerInterface {
     $totalConversions = array_sum(array_column($arms, 'rewards'));
     $avgRate = $totalImpressions > 0 ? $totalConversions / $totalImpressions : 0;
 
+    // Batch-load node entities for arm labels to avoid N+1 queries.
+    $this->preloadArmLabels($arms, $experimentId);
+
     // Enrich arm data with labels and computed fields.
     $enrichedArms = [];
     foreach ($arms as $arm) {
@@ -226,39 +237,36 @@ class RlAnalyzer implements RlAnalyzerInterface {
   public function getTrends(string $experimentId, string $period = 'weekly', int $periods = 8): array {
     $this->getExperimentOrFail($experimentId);
 
-    // Determine date grouping format.
-    $dateFormat = match ($period) {
-      'daily' => '%Y-%m-%d',
-      'monthly' => '%Y-%m',
-      default => '%Y-%u',
-    };
-
-    // Query snapshots for trend data.
+    // Query snapshots for trend data using database-agnostic approach.
+    // We fetch raw data and group in PHP for database compatibility.
     $query = $this->database->select('rl_arm_snapshots', 's');
     $query->condition('s.experiment_id', $experimentId);
-    $query->addExpression("DATE_FORMAT(FROM_UNIXTIME(s.created), '{$dateFormat}')", 'period_key');
-    $query->addExpression('SUM(s.turns)', 'impressions');
-    $query->addExpression('SUM(s.rewards)', 'conversions');
-    $query->addExpression('MAX(s.created)', 'period_end');
-    $query->groupBy('period_key');
-    $query->orderBy('period_key', 'DESC');
-    $query->range(0, $periods);
+    $query->fields('s', ['turns', 'rewards', 'created']);
+    $query->orderBy('s.created', 'DESC');
+    // Fetch more rows than needed since we'll aggregate them.
+    $query->range(0, $periods * 100);
 
-    $results = $query->execute()->fetchAll();
+    $rawResults = $query->execute()->fetchAll();
 
-    if (empty($results)) {
+    if (empty($rawResults)) {
       // Fall back to current arm data if no snapshots.
       return $this->getTrendsFallback($experimentId, $period, $periods);
     }
 
-    // Reverse to chronological order.
-    $results = array_reverse($results);
+    // Group results by period in PHP for database compatibility.
+    $periodData = $this->groupSnapshotsByPeriod($rawResults, $period, $periods);
 
+    if (empty($periodData)) {
+      // Fall back to current arm data if no snapshots.
+      return $this->getTrendsFallback($experimentId, $period, $periods);
+    }
+
+    // Build trend data array.
     $data = [];
     $prevRate = NULL;
-    foreach ($results as $row) {
-      $impressions = (int) $row->impressions;
-      $conversions = (int) $row->conversions;
+    foreach ($periodData as $periodKey => $periodInfo) {
+      $impressions = (int) $periodInfo['impressions'];
+      $conversions = (int) $periodInfo['conversions'];
       $rate = $impressions > 0 ? round($conversions * 100 / $impressions, 2) : 0;
 
       $change = $prevRate !== NULL && $prevRate > 0
@@ -266,7 +274,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
         : NULL;
 
       $data[] = [
-        'period' => $row->period_key,
+        'period' => $periodKey,
         'impressions' => $impressions,
         'conversions' => $conversions,
         'rate' => $rate,
@@ -313,6 +321,9 @@ class RlAnalyzer implements RlAnalyzerInterface {
   public function export(string $experimentId, bool $includeSnapshots = FALSE): array {
     $experiment = $this->getExperimentOrFail($experimentId);
     $arms = $this->getArmsData($experimentId);
+
+    // Batch-load node entities for arm labels to avoid N+1 queries.
+    $this->preloadArmLabels($arms, $experimentId);
 
     $export = [
       'experiment' => [
@@ -362,7 +373,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
    * @return object
    *   The experiment record.
    *
-   * @throws \InvalidArgumentException
+   * @throws \Drupal\rl\Exception\ExperimentNotFoundException
    *   If experiment not found.
    */
   protected function getExperimentOrFail(string $experimentId): object {
@@ -373,7 +384,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
       ->fetchObject();
 
     if (!$experiment) {
-      throw new \InvalidArgumentException("Experiment '{$experimentId}' not found.");
+      throw new ExperimentNotFoundException($experimentId);
     }
 
     return $experiment;
@@ -428,23 +439,80 @@ class RlAnalyzer implements RlAnalyzerInterface {
   }
 
   /**
+   * Preloads arm labels by batch-loading node entities.
+   *
+   * This method batch-loads all node entities for numeric arm IDs to avoid
+   * N+1 queries when resolving labels individually.
+   *
+   * @param array $arms
+   *   Array of arm data from getArmsData().
+   * @param string $experimentId
+   *   The experiment ID for cache keying.
+   */
+  protected function preloadArmLabels(array $arms, string $experimentId): void {
+    // Collect numeric arm IDs that aren't already cached.
+    $nodeIds = [];
+    foreach ($arms as $arm) {
+      $cacheKey = $experimentId . ':' . $arm['arm_id'];
+      if (!isset($this->armLabelCache[$cacheKey]) && is_numeric($arm['arm_id'])) {
+        $nodeIds[] = (int) $arm['arm_id'];
+      }
+    }
+
+    if (empty($nodeIds)) {
+      return;
+    }
+
+    // Batch-load all nodes at once.
+    try {
+      $nodes = $this->entityTypeManager->getStorage('node')->loadMultiple($nodeIds);
+      foreach ($nodes as $nodeId => $node) {
+        // Find matching arm(s) and cache the label.
+        foreach ($arms as $arm) {
+          if ((int) $arm['arm_id'] === $nodeId) {
+            $cacheKey = $experimentId . ':' . $arm['arm_id'];
+            $this->armLabelCache[$cacheKey] = $node->label();
+          }
+        }
+      }
+    }
+    catch (\Exception $e) {
+      // If batch load fails, individual lookups will return arm_id.
+    }
+  }
+
+  /**
    * Resolves an arm ID to a human-readable label.
+   *
+   * Currently only supports node entities. For numeric arm IDs, attempts to
+   * load the node and return its title. For non-numeric or non-node arm IDs,
+   * returns the original arm ID.
    *
    * @param string $armId
    *   The arm ID.
    * @param string $experimentId
-   *   The experiment ID (for context).
+   *   The experiment ID (for cache keying).
    *
    * @return string
-   *   Human-readable label or the original arm ID.
+   *   Human-readable label (node title) or the original arm ID.
    */
   protected function resolveArmLabel(string $armId, string $experimentId): string {
+    $cacheKey = $experimentId . ':' . $armId;
+
+    // Return cached label if available.
+    if (isset($this->armLabelCache[$cacheKey])) {
+      return $this->armLabelCache[$cacheKey];
+    }
+
     // If arm_id is numeric, try to resolve as node title.
+    // Note: Only node entities are currently supported.
     if (is_numeric($armId)) {
       try {
         $node = $this->entityTypeManager->getStorage('node')->load((int) $armId);
         if ($node) {
-          return $node->label();
+          $label = $node->label();
+          $this->armLabelCache[$cacheKey] = $label;
+          return $label;
         }
       }
       catch (\Exception $e) {
@@ -453,6 +521,55 @@ class RlAnalyzer implements RlAnalyzerInterface {
     }
 
     return $armId;
+  }
+
+  /**
+   * Groups snapshot data by time period.
+   *
+   * This method provides database-agnostic date grouping by processing
+   * raw snapshot data in PHP instead of using MySQL-specific DATE_FORMAT.
+   *
+   * @param array $rawResults
+   *   Raw snapshot results with turns, rewards, created fields.
+   * @param string $period
+   *   Period type: 'daily', 'weekly', or 'monthly'.
+   * @param int $maxPeriods
+   *   Maximum number of periods to return.
+   *
+   * @return array
+   *   Associative array keyed by period string with aggregated data.
+   */
+  protected function groupSnapshotsByPeriod(array $rawResults, string $period, int $maxPeriods): array {
+    $grouped = [];
+
+    foreach ($rawResults as $row) {
+      $timestamp = (int) $row->created;
+
+      // Generate period key based on period type.
+      $periodKey = match ($period) {
+        'daily' => date('Y-m-d', $timestamp),
+        'monthly' => date('Y-m', $timestamp),
+        default => date('Y', $timestamp) . '-W' . date('W', $timestamp),
+      };
+
+      if (!isset($grouped[$periodKey])) {
+        $grouped[$periodKey] = [
+          'impressions' => 0,
+          'conversions' => 0,
+          'period_end' => $timestamp,
+        ];
+      }
+
+      $grouped[$periodKey]['impressions'] += (int) $row->turns;
+      $grouped[$periodKey]['conversions'] += (int) $row->rewards;
+      $grouped[$periodKey]['period_end'] = max($grouped[$periodKey]['period_end'], $timestamp);
+    }
+
+    // Sort by period key and limit.
+    ksort($grouped);
+    $grouped = array_slice($grouped, -$maxPeriods, $maxPeriods, TRUE);
+
+    return $grouped;
   }
 
   /**
