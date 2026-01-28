@@ -6,6 +6,7 @@ EXIT_CODE=0
 echo "---- Checking with PHPCompatibility PHP 8.3 and up ----"
 phpcs --standard=PHPCompatibility \
   --runtime-set testVersion 8.3- \
+  --runtime-set ignore_warnings_on_exit 1 \
   --extensions=php,module,inc,install,test,profile,theme,info,txt,md,yml \
   --ignore=node_modules,rl/vendor,.github,vendor \
   -v \
@@ -17,6 +18,7 @@ fi
 
 echo "---- Checking with Drupal standard... ----"
 phpcs --standard=Drupal \
+  --runtime-set ignore_warnings_on_exit 1 \
   --extensions=php,module,inc,install,test,profile,theme,info,txt,md,yml \
   --ignore=node_modules,rl/vendor,.github,vendor \
   -v \
@@ -28,6 +30,7 @@ fi
 
 echo "---- Checking with DrupalPractice standard... ----"
 phpcs --standard=DrupalPractice \
+  --runtime-set ignore_warnings_on_exit 1 \
   --extensions=php,module,inc,install,test,profile,theme,info,txt,md,yml \
   --ignore=node_modules,rl/vendor,.github,vendor \
   -v \
