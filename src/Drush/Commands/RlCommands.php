@@ -89,7 +89,13 @@ final class RlCommands extends DrushCommands {
   #[CLI\Usage(name: 'drush rl:status ab_test_button_color', description: 'Get status of button color test')]
   #[CLI\Usage(name: 'drush rl:status ai_sorting-help_center_categories-block_1 --format=json', description: 'Get detailed status as JSON')]
   public function status(string $experimentId, array $options = ['format' => 'yaml']): array {
-    return $this->analyzer->getStatus($experimentId);
+    try {
+      return $this->analyzer->getStatus($experimentId);
+    }
+    catch (\InvalidArgumentException $e) {
+      $this->logger()->error($e->getMessage());
+      throw $e;
+    }
   }
 
   /**
@@ -130,12 +136,18 @@ final class RlCommands extends DrushCommands {
   #[CLI\Usage(name: 'drush rl:perf ai_sorting-help_center_categories-block_1 --limit=10 --format=json', description: 'Get top 10 performers as JSON')]
   #[CLI\Usage(name: 'drush rl:perf ab_test_headline_variants --sort=impressions', description: 'Sort by traffic volume')]
   public function performance(string $experimentId, array $options = ['limit' => 20, 'sort' => 'rate']): RowsOfFields {
-    $data = $this->analyzer->getPerformance(
-      $experimentId,
-      (int) $options['limit'],
-      $options['sort']
-    );
-    return new RowsOfFields($data['arms']);
+    try {
+      $data = $this->analyzer->getPerformance(
+        $experimentId,
+        (int) $options['limit'],
+        $options['sort']
+      );
+      return new RowsOfFields($data['arms']);
+    }
+    catch (\InvalidArgumentException $e) {
+      $this->logger()->error($e->getMessage());
+      throw $e;
+    }
   }
 
   /**
@@ -166,12 +178,18 @@ final class RlCommands extends DrushCommands {
   #[CLI\Usage(name: 'drush rl:trends ab_test_headline_variants', description: 'Get weekly trends')]
   #[CLI\Usage(name: 'drush rl:trends mock_10_arm_test --period=daily --periods=14 --format=json', description: 'Get 14 days of daily data')]
   public function trends(string $experimentId, array $options = ['period' => 'weekly', 'periods' => 8]): RowsOfFields {
-    $data = $this->analyzer->getTrends(
-      $experimentId,
-      $options['period'],
-      (int) $options['periods']
-    );
-    return new RowsOfFields($data['data']);
+    try {
+      $data = $this->analyzer->getTrends(
+        $experimentId,
+        $options['period'],
+        (int) $options['periods']
+      );
+      return new RowsOfFields($data['data']);
+    }
+    catch (\InvalidArgumentException $e) {
+      $this->logger()->error($e->getMessage());
+      throw $e;
+    }
   }
 
   /**
@@ -195,10 +213,16 @@ final class RlCommands extends DrushCommands {
   #[CLI\Usage(name: 'drush rl:export ab_test_button_color', description: 'Export experiment data as JSON')]
   #[CLI\Usage(name: 'drush rl:export mock_10_arm_test --snapshots > export.json', description: 'Export with snapshots to file')]
   public function export(string $experimentId, array $options = ['snapshots' => FALSE, 'format' => 'json']): array {
-    return $this->analyzer->export(
-      $experimentId,
-      (bool) $options['snapshots']
-    );
+    try {
+      return $this->analyzer->export(
+        $experimentId,
+        (bool) $options['snapshots']
+      );
+    }
+    catch (\InvalidArgumentException $e) {
+      $this->logger()->error($e->getMessage());
+      throw $e;
+    }
   }
 
   /**
@@ -221,18 +245,24 @@ final class RlCommands extends DrushCommands {
   #[CLI\Usage(name: 'drush rl:analyze ab_test_button_color', description: 'Get full analysis with recommendations')]
   #[CLI\Usage(name: 'drush rl:analyze mock_10_arm_test --format=json', description: 'Get analysis as JSON')]
   public function analyze(string $experimentId, array $options = ['format' => 'yaml']): array {
-    $status = $this->analyzer->getStatus($experimentId);
-    $performance = $this->analyzer->getPerformance($experimentId, 10);
+    try {
+      $status = $this->analyzer->getStatus($experimentId);
+      $performance = $this->analyzer->getPerformance($experimentId, 10);
 
-    return [
-      'experiment' => $status['experiment'],
-      'status' => $status['status'],
-      'summary' => $status['summary'],
-      'value_generated' => $status['value_generated'],
-      'top_performers' => array_slice($performance['arms'], 0, 5),
-      'insights' => $performance['insights'],
-      'recommendation' => $this->generateRecommendation($status, $performance),
-    ];
+      return [
+        'experiment' => $status['experiment'],
+        'status' => $status['status'],
+        'summary' => $status['summary'],
+        'value_generated' => $status['value_generated'],
+        'top_performers' => array_slice($performance['arms'], 0, 5),
+        'insights' => $performance['insights'],
+        'recommendation' => $this->generateRecommendation($status, $performance),
+      ];
+    }
+    catch (\InvalidArgumentException $e) {
+      $this->logger()->error($e->getMessage());
+      throw $e;
+    }
   }
 
   /**
