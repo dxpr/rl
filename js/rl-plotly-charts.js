@@ -269,10 +269,14 @@
           tickfont: { size: config.tickSize }
         };
 
-        // Show arm labels on Y-axis for small number of arms
-        if (landscapeNumArms <= lineChartThreshold) {
+        // Show arm labels on Y-axis when 15 or fewer variants for readability
+        // Use shorter labels for 3D axis (max 25 chars) to ensure proper alignment
+        if (landscapeNumArms <= 15) {
+          const shortLabels = sortedLabels.map(function(label) {
+            return truncateLabel(label, 25);
+          });
           yAxisConfig.tickvals = armIndices;
-          yAxisConfig.ticktext = truncatedLabels;
+          yAxisConfig.ticktext = shortLabels;
           yAxisConfig.tickangle = 0;
         }
 
