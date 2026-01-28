@@ -101,6 +101,38 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
 <li><code>GET /rl/experiment/{uuid}/scores</code> - Get scores</li>
 </ul>
 
+<h3>Analytics API &amp; Drush Commands</h3>
+
+<p>The RL module provides an analytics service for accessing experiment insights. Use it via Drush or inject it into other modules.</p>
+
+<h4>Drush Commands</h4>
+<pre><code># List all experiments
+drush rl:list --format=json
+
+# Get detailed experiment status
+drush rl:status my_experiment --format=yaml
+
+# Get arm performance with human-readable labels
+drush rl:performance my_experiment --limit=10
+
+# Full analysis with AI-friendly recommendations
+drush rl:analyze my_experiment --format=json</code></pre>
+
+<h4>Service API for Other Modules</h4>
+<pre><code>// Get the analyzer service
+$analyzer = \Drupal::service('rl.analyzer');
+
+// List experiments with summary stats
+$experiments = $analyzer->listExperiments();
+
+// Get performance with resolved entity labels
+$performance = $analyzer->getPerformance('my_experiment', limit: 20);
+
+// Get status with confidence and recommendations
+$status = $analyzer->getStatus('my_experiment');</code></pre>
+
+<p>The analytics API resolves entity IDs to human-readable labels, pre-computes insights like "vs average" comparisons, and provides actionable recommendations—ideal for AI tools and integrations.</p>
+
 <p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>
 
 <h3>Resources</h3>

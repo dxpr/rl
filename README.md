@@ -94,6 +94,66 @@ navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 Full algorithm details available in source code:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php)
 
+## Analytics API
+
+The RL module provides an analytics service (`rl.analyzer`) for accessing experiment performance data, insights, and recommendations. This service can be used by Drush commands, other modules, or custom code.
+
+### Drush Commands
+
+```bash
+# List all experiments
+drush rl:list
+drush rl:list --format=json
+
+# Get detailed experiment status
+drush rl:status ab_test_button_color --format=yaml
+
+# Get arm performance with human-readable labels
+drush rl:performance ai_sorting-help_center_categories-block_1 --limit=10
+
+# Get historical trends
+drush rl:trends ab_test_headline_variants --period=weekly --periods=8
+
+# Full analysis with recommendations (AI-optimized)
+drush rl:analyze mock_10_arm_test --format=json
+
+# Export complete experiment data
+drush rl:export my_experiment --snapshots --format=json
+```
+
+### Service API for Other Modules
+
+```php
+// Get the analyzer service
+$analyzer = \Drupal::service('rl.analyzer');
+
+// List all experiments with summary stats
+$experiments = $analyzer->listExperiments();
+
+// Get detailed status for an experiment
+$status = $analyzer->getStatus('my_experiment');
+// Returns: phase, confidence, value generated vs equal distribution
+
+// Get arm performance with resolved labels
+$performance = $analyzer->getPerformance('my_experiment', limit: 20);
+// Returns: arms with labels, rates, vs_average, confidence
+
+// Get historical trends
+$trends = $analyzer->getTrends('my_experiment', 'weekly', 8);
+// Returns: period data with trend analysis
+
+// Full export for deep analysis
+$export = $analyzer->export('my_experiment', includeSnapshots: true);
+```
+
+### AI Integration
+
+The Drush commands are designed for AI tool consumption:
+- Human-readable labels (entity IDs resolved to titles)
+- Pre-computed insights (vs_average, confidence levels)
+- Actionable recommendations
+- JSON/YAML output formats
+
 ## Resources
 
 - [Multi-Armed Bandit Problem](https://en.wikipedia.org/wiki/Multi-armed_bandit) - Wikipedia overview
