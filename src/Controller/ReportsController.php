@@ -281,11 +281,25 @@ class ReportsController extends ControllerBase {
     $start_date = $request ? $request->query->get('start') : NULL;
     $end_date = $request ? $request->query->get('end') : NULL;
     $time_axis = $request ? $request->query->get('axis', 'trials') : 'trials';
+    $metric = $request ? $request->query->get('metric', 'score') : 'score';
+    $limit = (int) ($request ? $request->query->get('limit', 100) : 100);
 
     // Validate time axis value.
     $valid_axes = ['trials', 'daily', 'weekly', 'monthly', 'quarterly'];
     if (!in_array($time_axis, $valid_axes)) {
       $time_axis = 'trials';
+    }
+
+    // Validate metric value.
+    $valid_metrics = ['score', 'rate'];
+    if (!in_array($metric, $valid_metrics)) {
+      $metric = 'score';
+    }
+
+    // Validate limit value.
+    $valid_limits = [5, 10, 25, 50, 75, 100];
+    if (!in_array($limit, $valid_limits)) {
+      $limit = 100;
     }
 
     // Calculate date range from preset if provided.
@@ -297,7 +311,7 @@ class ReportsController extends ControllerBase {
     // Build date filter form for charts.
     $date_filter = NULL;
     if (!empty($available_range)) {
-      $date_filter = $this->buildDateFilterForm($experiment_id, $date_range, $available_range, $preset, $time_axis);
+      $date_filter = $this->buildDateFilterForm($experiment_id, $date_range, $available_range, $preset, $time_axis, $metric, $limit);
     }
 
     // Add charts if we have snapshot data.
@@ -307,7 +321,7 @@ class ReportsController extends ControllerBase {
       $date_range['end'] ?? NULL
     );
     if (!empty($snapshots)) {
-      $build['charts'] = $this->buildCharts($experiment_id, $snapshots, $arms, $time_axis, $date_filter);
+      $build['charts'] = $this->buildCharts($experiment_id, $snapshots, $arms, $time_axis, $date_filter, $metric, $limit);
     }
     else {
       // Show appropriate message based on whether event logging is enabled.
@@ -333,7 +347,8 @@ class ReportsController extends ControllerBase {
       ['data' => $this->t('Variant'), 'field' => 'arm_id'],
       ['data' => $this->t('Impressions'), 'field' => 'turns'],
       ['data' => $this->t('Conversions'), 'field' => 'rewards'],
-      ['data' => $this->t('Rate'), 'field' => 'success_rate', 'sort' => 'desc'],
+      ['data' => $this->t('Conversion Rate'), 'field' => 'conversion_rate', 'sort' => 'desc'],
+      ['data' => $this->t('Conversion Score'), 'field' => 'conversion_score'],
     ];
 
     // Build row data with sortable values.
@@ -342,7 +357,13 @@ class ReportsController extends ControllerBase {
       // Validate and sanitize arm data.
       $arm = $this->armDataValidator->validateAndSanitize($arm, $experiment_id, $arm->arm_id);
 
-      $success_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
+      // Raw conversion rate.
+      $conversion_rate = $arm->turns > 0 ? ($arm->rewards / $arm->turns) * 100 : 0;
+
+      // Bayesian posterior mean (Conversion Score).
+      $alpha = $arm->rewards + 1;
+      $beta = max(1, $arm->turns - $arm->rewards + 1);
+      $conversion_score = ($alpha / ($alpha + $beta)) * 100;
 
       // Get decorated arm name or fallback to escaped arm ID.
       $arm_display = $this->decoratorManager->decorateArm($experiment_id, $arm->arm_id);
@@ -353,23 +374,27 @@ class ReportsController extends ControllerBase {
         'arm_name' => $arm_name,
         'turns' => (int) $arm->turns,
         'rewards' => (int) $arm->rewards,
-        'success_rate' => $success_rate,
+        'conversion_rate' => $conversion_rate,
+        'conversion_score' => $conversion_score,
       ];
     }
 
     // Sort by the selected column.
-    $order = $request ? $request->query->get('order', 'Rate') : 'Rate';
+    $order = $request ? $request->query->get('order', 'Conversion Rate') : 'Conversion Rate';
     $sort = $request ? $request->query->get('sort', 'desc') : 'desc';
 
-    $sort_field = 'success_rate';
+    $sort_field = 'conversion_rate';
     if (stripos($order, 'Variant') !== FALSE) {
       $sort_field = 'arm_id';
     }
     elseif (stripos($order, 'Impression') !== FALSE) {
       $sort_field = 'turns';
     }
-    elseif (stripos($order, 'Conversion') !== FALSE) {
+    elseif (stripos($order, 'Conversions') !== FALSE) {
       $sort_field = 'rewards';
+    }
+    elseif (stripos($order, 'Conversion Rate') !== FALSE) {
+      $sort_field = 'conversion_rate';
     }
 
     // @phpstan-ignore argument.unresolvableType, argument.unresolvableType
@@ -385,7 +410,8 @@ class ReportsController extends ControllerBase {
         ['data' => ['#markup' => $data['arm_name']]],
         $data['turns'],
         $data['rewards'],
-        number_format($data['success_rate'], 2) . '%',
+        number_format($data['conversion_rate'], 2) . '%',
+        number_format($data['conversion_score'], 2) . '%',
       ];
     }
 
@@ -414,11 +440,15 @@ class ReportsController extends ControllerBase {
    *   or 'quarterly'.
    * @param array|null $date_filter
    *   Optional date filter render array.
+   * @param string $metric
+   *   Y-axis metric: 'score' (Bayesian) or 'rate' (raw).
+   * @param int $limit
+   *   Maximum number of top variants for 3D chart.
    *
    * @return array
    *   Render array with charts.
    */
-  protected function buildCharts(string $experiment_id, array $snapshots, array $arms, string $time_axis = 'trials', ?array $date_filter = NULL): array {
+  protected function buildCharts(string $experiment_id, array $snapshots, array $arms, string $time_axis = 'trials', ?array $date_filter = NULL, string $metric = 'score', int $limit = 100): array {
     // Organize snapshots by arm and calculate chart data.
     $arms_data = [];
     $all_x_values = [];
@@ -444,15 +474,19 @@ class ReportsController extends ControllerBase {
       $turns = (int) $snapshot->turns;
       $rewards = (int) $snapshot->rewards;
 
-      // Calculate posterior mean.
+      // Calculate posterior mean (Conversion Score).
       $alpha = $rewards + 1;
       $beta = max(1, $turns - $rewards + 1);
-      $mean = $alpha / ($alpha + $beta);
+      $score = $alpha / ($alpha + $beta);
+
+      // Calculate raw conversion rate.
+      $rate = $turns > 0 ? $rewards / $turns : 0;
 
       // For time-based axes, keep the latest snapshot per bucket.
       if (!isset($arms_data[$arm_id][$x_value]) || $created > $arms_data[$arm_id][$x_value]['created']) {
         $arms_data[$arm_id][$x_value] = [
-          'mean' => $mean,
+          'score' => $score,
+          'rate' => $rate,
           'turns' => $turns,
           'rewards' => $rewards,
           'created' => $created,
@@ -480,8 +514,8 @@ class ReportsController extends ControllerBase {
     }
     arsort($arm_totals);
 
-    // Use up to 100 arms for 3D Plotly visualizations.
-    $top_arms_3d = array_slice(array_keys($arm_totals), 0, 100);
+    // Use up to $limit arms for 3D Plotly visualizations.
+    $top_arms_3d = array_slice(array_keys($arm_totals), 0, $limit);
 
     // Build arm label map using decorators for human-readable names.
     $arm_labels = [];
@@ -516,8 +550,14 @@ class ReportsController extends ControllerBase {
     ];
 
     // Prepare chart data for both 2D line and 3D surface (single loop).
+    // Pass both score and rate so JS can switch between them.
     $line_chart_data = ['arms' => []];
-    $surface_3d_data = ['xValues' => $x_values, 'armLabels' => [], 'zMatrix' => []];
+    $surface_3d_data = [
+      'xValues' => $x_values,
+      'armLabels' => [],
+      'zMatrixScore' => [],
+      'zMatrixRate' => [],
+    ];
     $i = 0;
     foreach ($top_arms_3d as $arm_id) {
       if (!isset($arms_data[$arm_id])) {
@@ -526,13 +566,16 @@ class ReportsController extends ControllerBase {
       $label = $arm_labels[$arm_id];
       $color = $colors[$i % count($colors)];
       $data_points = [];
-      $z_row = [];
+      $z_row_score = [];
+      $z_row_rate = [];
 
       foreach ($x_values as $x) {
         if (isset($arms_data[$arm_id][$x])) {
-          $rate = round($arms_data[$arm_id][$x]['mean'] * 100, 2);
-          $data_points[] = ['x' => $x, 'y' => $rate];
-          $z_row[] = $rate;
+          $score = round($arms_data[$arm_id][$x]['score'] * 100, 2);
+          $rate = round($arms_data[$arm_id][$x]['rate'] * 100, 2);
+          $data_points[] = ['x' => $x, 'score' => $score, 'rate' => $rate];
+          $z_row_score[] = $score;
+          $z_row_rate[] = $rate;
         }
         else {
           // Find closest previous value for 3D surface interpolation.
@@ -542,18 +585,20 @@ class ReportsController extends ControllerBase {
               $closest = $point;
             }
           }
-          $z_row[] = $closest ? round($closest['mean'] * 100, 2) : 0;
+          $z_row_score[] = $closest ? round($closest['score'] * 100, 2) : 0;
+          $z_row_rate[] = $closest ? round($closest['rate'] * 100, 2) : 0;
         }
       }
 
       $line_chart_data['arms'][] = ['label' => $label, 'data' => $data_points, 'color' => $color];
       $surface_3d_data['armLabels'][] = $label;
-      $surface_3d_data['zMatrix'][] = $z_row;
+      $surface_3d_data['zMatrixScore'][] = $z_row_score;
+      $surface_3d_data['zMatrixRate'][] = $z_row_rate;
       $i++;
     }
 
     // Plotly data (up to 100 arms for 3D visualizations).
-    $chart_line_threshold = $this->config('rl.settings')->get('chart_line_threshold') ?? 10;
+    $chart_line_threshold = $this->config('rl.settings')->get('chart_line_threshold') ?? 9;
     $total_arms_all = count($arm_totals);
     $plotly_data = [
       'lineChartData' => $line_chart_data,
@@ -562,6 +607,7 @@ class ReportsController extends ControllerBase {
       'totalArmsAll' => $total_arms_all,
       'chartLineThreshold' => $chart_line_threshold,
       'timeAxis' => $time_axis,
+      'metric' => $metric,
       'xAxisLabel' => (string) $x_axis_label,
       'xLabels' => !empty($x_labels) ? $x_labels : NULL,
     ];
@@ -581,7 +627,7 @@ class ReportsController extends ControllerBase {
       '#theme' => 'rl_charts',
       '#title' => $this->t('Performance Over Time'),
       '#tip_hover' => $this->t('Hover for details. Higher = better.'),
-      '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion rate.'),
+      '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion score.'),
       '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
       '#date_filter' => $date_filter,
     ];
@@ -765,11 +811,15 @@ class ReportsController extends ControllerBase {
    *   Currently selected preset.
    * @param string $current_axis
    *   Currently selected time axis.
+   * @param string $current_metric
+   *   Currently selected y-axis metric.
+   * @param int $current_limit
+   *   Currently selected max variants limit for 3D chart.
    *
    * @return array
    *   Render array for date filter.
    */
-  protected function buildDateFilterForm(string $experiment_id, array $current_range, array $available_range, string $current_preset, string $current_axis = 'trials'): array {
+  protected function buildDateFilterForm(string $experiment_id, array $current_range, array $available_range, string $current_preset, string $current_axis = 'trials', string $current_metric = 'score', int $current_limit = 100): array {
     $base_url = Url::fromRoute('rl.reports.experiment_detail', [
       'experiment_id' => $experiment_id,
     ]);
@@ -797,17 +847,41 @@ class ReportsController extends ControllerBase {
       'quarterly' => $this->t('Quarterly'),
     ];
 
-    // Helper to build dropdown options with URLs.
-    $build_options = function (array $items, string $param, string $other_param, string $other_value, string $other_default) use ($base_url): array {
+    $metrics = [
+      'score' => $this->t('Conversion Score'),
+      'rate' => $this->t('Conversion Rate'),
+    ];
+
+    $limits = [
+      5 => '5',
+      10 => '10',
+      25 => '25',
+      50 => '50',
+      75 => '75',
+      100 => '100',
+    ];
+
+    // Helper to build dropdown options with URLs, preserving other params.
+    $build_options = function (array $items, string $param, array $other_params) use ($base_url): array {
       $options = $urls = [];
       foreach ($items as $key => $label) {
         $url = clone $base_url;
-        $query = [];
-        if ($key && $key !== $other_default) {
+        $query = $other_params;
+        if ($key) {
           $query[$param] = $key;
         }
-        if ($other_value && $other_value !== $other_default) {
-          $query[$other_param] = $other_value;
+        // Remove default values from query.
+        if (isset($query['axis']) && $query['axis'] === 'trials') {
+          unset($query['axis']);
+        }
+        if (isset($query['preset']) && $query['preset'] === '') {
+          unset($query['preset']);
+        }
+        if (isset($query['metric']) && $query['metric'] === 'score') {
+          unset($query['metric']);
+        }
+        if (isset($query['limit']) && (int) $query['limit'] === 100) {
+          unset($query['limit']);
         }
         if (!empty($query)) {
           $url->setOption('query', $query);
@@ -818,8 +892,26 @@ class ReportsController extends ControllerBase {
       return ['options' => $options, 'urls' => $urls];
     };
 
-    $preset_data = $build_options($presets, 'preset', 'axis', $current_axis, 'trials');
-    $axis_data = $build_options($axes, 'axis', 'preset', $current_preset, '');
+    $preset_data = $build_options($presets, 'preset', [
+      'axis' => $current_axis,
+      'metric' => $current_metric,
+      'limit' => $current_limit,
+    ]);
+    $axis_data = $build_options($axes, 'axis', [
+      'preset' => $current_preset,
+      'metric' => $current_metric,
+      'limit' => $current_limit,
+    ]);
+    $metric_data = $build_options($metrics, 'metric', [
+      'preset' => $current_preset,
+      'axis' => $current_axis,
+      'limit' => $current_limit,
+    ]);
+    $limit_data = $build_options($limits, 'limit', [
+      'preset' => $current_preset,
+      'axis' => $current_axis,
+      'metric' => $current_metric,
+    ]);
 
     // Format available date range for display.
     $range_text = $this->t('Data available from @start to @end', [
@@ -832,7 +924,7 @@ class ReportsController extends ControllerBase {
       '#attributes' => ['class' => ['rl-date-filter']],
       'presets' => [
         '#type' => 'container',
-        '#attributes' => ['class' => ['rl-presets']],
+        '#attributes' => ['class' => ['rl-filter-group']],
         'label' => [
           '#markup' => '<strong>' . $this->t('Time range:') . '</strong> ',
         ],
@@ -841,14 +933,14 @@ class ReportsController extends ControllerBase {
           '#options' => $preset_data['options'],
           '#value' => $current_preset,
           '#attributes' => [
-            'class' => ['rl-preset-select', 'rl-filter-select'],
+            'class' => ['rl-filter-select'],
             'data-urls' => json_encode($preset_data['urls']),
           ],
         ],
       ],
       'axes' => [
         '#type' => 'container',
-        '#attributes' => ['class' => ['rl-axes']],
+        '#attributes' => ['class' => ['rl-filter-group']],
         'label' => [
           '#markup' => '<strong>' . $this->t('X-axis:') . '</strong> ',
         ],
@@ -857,8 +949,40 @@ class ReportsController extends ControllerBase {
           '#options' => $axis_data['options'],
           '#value' => $current_axis,
           '#attributes' => [
-            'class' => ['rl-axis-select', 'rl-filter-select'],
+            'class' => ['rl-filter-select'],
             'data-urls' => json_encode($axis_data['urls']),
+          ],
+        ],
+      ],
+      'metrics' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rl-filter-group']],
+        'label' => [
+          '#markup' => '<strong>' . $this->t('Y-axis:') . '</strong> ',
+        ],
+        'select' => [
+          '#type' => 'select',
+          '#options' => $metric_data['options'],
+          '#value' => $current_metric,
+          '#attributes' => [
+            'class' => ['rl-filter-select'],
+            'data-urls' => json_encode($metric_data['urls']),
+          ],
+        ],
+      ],
+      'limits' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rl-filter-group']],
+        'label' => [
+          '#markup' => '<strong>' . $this->t('Max variants:') . '</strong> ',
+        ],
+        'select' => [
+          '#type' => 'select',
+          '#options' => $limit_data['options'],
+          '#value' => $current_limit,
+          '#attributes' => [
+            'class' => ['rl-filter-select'],
+            'data-urls' => json_encode($limit_data['urls']),
           ],
         ],
       ],

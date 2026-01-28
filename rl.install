@@ -614,7 +614,7 @@ function rl_update_10001() {
 function rl_update_10002() {
   $config = \Drupal::configFactory()->getEditable('rl.settings');
   if ($config->get('chart_line_threshold') === NULL) {
-    $config->set('chart_line_threshold', 10);
+    $config->set('chart_line_threshold', 9);
   }
   $config->save();
 

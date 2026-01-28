@@ -75,7 +75,7 @@ class RlSettingsForm extends ConfigFormBase {
       '#type' => 'number',
       '#title' => $this->t('Line chart threshold'),
       '#description' => $this->t('Maximum number of variants to show in the 2D line chart. Experiments with more variants will use the 3D landscape visualization instead.'),
-      '#default_value' => $config->get('chart_line_threshold') ?? 10,
+      '#default_value' => $config->get('chart_line_threshold') ?? 9,
       '#min' => 2,
       '#max' => 50,
     ];
