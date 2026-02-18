@@ -10,7 +10,7 @@ jobs:
     runs-on: ubicloud-standard-4
     timeout-minutes: 60
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Lint Drupal
       run: |
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubicloud-standard-4
     timeout-minutes: 60
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Check Drupal compatibility
       run: |
