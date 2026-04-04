@@ -1,0 +1,3 @@
+# Ignore .claude directory except skills
+.claude/*
+!.claude/skills/

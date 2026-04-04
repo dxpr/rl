@@ -1,0 +1,30 @@
+services:
+  rl.drush.analytics_commands:
+    class: Drupal\rl\Drush\Commands\RlAnalyticsCommands
+    arguments:
+      - '@rl.analyzer'
+    tags:
+      - { name: drush.command }
+
+  rl.drush.experiment_commands:
+    class: Drupal\rl\Drush\Commands\RlExperimentCommands
+    arguments:
+      - '@rl.experiment_registry'
+      - '@database'
+    tags:
+      - { name: drush.command }
+
+  rl.drush.config_commands:
+    class: Drupal\rl\Drush\Commands\RlConfigCommands
+    arguments:
+      - '@config.factory'
+      - '@database'
+    tags:
+      - { name: drush.command }
+
+  rl.drush.setup_commands:
+    class: Drupal\rl\Drush\Commands\RlSetupCommands
+    arguments:
+      - '@extension.list.module'
+    tags:
+      - { name: drush.command }

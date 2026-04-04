@@ -7,8 +7,6 @@ namespace Drupal\rl\Drush\Commands;
 use Consolidation\OutputFormatters\StructuredData\RowsOfFields;
 use Drupal\rl\Service\RlAnalyzerInterface;
 use Drush\Attributes as CLI;
-use Drush\Commands\DrushCommands;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Drush commands for RL experiment analytics.
@@ -16,13 +14,10 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * These commands provide AI-friendly access to experiment data,
  * performance metrics, and actionable insights.
  */
-final class RlCommands extends DrushCommands {
+final class RlAnalyticsCommands extends RlCommandsBase {
 
   /**
-   * Constructs RlCommands.
-   *
-   * @param \Drupal\rl\Service\RlAnalyzerInterface $analyzer
-   *   The RL analyzer service.
+   * Constructs RlAnalyticsCommands.
    */
   public function __construct(
     protected RlAnalyzerInterface $analyzer,
@@ -31,19 +26,7 @@ final class RlCommands extends DrushCommands {
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public static function create(ContainerInterface $container): self {
-    return new static(
-      $container->get('rl.analyzer')
-    );
-  }
-
-  /**
    * List all RL experiments with summary statistics.
-   *
-   * Returns experiment IDs, names, source modules, arm counts,
-   * impression/conversion totals, and current status.
    *
    * @return \Consolidation\OutputFormatters\StructuredData\RowsOfFields
    *   Experiments data.
@@ -62,7 +45,7 @@ final class RlCommands extends DrushCommands {
   #[CLI\DefaultFields(fields: ['id', 'name', 'status', 'arms', 'impressions', 'conversions', 'conversion_rate'])]
   #[CLI\Usage(name: 'drush rl:list', description: 'List all experiments')]
   #[CLI\Usage(name: 'drush rl:list --format=json', description: 'Get experiments as JSON for AI processing')]
-  #[CLI\Usage(name: 'drush rl:list --format=table', description: 'Display experiments in table format')]
+  #[CLI\Usage(name: 'drush rl:list --format=yaml', description: 'Get experiments as YAML')]
   public function listExperiments(): RowsOfFields {
     $data = $this->analyzer->listExperiments();
     return new RowsOfFields($data['experiments']);
@@ -71,14 +54,10 @@ final class RlCommands extends DrushCommands {
   /**
    * Get detailed status of a specific experiment.
    *
-   * Returns experiment phase (exploration/learning/exploitation),
-   * confidence levels, traffic distribution, and value generated
-   * compared to equal traffic distribution.
-   *
    * @param string $experimentId
-   *   The experiment ID (e.g., 'ab_test_button_color').
+   *   The experiment ID.
    * @param array $options
-   *   Command options including format.
+   *   Command options.
    *
    * @return array
    *   Detailed experiment status.
@@ -100,10 +79,6 @@ final class RlCommands extends DrushCommands {
 
   /**
    * Get arm-level performance data with human-readable labels.
-   *
-   * Returns conversion rates, traffic shares, and comparison to average
-   * for each variant. Entity IDs are resolved to titles (e.g., node
-   * titles for content experiments).
    *
    * @param string $experimentId
    *   The experiment ID.
@@ -134,7 +109,6 @@ final class RlCommands extends DrushCommands {
   ])]
   #[CLI\Usage(name: 'drush rl:performance mock_10_arm_test', description: 'Get arm performance')]
   #[CLI\Usage(name: 'drush rl:perf ai_sorting-help_center_categories-block_1 --limit=10 --format=json', description: 'Get top 10 performers as JSON')]
-  #[CLI\Usage(name: 'drush rl:perf ab_test_headline_variants --sort=impressions', description: 'Sort by traffic volume')]
   public function performance(string $experimentId, array $options = ['limit' => 20, 'sort' => 'rate']): RowsOfFields {
     try {
       $data = $this->analyzer->getPerformance(
@@ -152,9 +126,6 @@ final class RlCommands extends DrushCommands {
 
   /**
    * Get historical trends for an experiment.
-   *
-   * Returns conversion rates over time periods with trend analysis.
-   * Requires event logging to be enabled for historical data.
    *
    * @param string $experimentId
    *   The experiment ID.
@@ -195,9 +166,6 @@ final class RlCommands extends DrushCommands {
   /**
    * Export complete experiment data for deep analysis.
    *
-   * Returns all arm data with optional historical snapshots.
-   * Useful for external analysis tools or AI processing.
-   *
    * @param string $experimentId
    *   The experiment ID.
    * @param array $options
@@ -228,13 +196,10 @@ final class RlCommands extends DrushCommands {
   /**
    * Get full analysis with insights (wrapper combining status + performance).
    *
-   * Returns comprehensive analysis including status, top performers,
-   * and actionable recommendations. Optimized for AI consumption.
-   *
    * @param string $experimentId
    *   The experiment ID.
    * @param array $options
-   *   Command options including format.
+   *   Command options.
    *
    * @return array
    *   Full analysis data.
@@ -267,14 +232,6 @@ final class RlCommands extends DrushCommands {
 
   /**
    * Generates a human-readable recommendation based on experiment data.
-   *
-   * @param array $status
-   *   Status data.
-   * @param array $performance
-   *   Performance data.
-   *
-   * @return string
-   *   Recommendation text.
    */
   protected function generateRecommendation(array $status, array $performance): string {
     $confidence = $status['status']['top_performer_confidence'] ?? 0;
