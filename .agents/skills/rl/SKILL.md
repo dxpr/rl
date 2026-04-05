@@ -32,4 +32,5 @@ Manage A/B testing experiments powered by Thompson Sampling via Drush.
 | event_log_max_rows | integer | 100000 |
 | chart_line_threshold | integer | 9 |
 
-All state-changing commands support `--dry-run`. Analysis commands support `--format=json|yaml|table`.
+All state-changing commands support `--dry-run`.
+Analysis commands support `--format=json|yaml|table`.

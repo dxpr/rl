@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\rl\Drush\Commands;
 
 use Consolidation\OutputFormatters\StructuredData\RowsOfFields;
+use Drupal\rl\Exception\ExperimentNotFoundException;
 use Drupal\rl\Service\RlAnalyzerInterface;
 use Drush\Attributes as CLI;
 
@@ -71,7 +72,7 @@ final class RlAnalyticsCommands extends RlCommandsBase {
     try {
       return $this->analyzer->getStatus($experimentId);
     }
-    catch (\InvalidArgumentException $e) {
+    catch (ExperimentNotFoundException $e) {
       $this->logger()->error($e->getMessage());
       throw $e;
     }
@@ -118,7 +119,7 @@ final class RlAnalyticsCommands extends RlCommandsBase {
       );
       return new RowsOfFields($data['arms']);
     }
-    catch (\InvalidArgumentException $e) {
+    catch (ExperimentNotFoundException $e) {
       $this->logger()->error($e->getMessage());
       throw $e;
     }
@@ -157,7 +158,7 @@ final class RlAnalyticsCommands extends RlCommandsBase {
       );
       return new RowsOfFields($data['data']);
     }
-    catch (\InvalidArgumentException $e) {
+    catch (ExperimentNotFoundException $e) {
       $this->logger()->error($e->getMessage());
       throw $e;
     }
@@ -187,7 +188,7 @@ final class RlAnalyticsCommands extends RlCommandsBase {
         (bool) $options['snapshots']
       );
     }
-    catch (\InvalidArgumentException $e) {
+    catch (ExperimentNotFoundException $e) {
       $this->logger()->error($e->getMessage());
       throw $e;
     }
@@ -224,7 +225,7 @@ final class RlAnalyticsCommands extends RlCommandsBase {
         'recommendation' => $this->generateRecommendation($status, $performance),
       ];
     }
-    catch (\InvalidArgumentException $e) {
+    catch (ExperimentNotFoundException $e) {
       $this->logger()->error($e->getMessage());
       throw $e;
     }

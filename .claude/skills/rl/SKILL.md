@@ -118,13 +118,19 @@ drush rl:config:list
 - **Arm**: A single variant (identified by arm_id, often a node ID)
 - **Turn/Impression**: One display of a variant to a visitor
 - **Reward/Conversion**: A successful outcome (click, form submit, etc.)
-- **Thompson Sampling**: Bayesian algorithm that balances exploration vs exploitation
-- **Phase**: exploration → learning → exploitation → conclusive
-- **Confidence**: Statistical confidence that the top performer is truly best
+- **Thompson Sampling**: Bayesian algorithm that balances
+  exploration vs exploitation
+- **Phase**: exploration, learning, exploitation, conclusive
+- **Confidence**: Statistical confidence that the top
+  performer is truly best
 
 ## Notes
 
-- Experiments are tracked in custom database tables, not Drupal config entities
-- The `rl.php` endpoint provides high-performance tracking with minimal Drupal bootstrap
-- Arms are typically node IDs; the analyzer resolves them to node titles automatically
-- Views management is handled by `drush_webmaster` (`wm:view:*` commands) — do not duplicate
+- Experiments are tracked in custom database tables,
+  not Drupal config entities
+- The `rl.php` endpoint provides high-performance
+  tracking with minimal Drupal bootstrap
+- Arms are typically node IDs; the analyzer resolves
+  them to node titles automatically
+- Views management is handled by `drush_webmaster`
+  (`wm:view:*` commands) — do not duplicate
