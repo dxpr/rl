@@ -25,3 +25,13 @@ jobs:
     - name: Check Drupal compatibility
       run: |
         docker compose --profile lint run drupal-check
+
+  drush-e2e:
+    runs-on: ubicloud-standard-4
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Run Drush E2E tests
+      run: |
+        docker compose --profile test run --rm e2e-test
