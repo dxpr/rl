@@ -11,10 +11,11 @@ echo "RL Module E2E Tests"
 echo "==================="
 echo ""
 
-# Install dependencies if in Docker.
+# Install PHP extensions required by Drupal (GD for image handling).
 if command -v apk &> /dev/null; then
   echo "Installing system dependencies..."
-  apk add --no-cache bash yq > /dev/null 2>&1 || true
+  apk add --no-cache bash yq libpng libpng-dev libjpeg-turbo-dev libwebp-dev zlib-dev libxpm-dev > /dev/null 2>&1
+  docker-php-ext-install gd > /dev/null 2>&1
 fi
 
 # Check for yq.
@@ -28,30 +29,29 @@ SITE_DIR=$(mktemp -d)
 echo "Setting up Drupal in $SITE_DIR..."
 
 cd "$SITE_DIR"
-composer create-project drupal/recommended-project:^11 . --no-interaction --quiet 2>&1 || true
+composer create-project drupal/recommended-project:11.x-dev . --no-interaction --quiet
 
 # Symlink our module.
 mkdir -p web/modules/contrib
 ln -s "$MODULE_DIR" web/modules/contrib/rl
 
-# Install Drupal with SQLite.
-cd web
-php core/scripts/drupal install standard \
-  --site-name="RL E2E Tests" \
-  --db-url="sqlite://sites/default/files/.ht.sqlite" \
-  2>&1 || \
-php -r "
-  require 'autoload.php';
-  \$site_path = 'sites/default';
-  \$settings = [];
-  require_once 'core/includes/install.core.inc';
-" 2>&1 || true
+# Install Drush.
+composer require drush/drush --quiet
 
-# Use Drush from vendor.
-DRUSH="$SITE_DIR/vendor/bin/drush"
+# Install Drupal with SQLite.
+./vendor/bin/drush site:install standard \
+  --db-url=sqlite://sites/default/files/.ht.sqlite \
+  --site-name="RL E2E Tests" \
+  --site-mail="test@example.com" \
+  --yes \
+  --quiet
 
 # Enable the RL module.
-$DRUSH en rl -y 2>&1
+DRUSH="$SITE_DIR/vendor/bin/drush"
+$DRUSH en rl --yes --quiet
+
+# Rebuild cache after enabling module.
+$DRUSH cr --quiet
 
 echo "Drupal installed. Running tests..."
 echo ""
