@@ -47,6 +47,57 @@
 <li><strong>Bayesian approach</strong> - Incorporates uncertainty</li>
 </ul>
 
+<h3>Command Reference</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th>Commands</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Discovery</strong></td>
+      <td><code>rl:list</code>, <code>rl:status</code>, <code>rl:performance</code>, <code>rl:trends</code></td>
+      <td>List experiments, check phase/confidence, arm-level stats, historical trends</td>
+    </tr>
+    <tr>
+      <td><strong>Analysis</strong></td>
+      <td><code>rl:analyze</code>, <code>rl:export</code></td>
+      <td>Full analysis with recommendations, export experiment data</td>
+    </tr>
+    <tr>
+      <td><strong>Experiment CRUD</strong></td>
+      <td><code>rl:experiment:create</code>, <code>rl:experiment:update</code>, <code>rl:experiment:delete</code></td>
+      <td>Create, update, and delete experiments with <code>--dry-run</code> support</td>
+    </tr>
+    <tr>
+      <td><strong>Configuration</strong></td>
+      <td><code>rl:config:get</code>, <code>rl:config:set</code>, <code>rl:config:list</code>, <code>rl:config:reset</code></td>
+      <td>Get/set module settings, list all with current values, reset to defaults</td>
+    </tr>
+    <tr>
+      <td><strong>Setup</strong></td>
+      <td><code>rl:setup-ai</code></td>
+      <td>Install AI skill files for Claude Code, Codex, Gemini, Copilot, Cursor</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>AI Coding Assistant Integration</h3>
+
+<p>The RL module ships with a built-in <a href="https://agentskills.io/specification">Agent Skills</a> file that teaches AI coding assistants how to manage experiments through natural language. Compatible with Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, and other tools supporting the standard.</p>
+
+<p>After installing the module, run <code>drush rl:setup-ai</code> to enable AI assistant support. Your AI will then respond to natural language like:</p>
+<ul>
+  <li>"List all running experiments"</li>
+  <li>"Analyze the hero_cta_test experiment"</li>
+  <li>"Create a new A/B test for the homepage banner"</li>
+  <li>"What's the conversion rate for variant B?"</li>
+</ul>
+
 <h3>API</h3>
 
 <pre><code>// Get the experiment manager
