@@ -306,8 +306,8 @@ class RlAnalyzer implements RlAnalyzerInterface {
       'data' => $data,
       'analysis' => [
         'trend_direction' => $trendDirection,
-        'first_period_rate' => $data[0]['rate'] ?? 0,
-        'last_period_rate' => end($data)['rate'] ?? 0,
+        'first_period_rate' => $data[0]['rate'],
+        'last_period_rate' => end($data)['rate'],
         'overall_change_pct' => count($data) >= 2
           ? round((end($data)['rate'] - $data[0]['rate']) * 100 / max(0.01, $data[0]['rate']), 1)
           : 0,

@@ -525,6 +525,44 @@ function rl_requirements($phase) {
     }
   }
 
+  // Check if installed AI skill files are outdated.
+  // Silent when: not installed, up to date, or unreadable.
+  try {
+    $module_path = \Drupal::service('extension.list.module')->getPath('rl');
+    $module_root = DRUPAL_ROOT . '/' . $module_path;
+    // Walk up from DRUPAL_ROOT to find project root (composer.json).
+    $project_root = DRUPAL_ROOT;
+    for ($i = 0; $i < 5; $i++) {
+      if (file_exists($project_root . '/composer.json')) {
+        break;
+      }
+      $project_root = dirname($project_root);
+    }
+
+    $skill_files = [
+      '.claude/skills/rl/SKILL.md',
+      '.agents/skills/rl/SKILL.md',
+      '.agents/skills/rl/agents/openai.yaml',
+    ];
+    foreach ($skill_files as $relative) {
+      $source = $module_root . '/' . $relative;
+      $dest = $project_root . '/' . $relative;
+      if (file_exists($source) && file_exists($dest)
+        && is_readable($source) && is_readable($dest)
+        && md5_file($source) !== md5_file($dest)) {
+        $requirements['rl_skill_files'] = [
+          'title' => t('RL AI Skill Files'),
+          'description' => t('The installed AI skill files are outdated. Run <code>drush rl:setup-ai</code> to update.'),
+          'severity' => REQUIREMENT_WARNING,
+        ];
+        break;
+      }
+    }
+  }
+  catch (\Exception $e) {
+    // Silent on any error.
+  }
+
   return $requirements;
 }
 

@@ -33,8 +33,9 @@ class DisableEventLogConfirmForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container): DisableEventLogConfirmForm {
-    return new self(
+  public static function create(ContainerInterface $container): static {
+    // @phpstan-ignore new.static
+    return new static(
       $container->get('rl.snapshot_storage')
     );
   }
