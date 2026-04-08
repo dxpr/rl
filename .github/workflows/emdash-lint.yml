@@ -1,0 +1,34 @@
+name: Em dash lint
+
+on: pull_request
+
+jobs:
+  emdash-lint:
+    runs-on: ubicloud-standard-2
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Check for em dashes
+      run: |
+        if grep -rn '—' \
+          --include='*.html' \
+          --include='*.md' \
+          --include='*.txt' \
+          --include='*.php' \
+          --include='*.module' \
+          --include='*.install' \
+          --include='*.inc' \
+          --include='*.yml' \
+          --include='*.yaml' \
+          --include='*.twig' \
+          --include='*.js' \
+          --include='*.css' \
+          --exclude-dir='node_modules' \
+          --exclude-dir='vendor' \
+          --exclude-dir='.claude' \
+          . ; then
+          echo ""
+          echo "Error: Em dashes (—) found in the files listed above."
+          echo "Replace with ' -- ' or rephrase."
+          exit 1
+        fi
