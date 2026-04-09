@@ -1,0 +1,5 @@
+content_optimizer.experiment.add:
+  title: 'Add experiment'
+  route_name: content_optimizer.experiment.add
+  appears_on:
+    - content_optimizer.experiments

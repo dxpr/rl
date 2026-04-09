@@ -1,0 +1,5 @@
+content_optimizer.experiments:
+  title: 'Content Optimizer'
+  description: 'A/B test page titles, menu links, and other text.'
+  route_name: content_optimizer.experiments
+  parent: system.admin_config_content

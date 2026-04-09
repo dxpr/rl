@@ -1,0 +1,4 @@
+administer content optimizer:
+  title: 'Administer Content Optimizer'
+  description: 'Create, edit, and delete content optimization experiments.'
+  restrict access: true

@@ -1,0 +1,19 @@
+content_optimizer.settings:
+  type: config_object
+  label: 'Content Optimizer settings'
+  mapping:
+    reward_strategy:
+      type: string
+      label: 'Reward strategy'
+    reward_threshold:
+      type: integer
+      label: 'Reward threshold in seconds'
+    entity_types:
+      type: sequence
+      label: 'Enabled entity types'
+      sequence:
+        type: string
+        label: 'Entity type'
+    cache_ttl:
+      type: integer
+      label: 'Cache TTL override in seconds'

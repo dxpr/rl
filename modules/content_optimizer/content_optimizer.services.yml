@@ -1,0 +1,14 @@
+services:
+  content_optimizer.experiment_registration:
+    class: Drupal\content_optimizer\Service\ExperimentRegistrationService
+    arguments: ['@rl.experiment_registry']
+
+  content_optimizer.variant_selector:
+    class: Drupal\content_optimizer\Service\VariantSelector
+    arguments: ['@rl.experiment_manager', '@entity_type.manager', '@rl.cache_manager']
+
+  content_optimizer.experiment_decorator:
+    class: Drupal\content_optimizer\Decorator\ContentOptimizerDecorator
+    arguments: ['@entity_type.manager']
+    tags:
+      - { name: rl_experiment_decorator }

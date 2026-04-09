@@ -1,0 +1,454 @@
+<?php
+
+/**
+ * @file
+ * Content Optimizer module: A/B test page titles and other entity text.
+ */
+
+use Drupal\Core\Entity\Display\EntityFormDisplayInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Url;
+
+/**
+ * Implements hook_help().
+ */
+function content_optimizer_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name === 'help.page.content_optimizer') {
+    return '<p>' . t('A/B test page titles, menu link labels, and other entity text using Thompson Sampling. Add variant texts on entity edit forms or via the admin UI, and the module automatically tests which performs best.') . '</p>';
+  }
+}
+
+/**
+ * Implements hook_entity_extra_field_info().
+ */
+function content_optimizer_entity_extra_field_info() {
+  $extra = [];
+  $config = \Drupal::config('content_optimizer.settings');
+  $entity_types = $config->get('entity_types') ?? ['node'];
+
+  foreach ($entity_types as $entity_type_id) {
+    $entity_type = \Drupal::entityTypeManager()->getDefinition($entity_type_id, FALSE);
+    if (!$entity_type) {
+      continue;
+    }
+
+    $bundles = \Drupal::service('entity_type.bundle.info')->getBundleInfo($entity_type_id);
+    foreach (array_keys($bundles) as $bundle) {
+      $extra[$entity_type_id][$bundle]['form']['content_optimizer'] = [
+        'label' => t('Title variants'),
+        'description' => t('Content Optimizer variant editor.'),
+        'weight' => 50,
+        'visible' => TRUE,
+      ];
+    }
+  }
+
+  return $extra;
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Adds the title variants vertical tab to entity edit forms for supported
+ * entity types.
+ */
+function content_optimizer_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
+  $form_object = $form_state->getFormObject();
+  if (!($form_object instanceof \Drupal\Core\Entity\ContentEntityFormInterface)) {
+    return;
+  }
+
+  $entity = $form_object->getEntity();
+  if (!$entity || $entity->isNew()) {
+    return;
+  }
+
+  $entity_type_id = $entity->getEntityTypeId();
+  $config = \Drupal::config('content_optimizer.settings');
+  $enabled_types = $config->get('entity_types') ?? ['node'];
+
+  if (!in_array($entity_type_id, $enabled_types)) {
+    return;
+  }
+
+  // Only alter the default/edit form operations.
+  $operation = $form_object->getOperation();
+  if (!in_array($operation, ['default', 'edit'])) {
+    return;
+  }
+
+  // Load existing experiment for this entity's title.
+  $experiments = \Drupal::entityTypeManager()
+    ->getStorage('content_optimizer_experiment')
+    ->loadByProperties([
+      'target_entity_type' => $entity_type_id,
+      'target_entity_id' => $entity->id(),
+      'target_field' => 'title',
+    ]);
+  $experiment = $experiments ? reset($experiments) : NULL;
+  $existing_variants = $experiment ? $experiment->getVariants() : [];
+
+  // Build the vertical tab.
+  $form['content_optimizer'] = [
+    '#type' => 'details',
+    '#title' => t('Title variants'),
+    '#group' => 'advanced',
+    '#open' => FALSE,
+    '#weight' => 50,
+    '#tree' => TRUE,
+    '#attached' => [
+      'library' => ['content_optimizer/admin'],
+    ],
+  ];
+
+  // Show experiment status if active.
+  if ($experiment && $experiment->isPublished()) {
+    $rl_experiment_id = $experiment->getRlExperimentId();
+    $experiment_manager = \Drupal::service('rl.experiment_manager');
+    $total_turns = $experiment_manager->getTotalTurns($rl_experiment_id);
+    $variant_count = count($existing_variants) + 1;
+
+    $status_text = t('@count variants, @impressions impressions', [
+      '@count' => $variant_count,
+      '@impressions' => $total_turns,
+    ]);
+
+    $report_url = Url::fromRoute('rl.reports.experiment_detail', [
+      'experiment_id' => $rl_experiment_id,
+    ]);
+
+    $form['content_optimizer']['status'] = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['content-optimizer-status']],
+      'text' => [
+        '#markup' => '<strong>' . t('Active') . '</strong> &mdash; ' . $status_text . ' ',
+      ],
+      'link' => [
+        '#type' => 'link',
+        '#title' => t('View report'),
+        '#url' => $report_url,
+        '#attributes' => ['target' => '_blank'],
+      ],
+    ];
+  }
+
+  $form['content_optimizer']['description'] = [
+    '#markup' => '<p>' . t('Add alternative titles to test which performs best. The original title is always included as a variant.') . '</p>',
+  ];
+
+  // Variant text fields.
+  $num_variants = $form_state->get('co_num_variants');
+  if ($num_variants === NULL) {
+    $num_variants = max(1, count($existing_variants));
+    $form_state->set('co_num_variants', $num_variants);
+  }
+
+  $form['content_optimizer']['variants'] = [
+    '#type' => 'container',
+    '#prefix' => '<div id="content-optimizer-variants-wrapper">',
+    '#suffix' => '</div>',
+  ];
+
+  for ($i = 0; $i < $num_variants; $i++) {
+    $form['content_optimizer']['variants'][$i] = [
+      '#type' => 'textfield',
+      '#title' => t('Variant @num', ['@num' => $i + 1]),
+      '#default_value' => $existing_variants[$i] ?? '',
+      '#maxlength' => 512,
+    ];
+  }
+
+  $form['content_optimizer']['variants']['add_variant'] = [
+    '#type' => 'submit',
+    '#value' => t('Add variant'),
+    '#name' => 'co_add_variant',
+    '#submit' => ['_content_optimizer_add_variant_submit'],
+    '#ajax' => [
+      'callback' => '_content_optimizer_variants_ajax',
+      'wrapper' => 'content-optimizer-variants-wrapper',
+    ],
+    '#limit_validation_errors' => [],
+  ];
+
+  if ($num_variants > 1) {
+    $form['content_optimizer']['variants']['remove_variant'] = [
+      '#type' => 'submit',
+      '#value' => t('Remove last'),
+      '#name' => 'co_remove_variant',
+      '#submit' => ['_content_optimizer_remove_variant_submit'],
+      '#ajax' => [
+        'callback' => '_content_optimizer_variants_ajax',
+        'wrapper' => 'content-optimizer-variants-wrapper',
+      ],
+      '#limit_validation_errors' => [],
+    ];
+  }
+
+  $form['content_optimizer']['enabled'] = [
+    '#type' => 'checkbox',
+    '#title' => t('Enable experiment'),
+    '#default_value' => $experiment ? $experiment->isPublished() : TRUE,
+  ];
+
+  if ($experiment) {
+    $form['content_optimizer']['experiment_id'] = [
+      '#type' => 'value',
+      '#value' => $experiment->id(),
+    ];
+  }
+
+  // Add our submit handler.
+  $form['actions']['submit']['#submit'][] = '_content_optimizer_entity_form_submit';
+}
+
+/**
+ * AJAX callback for variants section.
+ */
+function _content_optimizer_variants_ajax(array &$form, FormStateInterface $form_state) {
+  return $form['content_optimizer']['variants'];
+}
+
+/**
+ * Submit handler: add a variant row.
+ */
+function _content_optimizer_add_variant_submit(array &$form, FormStateInterface $form_state) {
+  $num = $form_state->get('co_num_variants') ?? 1;
+  $form_state->set('co_num_variants', $num + 1);
+  $form_state->setRebuild();
+}
+
+/**
+ * Submit handler: remove the last variant row.
+ */
+function _content_optimizer_remove_variant_submit(array &$form, FormStateInterface $form_state) {
+  $num = $form_state->get('co_num_variants') ?? 1;
+  if ($num > 1) {
+    $form_state->set('co_num_variants', $num - 1);
+  }
+  $form_state->setRebuild();
+}
+
+/**
+ * Submit handler: save the experiment when the entity form is saved.
+ */
+function _content_optimizer_entity_form_submit(array &$form, FormStateInterface $form_state) {
+  $form_object = $form_state->getFormObject();
+  $entity = $form_object->getEntity();
+  $co_values = $form_state->getValue('content_optimizer');
+
+  if (empty($co_values)) {
+    return;
+  }
+
+  // Collect variant texts.
+  $variants = [];
+  if (!empty($co_values['variants'])) {
+    foreach ($co_values['variants'] as $key => $value) {
+      if (is_numeric($key) && is_string($value) && !empty(trim($value))) {
+        $variants[] = trim($value);
+      }
+    }
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('content_optimizer_experiment');
+
+  // Load existing or create new experiment.
+  $experiment_id = $co_values['experiment_id'] ?? NULL;
+  if ($experiment_id) {
+    $experiment = $storage->load($experiment_id);
+  }
+  else {
+    $experiment = NULL;
+  }
+
+  if (empty($variants)) {
+    // No variants: delete experiment if it exists.
+    if ($experiment) {
+      $experiment->delete();
+      \Drupal::messenger()->addStatus(t('Title experiment removed.'));
+    }
+    return;
+  }
+
+  if (!$experiment) {
+    $experiment = $storage->create([
+      'target_entity_type' => $entity->getEntityTypeId(),
+      'target_entity_id' => $entity->id(),
+      'target_field' => 'title',
+    ]);
+  }
+
+  $experiment->setVariants($variants);
+
+  if (!empty($co_values['enabled'])) {
+    $experiment->setPublished();
+  }
+  else {
+    $experiment->setUnpublished();
+  }
+
+  $experiment->save();
+
+  // Register with RL.
+  \Drupal::service('content_optimizer.experiment_registration')->register(
+    $experiment->getRlExperimentId(),
+    $experiment->getExperimentLabel()
+  );
+}
+
+/**
+ * Implements hook_preprocess_page_title().
+ *
+ * Overrides the visible page title with the winning variant.
+ */
+function content_optimizer_preprocess_page_title(array &$variables) {
+  $result = _content_optimizer_get_active_variant();
+  if ($result && $result['text'] !== NULL) {
+    $variables['title'] = $result['text'];
+  }
+}
+
+/**
+ * Implements hook_preprocess_html().
+ *
+ * Overrides the <title> tag with the winning variant.
+ */
+function content_optimizer_preprocess_html(array &$variables) {
+  $result = _content_optimizer_get_active_variant();
+  if ($result && $result['text'] !== NULL && isset($variables['head_title']['title'])) {
+    $variables['head_title']['title'] = $result['text'];
+  }
+}
+
+/**
+ * Implements hook_page_attachments().
+ *
+ * Attaches tracking JavaScript when a variant experiment is active.
+ */
+function content_optimizer_page_attachments(array &$attachments) {
+  $result = _content_optimizer_get_active_variant();
+  if (!$result) {
+    return;
+  }
+
+  $config = \Drupal::config('content_optimizer.settings');
+  $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
+  $base_path = \Drupal::request()->getBasePath();
+
+  $attachments['#attached']['library'][] = 'content_optimizer/title-tracking';
+  $attachments['#attached']['drupalSettings']['contentOptimizer'] = [
+    'experimentId' => $result['experiment_id'],
+    'armId' => $result['arm_id'],
+    'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
+    'rewardStrategy' => $config->get('reward_strategy') ?? 'time_on_page',
+    'rewardThreshold' => ($config->get('reward_threshold') ?? 10) * 1000,
+  ];
+}
+
+/**
+ * Implements hook_entity_delete().
+ *
+ * Cleans up experiments when the target entity is deleted.
+ */
+function content_optimizer_entity_delete(EntityInterface $entity) {
+  $experiments = \Drupal::entityTypeManager()
+    ->getStorage('content_optimizer_experiment')
+    ->loadByProperties([
+      'target_entity_type' => $entity->getEntityTypeId(),
+      'target_entity_id' => $entity->id(),
+    ]);
+
+  foreach ($experiments as $experiment) {
+    $experiment->delete();
+  }
+}
+
+/**
+ * Get the active variant for the current page.
+ *
+ * Results are statically cached per request.
+ *
+ * @return array|null
+ *   Variant selection result or NULL.
+ */
+function _content_optimizer_get_active_variant(): ?array {
+  $result = &drupal_static(__FUNCTION__);
+  if ($result !== NULL) {
+    // Return cached result; FALSE means "checked, no variant".
+    return $result === FALSE ? NULL : $result;
+  }
+
+  $route_match = \Drupal::routeMatch();
+  $config = \Drupal::config('content_optimizer.settings');
+  $enabled_types = $config->get('entity_types') ?? ['node'];
+
+  // Try to find an entity parameter in the route.
+  foreach ($enabled_types as $entity_type_id) {
+    $entity = $route_match->getParameter($entity_type_id);
+    if ($entity instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      /** @var \Drupal\content_optimizer\Service\VariantSelector $selector */
+      $selector = \Drupal::service('content_optimizer.variant_selector');
+      $selection = $selector->selectVariant($entity_type_id, (int) $entity->id(), 'title');
+      if ($selection) {
+        $result = $selection;
+        return $result;
+      }
+    }
+  }
+
+  $result = FALSE;
+  return NULL;
+}
+
+/**
+ * Implements hook_preprocess_menu().
+ *
+ * Overrides menu link labels with winning variants.
+ */
+function content_optimizer_preprocess_menu(array &$variables) {
+  if (empty($variables['items'])) {
+    return;
+  }
+
+  _content_optimizer_process_menu_items($variables['items']);
+}
+
+/**
+ * Recursively process menu items for variant selection.
+ *
+ * @param array &$items
+ *   Menu items to process.
+ */
+function _content_optimizer_process_menu_items(array &$items) {
+  /** @var \Drupal\content_optimizer\Service\VariantSelector $selector */
+  $selector = \Drupal::service('content_optimizer.variant_selector');
+  $menu_tracking = &drupal_static('content_optimizer_menu_tracking', []);
+
+  foreach ($items as &$item) {
+    // Check if this menu item links to an entity.
+    if (isset($item['url']) && $item['url'] instanceof Url) {
+      $route_params = $item['url']->getRouteParameters();
+      if (!empty($route_params)) {
+        foreach ($route_params as $entity_type => $entity_id) {
+          $result = $selector->selectVariant($entity_type, (int) $entity_id, 'menu_link_label');
+          if ($result && $result['text'] !== NULL) {
+            $item['title'] = $result['text'];
+            $menu_tracking[] = [
+              'experimentId' => $result['experiment_id'],
+              'armId' => $result['arm_id'],
+              'entityId' => $entity_id,
+            ];
+          }
+          break;
+        }
+      }
+    }
+
+    // Process children recursively.
+    if (!empty($item['below'])) {
+      _content_optimizer_process_menu_items($item['below']);
+    }
+  }
+}

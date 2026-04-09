@@ -1,0 +1,7 @@
+name: 'Content Optimizer'
+type: module
+description: 'A/B test page titles, menu link labels, and other entity text using Thompson Sampling.'
+core_version_requirement: ^10.3 || ^11
+package: RL
+dependencies:
+  - rl:rl

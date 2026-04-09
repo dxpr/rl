@@ -1,0 +1,5 @@
+reward_strategy: time_on_page
+reward_threshold: 10
+entity_types:
+  - node
+cache_ttl: 60

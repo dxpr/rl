@@ -1,0 +1,39 @@
+content_optimizer.experiments:
+  path: '/admin/config/content/content-optimizer'
+  defaults:
+    _entity_list: 'content_optimizer_experiment'
+    _title: 'Content Optimizer'
+  requirements:
+    _permission: 'administer content optimizer'
+
+content_optimizer.experiment.add:
+  path: '/admin/config/content/content-optimizer/add'
+  defaults:
+    _entity_form: 'content_optimizer_experiment.add'
+    _title: 'Add Experiment'
+  requirements:
+    _permission: 'administer content optimizer'
+
+content_optimizer.experiment.edit:
+  path: '/admin/config/content/content-optimizer/{content_optimizer_experiment}/edit'
+  defaults:
+    _entity_form: 'content_optimizer_experiment.edit'
+    _title: 'Edit Experiment'
+  requirements:
+    _permission: 'administer content optimizer'
+
+content_optimizer.experiment.delete:
+  path: '/admin/config/content/content-optimizer/{content_optimizer_experiment}/delete'
+  defaults:
+    _entity_form: 'content_optimizer_experiment.delete'
+    _title: 'Delete Experiment'
+  requirements:
+    _permission: 'administer content optimizer'
+
+content_optimizer.settings:
+  path: '/admin/config/content/content-optimizer/settings'
+  defaults:
+    _form: '\Drupal\content_optimizer\Form\SettingsForm'
+    _title: 'Content Optimizer Settings'
+  requirements:
+    _permission: 'administer site configuration'

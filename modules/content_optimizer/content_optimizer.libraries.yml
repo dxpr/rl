@@ -1,0 +1,20 @@
+title-tracking:
+  js:
+    js/title-tracking.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once
+
+menu-tracking:
+  js:
+    js/menu-tracking.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once
+
+admin:
+  css:
+    theme:
+      css/content-optimizer.admin.css: {}

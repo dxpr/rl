@@ -1,0 +1,16 @@
+/**
+ * @file
+ * Admin styles for Content Optimizer.
+ */
+
+.content-optimizer-status {
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: #f0f8f0;
+  border-left: 3px solid #4caf50;
+  border-radius: 2px;
+}
+
+.content-optimizer-status a {
+  font-weight: bold;
+}

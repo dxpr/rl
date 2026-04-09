@@ -1,0 +1,10 @@
+content_optimizer.experiments:
+  title: 'Experiments'
+  route_name: content_optimizer.experiments
+  base_route: content_optimizer.experiments
+
+content_optimizer.settings:
+  title: 'Settings'
+  route_name: content_optimizer.settings
+  base_route: content_optimizer.experiments
+  weight: 50

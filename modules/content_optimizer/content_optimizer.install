@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for Content Optimizer.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function content_optimizer_uninstall() {
+  // Clean up configuration.
+  \Drupal::configFactory()->getEditable('content_optimizer.settings')->delete();
+}
