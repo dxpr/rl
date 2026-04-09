@@ -34,4 +34,14 @@ assert_has "invalid host returns error" "Invalid --host" "$output"
 output=$($DRUSH rl:setup-ai --host=agents 2>&1)
 assert_has "agents install returns success" "success: true" "$output"
 
+# Submodules: with rl_page_title and rl_menu_link enabled, the install
+# should include their skill files in the actions list.
+output=$($DRUSH rl:setup-ai 2>&1)
+assert_has "install includes rl_page_title submodule" "rl_page_title" "$output"
+assert_has "install includes rl_menu_link submodule" "rl_menu_link" "$output"
+
+# Check mode after submodule install.
+output=$($DRUSH rl:setup-ai --check 2>&1)
+assert_has "check confirms submodule files" "rl_page_title" "$output"
+
 print_summary

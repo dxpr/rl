@@ -1,0 +1,10 @@
+services:
+  rl_page_title.drush.commands:
+    class: Drupal\rl_page_title\Drush\Commands\RlPageTitleCommands
+    arguments:
+      - '@entity_type.manager'
+      - '@rl.experiment_registry'
+      - '@rl.experiment_manager'
+      - '@path_alias.manager'
+    tags:
+      - { name: drush.command }

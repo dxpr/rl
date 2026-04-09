@@ -3,6 +3,7 @@
 namespace Drupal\rl_page_title\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityPublishedTrait;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
@@ -61,7 +62,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *   },
  * )
  */
-class PageTitleExperiment extends ContentEntityBase implements VariantExperimentInterface {
+class PageTitleExperiment extends ContentEntityBase implements VariantExperimentInterface, EntityPublishedInterface {
 
   use EntityPublishedTrait;
   use VariantArmsTrait;

@@ -1,0 +1,4 @@
+display_name: "RL Page Title"
+description: "A/B test Drupal page titles for any page (nodes, Views, custom controllers) using Thompson Sampling. Per-language scoped, manage via Drush CLI."
+default_prompt: "List all page title experiments and their current status."
+allow_implicit_invocation: true

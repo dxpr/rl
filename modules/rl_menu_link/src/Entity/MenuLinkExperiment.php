@@ -3,6 +3,7 @@
 namespace Drupal\rl_menu_link\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityPublishedTrait;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
@@ -54,7 +55,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *   },
  * )
  */
-class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentInterface {
+class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentInterface, EntityPublishedInterface {
 
   use EntityPublishedTrait;
   use VariantArmsTrait;
