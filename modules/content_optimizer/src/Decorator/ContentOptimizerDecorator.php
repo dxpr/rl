@@ -89,7 +89,7 @@ class ContentOptimizerDecorator implements ExperimentDecoratorInterface {
    *   The experiment entity or NULL.
    */
   protected function findExperimentByRlId(string $rl_experiment_id) {
-    // Parse experiment ID: content_optimizer-{type}-{id}-{field}
+    // Parse experiment ID: content_optimizer-{type}-{id}-{field}.
     $parts = explode('-', $rl_experiment_id, 4);
     if (count($parts) < 4 || $parts[0] !== 'content_optimizer') {
       return NULL;

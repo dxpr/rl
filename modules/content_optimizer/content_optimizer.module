@@ -5,7 +5,8 @@
  * Content Optimizer module: A/B test page titles and other entity text.
  */
 
-use Drupal\Core\Entity\Display\EntityFormDisplayInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
@@ -56,7 +57,7 @@ function content_optimizer_entity_extra_field_info() {
  */
 function content_optimizer_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
   $form_object = $form_state->getFormObject();
-  if (!($form_object instanceof \Drupal\Core\Entity\ContentEntityFormInterface)) {
+  if (!($form_object instanceof ContentEntityFormInterface)) {
     return;
   }
 
@@ -387,7 +388,7 @@ function _content_optimizer_get_active_variant(): ?array {
   // Try to find an entity parameter in the route.
   foreach ($enabled_types as $entity_type_id) {
     $entity = $route_match->getParameter($entity_type_id);
-    if ($entity instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+    if ($entity instanceof ContentEntityInterface) {
       /** @var \Drupal\content_optimizer\Service\VariantSelector $selector */
       $selector = \Drupal::service('content_optimizer.variant_selector');
       $selection = $selector->selectVariant($entity_type_id, (int) $entity->id(), 'title');
