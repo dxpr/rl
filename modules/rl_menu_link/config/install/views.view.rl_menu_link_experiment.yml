@@ -5,7 +5,7 @@ dependencies:
     - rl_menu_link
     - user
 id: rl_menu_link_experiment
-label: 'RL Menu Link experiments'
+label: 'Reinforcement Learning menu link experiments'
 module: views
 description: 'Admin list of menu link experiments.'
 tag: ''
@@ -129,10 +129,64 @@ display:
           relationship: none
           group_type: group
           admin_label: ''
+          entity_type: rl_menu_link_experiment
+          entity_field: label
           plugin_id: field
           label: Label
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: false
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: value
+          type: string
           settings:
-            link_to_entity: true
+            link_to_entity: false
+          group_column: value
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
         menu_link_plugin_id:
           id: menu_link_plugin_id
           table: rl_menu_link_experiment
@@ -140,10 +194,64 @@ display:
           relationship: none
           group_type: group
           admin_label: ''
+          entity_type: rl_menu_link_experiment
+          entity_field: menu_link_plugin_id
           plugin_id: field
-          label: 'Menu link plugin ID'
+          label: 'Menu link'
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: false
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: value
+          type: string
           settings:
             link_to_entity: false
+          group_column: value
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
         langcode:
           id: langcode
           table: rl_menu_link_experiment
@@ -151,8 +259,65 @@ display:
           relationship: none
           group_type: group
           admin_label: ''
-          plugin_id: field
+          entity_type: rl_menu_link_experiment
+          entity_field: langcode
+          plugin_id: field_language
           label: Language
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: false
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: value
+          type: language
+          settings:
+            link_to_entity: false
+            native_language: false
+          group_column: value
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
         enabled:
           id: enabled
           table: rl_menu_link_experiment
@@ -160,8 +325,66 @@ display:
           relationship: none
           group_type: group
           admin_label: ''
+          entity_type: rl_menu_link_experiment
+          entity_field: enabled
           plugin_id: field
           label: Status
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: false
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: value
+          type: boolean
+          settings:
+            format: custom
+            format_custom_false: Paused
+            format_custom_true: Active
+          group_column: value
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
         operations:
           id: operations
           table: rl_menu_link_experiment
@@ -169,8 +392,50 @@ display:
           relationship: none
           group_type: group
           admin_label: ''
+          entity_type: rl_menu_link_experiment
           plugin_id: entity_operations
           label: Operations
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: false
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          destination: true
       filters:
         label:
           id: label
@@ -261,7 +526,7 @@ display:
           expose:
             label: ''
             field_identifier: label
-      title: 'RL Menu Link experiments'
+      title: 'Reinforcement Learning menu link experiments'
       empty:
         area_text_custom:
           id: area_text_custom
@@ -273,7 +538,7 @@ display:
           plugin_id: text_custom
           empty: true
           tokenize: false
-          content: 'No menu link experiments yet. Add one to start A/B testing.'
+          content: "No experiments yet. The easiest way to start one is to edit any menu link under Structure \u203a Menus and open the \"A/B test menu link title\" tab on its edit form."
   page_1:
     id: page_1
     display_title: 'Admin page'
@@ -284,7 +549,7 @@ display:
       path: admin/config/services/rl-menu-link
       menu:
         type: 'normal'
-        title: 'RL Menu Link experiments'
+        title: 'Reinforcement Learning menu link experiments'
         description: 'A/B test menu link labels using Thompson Sampling.'
         weight: 0
         expanded: false

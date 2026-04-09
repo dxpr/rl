@@ -42,6 +42,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *       "delete" = "Drupal\rl_page_title\Form\PageTitleExperimentDeleteForm",
  *     },
  *     "views_data" = "Drupal\views\EntityViewsData",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
  *       "html" = "Drupal\Core\Entity\Routing\AdminHtmlRouteProvider",
@@ -75,8 +76,8 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
     $fields += static::publishedBaseFieldDefinitions($entity_type);
 
     $fields['label'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('Label'))
-      ->setDescription(t('Human-readable name for this experiment.'))
+      ->setLabel(t('Experiment name'))
+      ->setDescription(t('A short name you will recognize later in reports. If left blank, the name of the page being tested is used.'))
       ->setRequired(TRUE)
       ->setSetting('max_length', 255)
       ->setDisplayOptions('form', [
@@ -86,8 +87,8 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['path'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('Internal path'))
-      ->setDescription(t('Internal path of the page to test, with leading slash. Examples: <code>/node/42</code>, <code>/blog</code>, <code>/user/login</code>.'))
+      ->setLabel(t('Page URL or path'))
+      ->setDescription(t('The page you want to test. Enter the URL or path, for example <code>/blog/my-article</code> or <code>/node/42</code>. URL aliases are resolved automatically.'))
       ->setRequired(TRUE)
       ->setSetting('max_length', 2048)
       ->setDisplayOptions('form', [
@@ -107,8 +108,8 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
     $enabled = $fields['enabled'];
     assert($enabled instanceof BaseFieldDefinition);
     $enabled
-      ->setLabel(t('Enabled'))
-      ->setDescription(t('When unchecked, the experiment is paused.'))
+      ->setLabel(t('Serve variants to visitors'))
+      ->setDescription(t('Uncheck to pause the experiment without losing any collected data.'))
       ->setDefaultValue(TRUE)
       ->setDisplayOptions('form', [
         'type' => 'boolean_checkbox',

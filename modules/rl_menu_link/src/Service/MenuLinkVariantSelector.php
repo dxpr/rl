@@ -6,6 +6,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\rl\Experiment\VariantSelectorBase;
+use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\CacheManager;
 use Drupal\rl\Service\ExperimentManagerInterface;
 use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
@@ -32,10 +33,18 @@ class MenuLinkVariantSelector extends VariantSelectorBase {
     EntityTypeManagerInterface $entity_type_manager,
     ExperimentManagerInterface $experiment_manager,
     CacheManager $cache_manager,
+    ExperimentRegistryInterface $experiment_registry,
     LanguageManagerInterface $language_manager,
   ) {
-    parent::__construct($entity_type_manager, $experiment_manager, $cache_manager);
+    parent::__construct($entity_type_manager, $experiment_manager, $cache_manager, $experiment_registry);
     $this->languageManager = $language_manager;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function ownerModule(): string {
+    return 'rl_menu_link';
   }
 
   /**

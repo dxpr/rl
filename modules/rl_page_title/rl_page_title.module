@@ -6,6 +6,7 @@
  */
 
 use Drupal\Component\Render\MarkupInterface;
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
@@ -26,7 +27,7 @@ use Drupal\rl_page_title\Entity\PageTitleExperiment;
 function rl_page_title_help($route_name, RouteMatchInterface $route_match) {
   if ($route_name === 'help.page.rl_page_title') {
     $url = Url::fromRoute('view.rl_page_title_experiment.page_1')->toString();
-    return '<p>' . t('A/B test page titles for any page using Thompson Sampling. Source-agnostic: works for nodes, Views displays, custom controllers, and any path. Manage experiments at <a href=":url">RL Page Title experiments</a>.', [
+    return '<p>' . t('A/B test page titles for any page using Thompson Sampling. Source-agnostic: works for nodes, Views displays, custom controllers, and any path. Manage experiments at <a href=":url">Reinforcement Learning page title experiments</a>.', [
       ':url' => $url,
     ]) . '</p>';
   }
@@ -253,6 +254,23 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   if ($entity->getEntityTypeId() === 'rl_page_title_experiment') {
     return;
   }
+  // Skip entities whose "canonical" URL is actually their edit form (e.g.
+  // menu_link_content). For those entities there is no public page whose
+  // title could meaningfully be tested, and without this check the tab
+  // would appear on the menu link edit form next to the rl_menu_link tab
+  // and testing a nonsensical admin path.
+  if ($entity->hasLinkTemplate('edit-form')) {
+    try {
+      $canonical_url = $entity->toUrl('canonical')->toString();
+      $edit_url = $entity->toUrl('edit-form')->toString();
+      if ($canonical_url === $edit_url) {
+        return;
+      }
+    }
+    catch (\Exception $e) {
+      return;
+    }
+  }
   if (!\Drupal::currentUser()->hasPermission('administer rl page title experiments')) {
     return;
   }
@@ -281,9 +299,16 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     }
   }
 
+  $is_multilingual = \Drupal::languageManager()->isMultilingual();
+  $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED
+    ? t('all languages')
+    : (\Drupal::languageManager()->getLanguage($entity_langcode)?->getName() ?? $entity_langcode);
+
+  $baseline_title = (string) ($entity->label() ?? '');
+
   $form['rl_page_title'] = [
     '#type' => 'details',
-    '#title' => t('Title variants'),
+    '#title' => t('A/B test title'),
     '#group' => 'advanced',
     '#open' => FALSE,
     '#weight' => 50,
@@ -291,56 +316,142 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     '#access' => TRUE,
   ];
 
+  $form['rl_page_title']['baseline'] = [
+    '#type' => 'item',
+    '#title' => t('Current title'),
+    '#markup' => '<p class="rl-page-title-baseline"><em>' . Html::escape($baseline_title) . '</em></p>',
+  ];
+
   if ($existing) {
     $rl_experiment_id = $existing->getRlExperimentId();
-    $total = \Drupal::service('rl.experiment_manager')->getTotalTurns($rl_experiment_id);
-    $variant_count = count($existing->getVariants()) + 1;
-    $report_link = '';
-    if ($total > 0) {
-      $report_url = Url::fromRoute('rl.reports.experiment_detail', [
-        'experiment_id' => $rl_experiment_id,
-      ]);
-      $report_link = ' <a href="' . $report_url->toString() . '" target="_blank">' . t('View report') . '</a>';
+    $experiment_manager = \Drupal::service('rl.experiment_manager');
+    $total_turns = $experiment_manager->getTotalTurns($rl_experiment_id);
+    $arms = $experiment_manager->getAllArmsData($rl_experiment_id);
+    $total_rewards = 0;
+    $leading_arm = NULL;
+    $leading_rate = -1.0;
+    // Require at least this many turns per arm before the arm is eligible
+    // to be displayed as the current leader. Below this threshold the
+    // observed rate is dominated by sampling noise (a lucky 2-for-2 start
+    // reads as 100 % but says nothing about the true rate).
+    $min_per_arm_for_leader = 10;
+    foreach ($arms as $arm) {
+      $turns = (int) $arm->turns;
+      $rewards = (int) $arm->rewards;
+      $total_rewards += $rewards;
+      if ($turns >= $min_per_arm_for_leader) {
+        $rate = $rewards / $turns;
+        if ($rate > $leading_rate) {
+          $leading_rate = $rate;
+          $leading_arm = (string) $arm->arm_id;
+        }
+      }
     }
-    $form['rl_page_title']['status'] = [
+
+    $leading_text = NULL;
+    if ($leading_arm !== NULL) {
+      if ($leading_arm === 'v0') {
+        $leading_text = $baseline_title;
+      }
+      else {
+        $index = (int) substr($leading_arm, 1) - 1;
+        $variants = $existing->getVariants();
+        if (isset($variants[$index])) {
+          $leading_text = (string) $variants[$index];
+        }
+      }
+    }
+
+    $state_line = $existing->isPublished()
+      ? t('This test is running.')
+      : t('This test is paused. It will not show variants to visitors until you turn it back on.');
+
+    if ($is_multilingual) {
+      $state_line = $existing->isPublished()
+        ? t('This test is running in @lang.', ['@lang' => $language_name])
+        : t('This test is paused in @lang. It will not show variants to visitors until you turn it back on.', ['@lang' => $language_name]);
+    }
+
+    if ($total_turns === 0) {
+      $progress_line = t('No visitors have seen this test yet. Save the page and come back after some traffic arrives.');
+    }
+    elseif ($total_turns < 10 || $leading_text === NULL) {
+      $progress_line = t('Still collecting data. @turns visitors have seen a variant so far.', [
+        '@turns' => number_format($total_turns),
+      ]);
+    }
+    else {
+      if ($leading_arm === 'v0') {
+        $progress_line = t('Your original title is currently ahead. @turns visitors, @rewards read the page.', [
+          '@turns' => number_format($total_turns),
+          '@rewards' => number_format($total_rewards),
+        ]);
+      }
+      else {
+        $progress_line = t('"@alt" is currently ahead of your original. @turns visitors, @rewards read the page.', [
+          '@alt' => $leading_text,
+          '@turns' => number_format($total_turns),
+          '@rewards' => number_format($total_rewards),
+        ]);
+      }
+    }
+
+    $form['rl_page_title']['state'] = [
       '#type' => 'item',
-      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions (@lang).', [
-        '@state' => $existing->isPublished() ? t('Active') : t('Disabled'),
-        '@variants' => $variant_count,
-        '@impressions' => $total,
-        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
-      ]) . $report_link,
+      '#markup' => '<p><strong>' . $state_line . '</strong></p><p>' . $progress_line . '</p>',
     ];
+
+    if ($total_turns > 0) {
+      $form['rl_page_title']['report'] = [
+        '#type' => 'link',
+        '#title' => t('See the full report'),
+        '#url' => Url::fromRoute('rl.reports.experiment_detail', ['experiment_id' => $rl_experiment_id]),
+        '#attributes' => ['target' => '_blank'],
+      ];
+    }
   }
   else {
+    $intro = $is_multilingual
+      ? t('Not sure if your title is pulling its weight? Add a few alternatives below and we will show each one to a share of visitors reading this page in @lang, then tell you which one brings in the most engaged readers.', [
+        '@lang' => $language_name,
+      ])
+      : t('Not sure if your title is pulling its weight? Add a few alternatives below and we will show each one to a share of visitors, then tell you which one brings in the most engaged readers.');
+
     $form['rl_page_title']['intro'] = [
       '#type' => 'item',
-      '#markup' => '<p>' . t('Add alternative titles to test which performs best. The original title is always tested as variant 1; the lines below are tested against it. The experiment is scoped to the current entity language (@lang).', [
-        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
-      ]) . '</p>',
+      '#markup' => '<p>' . $intro . '</p>',
     ];
   }
 
   $form['rl_page_title']['variants'] = [
     '#type' => 'textarea',
-    '#title' => t('Alternative titles'),
-    '#description' => t('One alternative per line. Leave empty to remove the experiment.'),
+    '#title' => $existing ? t('Alternatives you are testing') : t('Try these alternative titles'),
+    '#description' => t('Enter one alternative per line. Your current title (shown above) always stays in the test.'),
     '#default_value' => $existing ? implode("\n", $existing->getVariants()) : '',
     '#rows' => 4,
   ];
 
   $form['rl_page_title']['enabled'] = [
     '#type' => 'checkbox',
-    '#title' => t('Enable experiment'),
+    '#title' => t('Run this test'),
+    '#description' => t('Turn off to pause. Your collected data is kept safe.'),
     '#default_value' => $existing ? (bool) $existing->isPublished() : TRUE,
   ];
 
-  $form['rl_page_title']['advanced_link'] = [
-    '#type' => 'item',
-    '#markup' => $existing
-      ? '<small>' . t('<a href=":url">Open the full experiment form</a> for advanced options.', [':url' => $existing->toUrl('edit-form')->toString()]) . '</small>'
-      : '<small>' . t('<a href=":url">Open the full experiment form</a> for advanced options.', [':url' => Url::fromRoute('entity.rl_page_title_experiment.add_form', [], ['query' => ['path' => $internal_path]])->toString()]) . '</small>',
-  ];
+  // Explicit "Stop testing" affordance for an existing experiment. This
+  // replaces the old "leave the textarea empty to silently delete"
+  // shortcut, which was a foot-gun: a user clearing the field by accident
+  // would destroy all their collected data on the next save.
+  if ($existing) {
+    $form['rl_page_title']['remove_link'] = [
+      '#type' => 'link',
+      '#title' => t('Stop testing and delete collected data'),
+      '#url' => $existing->toUrl('delete-form'),
+      '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
+      '#prefix' => '<div class="rl-page-title-remove">',
+      '#suffix' => '</div>',
+    ];
+  }
 
   $form['rl_page_title']['_path'] = [
     '#type' => 'value',
@@ -394,25 +505,25 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
 
   try {
     if (empty($variants)) {
+      // A blank textarea does not delete: deletion happens through the
+      // dedicated "Stop testing and delete collected data" link so an
+      // accidentally cleared field can never destroy collected data. For
+      // a new experiment (no existing row) we simply do nothing. For an
+      // existing experiment we warn that the parent entity was saved but
+      // the title variants were left unchanged.
       if ($experiment !== NULL) {
-        $rl_id = $experiment->getRlExperimentId();
-        // Purge analytics first; if it fails, the entity is still around
-        // for a retry.
-        \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
-        $experiment->delete();
-        \Drupal::messenger()->addStatus(t('Title experiment removed.'));
+        \Drupal::messenger()->addWarning(t('Title variants were left unchanged because no alternatives were provided. To stop this experiment, use "Stop testing and delete collected data".'));
       }
       return;
     }
 
     if ($experiment === NULL) {
       $form_object = $form_state->getFormObject();
-      $entity_label = $internal_path;
+      $label = $internal_path;
       if ($form_object instanceof EntityFormInterface) {
         $parent = $form_object->getEntity();
-        $entity_label = $parent->label() ?? $internal_path;
+        $label = $parent->label() ?? $internal_path;
       }
-      $label = (string) t('Page title: @entity', ['@entity' => $entity_label]);
       $created = $storage->create([
         'label' => $label,
         'path' => $internal_path,
@@ -439,11 +550,13 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
 
     Cache::invalidateTags(['rl_page_title:' . $experiment->getPath()]);
 
-    \Drupal::messenger()->addStatus(t('Title experiment saved.'));
+    \Drupal::messenger()->addStatus(t('Title variants saved. @n alternatives will be rotated against your original title.', [
+      '@n' => count($variants),
+    ]));
   }
   catch (\Exception $e) {
-    \Drupal::logger('rl_page_title')->error('Failed to save title experiment from entity form: @message', ['@message' => $e->getMessage()]);
-    \Drupal::messenger()->addError(t('Could not save title experiment: @message', ['@message' => $e->getMessage()]));
+    \Drupal::logger('rl_page_title')->error('Failed to save title variants from entity form: @message', ['@message' => $e->getMessage()]);
+    \Drupal::messenger()->addError(t('Title variants could not be saved: @message', ['@message' => $e->getMessage()]));
   }
 }
 
@@ -486,4 +599,33 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
     $manager->purgeExperiment($rl_id);
     $experiment->delete();
   }
+}
+
+/**
+ * Implements hook_preprocess_views_view_field().
+ *
+ * Rewrites the Label cell in the page title experiment admin Views table
+ * so it links to the experiment report instead of the entity edit form.
+ * The report is the more useful destination for someone scanning the
+ * list: it shows per-arm statistics. The Operations column still
+ * provides Edit/Delete for entity-level actions.
+ */
+function rl_page_title_preprocess_views_view_field(array &$variables): void {
+  if ($variables['view']->id() !== 'rl_page_title_experiment') {
+    return;
+  }
+  if ($variables['field']->field !== 'label') {
+    return;
+  }
+  $entity = $variables['row']->_entity ?? NULL;
+  if (!$entity instanceof PageTitleExperiment) {
+    return;
+  }
+  $variables['output'] = [
+    '#type' => 'link',
+    '#title' => $entity->label(),
+    '#url' => Url::fromRoute('rl.reports.experiment_detail', [
+      'experiment_id' => $entity->getRlExperimentId(),
+    ]),
+  ];
 }

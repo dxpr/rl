@@ -103,8 +103,8 @@ class PageTitleExperimentForm extends ContentEntityForm {
     $form['variants_data']['#access'] = FALSE;
     $form['variants'] = [
       '#type' => 'textarea',
-      '#title' => $this->t('Variant titles'),
-      '#description' => $this->t('Alternative titles, one per line. The original title is always tested as variant 1; the lines below are tested against it.'),
+      '#title' => $this->t('Alternative titles'),
+      '#description' => $this->t('Enter one alternative per line. The original page title always stays in the test as the control, and each line below is rotated in for visitors and measured against it.'),
       '#default_value' => implode("\n", $entity->getVariants()),
       '#rows' => 6,
       '#required' => TRUE,
@@ -122,7 +122,7 @@ class PageTitleExperimentForm extends ContentEntityForm {
     $form['langcode']['widget'][0]['value'] = [
       '#type' => 'select',
       '#title' => $this->t('Language'),
-      '#description' => $this->t('Restrict this experiment to one language, or apply to all languages. Per-language experiments get independent Thompson Sampling state.'),
+      '#description' => $this->t('Restrict this experiment to visitors in one language, or apply it to all languages. Each language tracks its own results independently.'),
       '#options' => $language_options,
       '#default_value' => $entity->language()->getId(),
     ];
@@ -138,14 +138,17 @@ class PageTitleExperimentForm extends ContentEntityForm {
 
     $raw_path = trim((string) $form_state->getValue(['path', 0, 'value']));
     if ($raw_path === '') {
-      $form_state->setErrorByName('path', $this->t('Path is required.'));
+      $form_state->setErrorByName('path', $this->t('Please enter the page URL or path you want to test.'));
       return;
     }
+    // Quietly add a leading slash if the user left it off. Forcing users
+    // to type "/" is unnecessary friction and they get it wrong constantly.
     if ($raw_path[0] !== '/') {
-      $form_state->setErrorByName('path', $this->t('Path must start with a slash.'));
+      $raw_path = '/' . $raw_path;
+      $form_state->setValue(['path', 0, 'value'], $raw_path);
     }
-    elseif (!$this->pathValidator->isValid($raw_path)) {
-      $form_state->setErrorByName('path', $this->t('The path %path does not match a valid Drupal route.', ['%path' => $raw_path]));
+    if (!$this->pathValidator->isValid($raw_path)) {
+      $form_state->setErrorByName('path', $this->t('No page was found at %path. Check the URL and try again.', ['%path' => $raw_path]));
     }
 
     // Resolve to canonical internal path and check for duplicates.
@@ -166,16 +169,16 @@ class PageTitleExperimentForm extends ContentEntityForm {
       ]);
     foreach ($duplicates as $duplicate) {
       if ((string) $duplicate->id() !== (string) $entity->id()) {
-        $form_state->setErrorByName('path', $this->t('Another experiment (%label) already targets %path in this language. Edit that experiment instead.', [
-          '%label' => $duplicate->label(),
-          '%path' => $internal_path,
+        $form_state->setErrorByName('path', $this->t('An experiment named "@label" already tests this page in the same language. <a href=":url">Edit it instead</a>.', [
+          '@label' => $duplicate->label(),
+          ':url' => $duplicate->toUrl('edit-form')->toString(),
         ]));
         break;
       }
     }
 
     if (empty(VariantParser::parse((string) $form_state->getValue('variants', '')))) {
-      $form_state->setErrorByName('variants', $this->t('Provide at least one variant title.'));
+      $form_state->setErrorByName('variants', $this->t('Enter at least one alternative title, one per line.'));
     }
   }
 
@@ -234,7 +237,7 @@ class PageTitleExperimentForm extends ContentEntityForm {
         $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
       }
       catch (\Exception $e) {
-        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">RL reports</a>.', [
+        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">Reinforcement Learning reports</a>.', [
           '@message' => $e->getMessage(),
           ':url' => '/admin/reports/rl',
         ]));

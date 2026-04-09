@@ -6,5 +6,7 @@ services:
       - '@rl.experiment_registry'
       - '@rl.experiment_manager'
       - '@path_alias.manager'
+      - '@router.no_access_checks'
+      - '@title_resolver'
     tags:
       - { name: drush.command }

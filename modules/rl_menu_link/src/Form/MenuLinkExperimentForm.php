@@ -86,8 +86,8 @@ class MenuLinkExperimentForm extends ContentEntityForm {
     $form['variants_data']['#access'] = FALSE;
     $form['variants'] = [
       '#type' => 'textarea',
-      '#title' => $this->t('Variant labels'),
-      '#description' => $this->t('Alternative labels, one per line. The original label is always tested as variant 1; the lines below are tested against it.'),
+      '#title' => $this->t('Alternative menu link titles'),
+      '#description' => $this->t('Enter one alternative per line. The original menu link title always stays in the test as the control, and each line below is rotated in for visitors and measured against it.'),
       '#default_value' => implode("\n", $entity->getVariants()),
       '#rows' => 6,
       '#required' => TRUE,
@@ -103,7 +103,7 @@ class MenuLinkExperimentForm extends ContentEntityForm {
     $form['langcode']['widget'][0]['value'] = [
       '#type' => 'select',
       '#title' => $this->t('Language'),
-      '#description' => $this->t('Restrict this experiment to one language, or apply to all languages. Per-language experiments get independent Thompson Sampling state.'),
+      '#description' => $this->t('Restrict this experiment to visitors in one language, or apply it to all languages. Each language tracks its own results independently.'),
       '#options' => $language_options,
       '#default_value' => $entity->language()->getId(),
     ];
@@ -119,11 +119,11 @@ class MenuLinkExperimentForm extends ContentEntityForm {
 
     $plugin_id = trim((string) $form_state->getValue(['menu_link_plugin_id', 0, 'value']));
     if ($plugin_id === '') {
-      $form_state->setErrorByName('menu_link_plugin_id', $this->t('Plugin ID is required.'));
+      $form_state->setErrorByName('menu_link_plugin_id', $this->t('Menu link is required.'));
       return;
     }
     if (!$this->menuLinkManager->hasDefinition($plugin_id)) {
-      $form_state->setErrorByName('menu_link_plugin_id', $this->t('No menu link with plugin ID %id is registered.', ['%id' => $plugin_id]));
+      $form_state->setErrorByName('menu_link_plugin_id', $this->t('No menu link with identifier %id was found. Try editing the link from Structure &rsaquo; Menus and using its "Label variants" tab instead.', ['%id' => $plugin_id]));
       return;
     }
 
@@ -139,15 +139,16 @@ class MenuLinkExperimentForm extends ContentEntityForm {
       ]);
     foreach ($duplicates as $duplicate) {
       if ((string) $duplicate->id() !== (string) $entity->id()) {
-        $form_state->setErrorByName('menu_link_plugin_id', $this->t('Another experiment (%label) already targets this menu link in this language. Edit that experiment instead.', [
-          '%label' => $duplicate->label(),
+        $form_state->setErrorByName('menu_link_plugin_id', $this->t('An experiment named "@label" already tests this menu link in the same language. <a href=":url">Edit it instead</a>.', [
+          '@label' => $duplicate->label(),
+          ':url' => $duplicate->toUrl('edit-form')->toString(),
         ]));
         break;
       }
     }
 
     if (empty(VariantParser::parse((string) $form_state->getValue('variants', '')))) {
-      $form_state->setErrorByName('variants', $this->t('Provide at least one variant label.'));
+      $form_state->setErrorByName('variants', $this->t('Enter at least one alternative menu link title, one per line.'));
     }
   }
 
@@ -201,7 +202,7 @@ class MenuLinkExperimentForm extends ContentEntityForm {
         $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
       }
       catch (\Exception $e) {
-        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">RL reports</a>.', [
+        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">Reinforcement Learning reports</a>.', [
           '@message' => $e->getMessage(),
           ':url' => '/admin/reports/rl',
         ]));

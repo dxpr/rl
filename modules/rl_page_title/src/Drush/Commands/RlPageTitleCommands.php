@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\rl_page_title\Drush\Commands;
 
+use Drupal\Core\Controller\TitleResolverInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Language\LanguageInterface;
+use Symfony\Component\Routing\RouterInterface;
 use Drupal\path_alias\AliasManagerInterface;
 use Drupal\rl\Drush\Commands\RlCommandsBase;
 use Drupal\rl\Experiment\VariantParser;
@@ -13,6 +16,7 @@ use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
 use Drupal\rl_page_title\Entity\PageTitleExperiment;
 use Drush\Attributes as CLI;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Drush commands for managing page title A/B test experiments.
@@ -27,8 +31,58 @@ final class RlPageTitleCommands extends RlCommandsBase {
     protected readonly ExperimentRegistryInterface $experimentRegistry,
     protected readonly ExperimentManagerInterface $experimentManager,
     protected readonly AliasManagerInterface $aliasManager,
+    protected readonly RouterInterface $router,
+    protected readonly TitleResolverInterface $titleResolver,
   ) {
     parent::__construct();
+  }
+
+  /**
+   * Resolve a sensible default label for the given internal path.
+   *
+   * Mirrors what the entity edit form's vertical tab does: prefer the
+   * matched entity's label (e.g. node title for /node/12), and fall back
+   * to the route's resolved title (e.g. "Administration" for /admin) so
+   * that auto-generated experiment labels reflect what users actually
+   * see in the page title rather than the raw URL.
+   *
+   * Returns NULL if neither resolution succeeds; callers should fall
+   * back to the path itself.
+   */
+  protected function resolvePathLabel(string $internal_path): ?string {
+    try {
+      $match = $this->router->match($internal_path);
+    }
+    catch (\Exception $e) {
+      return NULL;
+    }
+
+    // Prefer entity label when the route binds a content entity parameter.
+    foreach ($match as $value) {
+      if ($value instanceof ContentEntityInterface) {
+        $label = $value->label();
+        if ($label !== NULL && $label !== '') {
+          return (string) $label;
+        }
+      }
+    }
+
+    // Otherwise resolve the route's title (covers /admin, /user/login, etc.).
+    try {
+      $route = $match['_route_object'] ?? NULL;
+      if ($route === NULL) {
+        return NULL;
+      }
+      $request = Request::create($internal_path);
+      $title = $this->titleResolver->getTitle($request, $route);
+      if ($title === NULL || $title === '') {
+        return NULL;
+      }
+      return (string) $title;
+    }
+    catch (\Exception $e) {
+      return NULL;
+    }
   }
 
   /**
@@ -158,7 +212,9 @@ final class RlPageTitleCommands extends RlCommandsBase {
       );
     }
 
-    $label = $options['label'] ?? sprintf('Page title: %s', $internal_path);
+    $label = $options['label']
+      ?? $this->resolvePathLabel($internal_path)
+      ?? $internal_path;
 
     if ($options['dry-run']) {
       return $this->yaml([

@@ -1,4 +1,4 @@
 administer rl page title experiments:
-  title: 'Administer RL page title experiments'
+  title: 'Administer Reinforcement Learning page title experiments'
   description: 'Create, edit, and delete page title A/B test experiments.'
   restrict access: true

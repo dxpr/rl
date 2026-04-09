@@ -32,6 +32,31 @@ final class RlMenuLinkCommands extends RlCommandsBase {
   }
 
   /**
+   * Resolve a sensible default label for the given menu link plugin ID.
+   *
+   * Mirrors what the entity edit form's vertical tab does: ask the menu
+   * link manager for the link's current title (e.g. "Blog" for a
+   * menu_link_content link, "Content" for system.admin_content) so the
+   * auto-generated experiment label reflects what users actually see in
+   * the navigation rather than the raw plugin ID.
+   *
+   * Returns NULL if the plugin can't be instantiated; callers should fall
+   * back to the plugin ID itself.
+   */
+  protected function resolvePluginLabel(string $plugin_id): ?string {
+    if (!$this->menuLinkManager->hasDefinition($plugin_id)) {
+      return NULL;
+    }
+    try {
+      $title = (string) $this->menuLinkManager->createInstance($plugin_id)->getTitle();
+      return $title !== '' ? $title : NULL;
+    }
+    catch (\Exception $e) {
+      return NULL;
+    }
+  }
+
+  /**
    * Lists all menu link experiments.
    */
   #[CLI\Command(name: 'rl:menu-link:list', aliases: ['rl-mll'])]
@@ -174,7 +199,7 @@ final class RlMenuLinkCommands extends RlCommandsBase {
       );
     }
 
-    $label = $options['label'] ?? sprintf('Menu link: %s', $pluginId);
+    $label = $options['label'] ?? $this->resolvePluginLabel($pluginId) ?? $pluginId;
 
     if ($options['dry-run']) {
       return $this->yaml([

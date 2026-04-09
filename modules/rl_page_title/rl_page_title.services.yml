@@ -5,6 +5,7 @@ services:
       - '@entity_type.manager'
       - '@rl.experiment_manager'
       - '@rl.cache_manager'
+      - '@rl.experiment_registry'
       - '@path.current'
       - '@language_manager'
 

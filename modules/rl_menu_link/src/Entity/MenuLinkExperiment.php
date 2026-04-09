@@ -35,6 +35,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *       "delete" = "Drupal\rl_menu_link\Form\MenuLinkExperimentDeleteForm",
  *     },
  *     "views_data" = "Drupal\views\EntityViewsData",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
  *       "html" = "Drupal\Core\Entity\Routing\AdminHtmlRouteProvider",
@@ -68,8 +69,8 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
     $fields += static::publishedBaseFieldDefinitions($entity_type);
 
     $fields['label'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('Label'))
-      ->setDescription(t('Human-readable name for this experiment.'))
+      ->setLabel(t('Experiment name'))
+      ->setDescription(t('A short name you will recognize later in reports. If left blank, the name of the menu link is used.'))
       ->setRequired(TRUE)
       ->setSetting('max_length', 255)
       ->setDisplayOptions('form', [
@@ -79,8 +80,10 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['menu_link_plugin_id'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('Menu link plugin ID'))
-      ->setDescription(t('The plugin ID of the menu link to test, e.g. <code>menu_link_content:abc-uuid</code> or <code>system.admin_content</code>.'))
+      ->setLabel(t('Menu link'))
+      ->setDescription(t('The internal identifier of the menu link you want to test. The easiest way to set this is to open the menu link from <a href=":menu_admin">Structure &rsaquo; Menus</a> and use the "A/B test menu link title" tab on its edit form instead of this page.', [
+        ':menu_admin' => '/admin/structure/menu',
+      ]))
       ->setRequired(TRUE)
       ->setSetting('max_length', 255)
       ->setDisplayOptions('form', [
@@ -91,8 +94,8 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
       ->addConstraint('NotBlank');
 
     $fields['variants_data'] = BaseFieldDefinition::create('string_long')
-      ->setLabel(t('Variant labels (JSON)'))
-      ->setDescription(t('JSON-encoded list of variant label strings.'))
+      ->setLabel(t('Alternative titles (JSON)'))
+      ->setDescription(t('JSON-encoded list of alternative menu link title strings.'))
       ->setRequired(TRUE);
 
     // The 'enabled' field comes from publishedBaseFieldDefinitions(); we
@@ -100,8 +103,8 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
     $enabled = $fields['enabled'];
     assert($enabled instanceof BaseFieldDefinition);
     $enabled
-      ->setLabel(t('Enabled'))
-      ->setDescription(t('When unchecked, the experiment is paused.'))
+      ->setLabel(t('Serve variants to visitors'))
+      ->setDescription(t('Uncheck to pause the experiment without losing any collected data.'))
       ->setDefaultValue(TRUE)
       ->setDisplayOptions('form', [
         'type' => 'boolean_checkbox',

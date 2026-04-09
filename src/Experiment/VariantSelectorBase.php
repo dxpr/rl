@@ -4,6 +4,7 @@ namespace Drupal\rl\Experiment;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\CacheManager;
 use Drupal\rl\Service\ExperimentManagerInterface;
 
@@ -42,6 +43,13 @@ abstract class VariantSelectorBase {
   protected CacheManager $cacheManager;
 
   /**
+   * The RL experiment registry.
+   *
+   * @var \Drupal\rl\Registry\ExperimentRegistryInterface
+   */
+  protected ExperimentRegistryInterface $experimentRegistry;
+
+  /**
    * Per-request cache of selection results, keyed by "target|langcode".
    *
    * Value is either a result array (with experiment_id, arm_id, text) or
@@ -52,17 +60,39 @@ abstract class VariantSelectorBase {
   protected array $resultCache = [];
 
   /**
+   * Per-request set of RL experiment IDs already verified as registered.
+   *
+   * Avoids hitting the registry twice for the same experiment within a
+   * single request.
+   *
+   * @var array<string, true>
+   */
+  protected array $registrationVerified = [];
+
+  /**
    * Constructs a VariantSelectorBase.
    */
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     ExperimentManagerInterface $experiment_manager,
     CacheManager $cache_manager,
+    ExperimentRegistryInterface $experiment_registry,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->experimentManager = $experiment_manager;
     $this->cacheManager = $cache_manager;
+    $this->experimentRegistry = $experiment_registry;
   }
+
+  /**
+   * The owner module name to use when (re-)registering an experiment.
+   *
+   * Used by self-healing registration in selectForTarget(): if the entity
+   * exists but the registry row was lost (e.g., the user purged analytics
+   * via Drush without deleting the entity), we re-register on the next
+   * page load so the rl.php tracking endpoint accepts the experiment.
+   */
+  abstract protected function ownerModule(): string;
 
   /**
    * Page cache TTL applied while an experiment is active on the page.
@@ -128,6 +158,26 @@ abstract class VariantSelectorBase {
     }
 
     $rl_experiment_id = $experiment->getRlExperimentId();
+
+    // Self-healing registration: the entity is the source of truth for
+    // whether an experiment exists, but the rl.php tracking endpoint
+    // checks the registry table. If a user purged analytics via Drush
+    // without deleting the entity, the registry row is gone but the
+    // entity remains, and tracking would silently no-op. Re-registering
+    // here on the next page load brings the registry back in sync.
+    // Idempotent: register() is an upsert, and we cache the verification
+    // for the rest of the request to avoid extra DB writes.
+    if (!isset($this->registrationVerified[$rl_experiment_id])) {
+      if (!$this->experimentRegistry->isRegistered($rl_experiment_id)) {
+        $this->experimentRegistry->register(
+          $rl_experiment_id,
+          $this->ownerModule(),
+          (string) $experiment->label(),
+        );
+      }
+      $this->registrationVerified[$rl_experiment_id] = TRUE;
+    }
+
     $arm_ids = $experiment->getArmIds();
     $scores = $this->experimentManager->getThompsonScores($rl_experiment_id, NULL, $arm_ids);
     arsort($scores);
