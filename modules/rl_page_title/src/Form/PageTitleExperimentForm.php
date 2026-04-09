@@ -3,9 +3,12 @@
 namespace Drupal\rl_page_title\Form;
 
 use Drupal\Core\Cache\Cache;
-use Drupal\Core\Entity\EntityForm;
+use Drupal\Core\Entity\ContentEntityForm;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Path\PathValidatorInterface;
+use Drupal\Core\Url;
 use Drupal\path_alias\AliasManagerInterface;
 use Drupal\rl\Experiment\VariantParser;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
@@ -16,7 +19,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for adding and editing Page Title experiments.
  */
-class PageTitleExperimentForm extends EntityForm {
+class PageTitleExperimentForm extends ContentEntityForm {
 
   /**
    * The path validator.
@@ -47,6 +50,20 @@ class PageTitleExperimentForm extends EntityForm {
   protected ExperimentManagerInterface $experimentManager;
 
   /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface
+   */
+  protected LanguageManagerInterface $languageManager;
+
+  /**
+   * RL experiment ID of the previous target, captured for post-save purge.
+   *
+   * @var string|null
+   */
+  protected ?string $pendingPurgeRlExperimentId = NULL;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -55,6 +72,7 @@ class PageTitleExperimentForm extends EntityForm {
     $instance->aliasManager = $container->get('path_alias.manager');
     $instance->experimentRegistry = $container->get('rl.experiment_registry');
     $instance->experimentManager = $container->get('rl.experiment_manager');
+    $instance->languageManager = $container->get('language_manager');
     return $instance;
   }
 
@@ -69,64 +87,47 @@ class PageTitleExperimentForm extends EntityForm {
 
     // Pre-populate from query parameters (for deep links from contextual UIs).
     $request = $this->getRequest();
-    $default_path = $entity->getPath() ?: ($request->query->get('path') ?? '');
-    $default_label = $entity->label() ?: ($request->query->get('label') ?? '');
+    if ($entity->isNew()) {
+      if ($entity->getPath() === '' && $request->query->has('path')) {
+        $entity->setPath((string) $request->query->get('path'));
+        $form['path']['widget'][0]['value']['#default_value'] = $entity->getPath();
+      }
+      if ($entity->label() === NULL && $request->query->has('label')) {
+        $form['label']['widget'][0]['value']['#default_value'] = (string) $request->query->get('label');
+      }
+    }
 
-    $form['label'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Label'),
-      '#description' => $this->t('Human-readable name for this experiment, e.g. "Blog index page title".'),
-      '#default_value' => $default_label,
-      '#required' => TRUE,
-      '#maxlength' => 255,
-    ];
-
-    $form['id'] = [
-      '#type' => 'machine_name',
-      '#default_value' => $entity->id(),
-      '#machine_name' => [
-        'exists' => [$this, 'experimentExists'],
-        'source' => ['label'],
-      ],
-      '#disabled' => !$entity->isNew(),
-    ];
-
-    $form['path'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Path'),
-      '#description' => $this->t('Internal path of the page to test, with leading slash. Examples: <code>/node/42</code>, <code>/blog</code>, <code>/user/login</code>, <code>/node/add</code>. Aliases are accepted and resolved to the internal path on save.'),
-      '#default_value' => $default_path,
-      '#required' => TRUE,
-      '#maxlength' => 2048,
-    ];
-
-    $variants = $entity->getVariants();
+    // Convert variants_data (JSON internal) to a textarea for editing. The
+    // base field is hidden because it stores JSON; the textarea is the
+    // user-facing surface.
+    $form['variants_data']['#access'] = FALSE;
     $form['variants'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Variant titles'),
       '#description' => $this->t('Alternative titles, one per line. The original title is always tested as variant 1; the lines below are tested against it.'),
-      '#default_value' => implode("\n", $variants),
+      '#default_value' => implode("\n", $entity->getVariants()),
       '#rows' => 6,
       '#required' => TRUE,
+      '#weight' => 0,
     ];
 
-    $form['enabled'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enabled'),
-      '#description' => $this->t('When unchecked, the experiment is paused: the original title always shows and no impressions or rewards are recorded.'),
-      '#default_value' => $entity->isNew() ? TRUE : (bool) $entity->status(),
+    // Language selector. Default to LANGCODE_NOT_SPECIFIED ("all languages")
+    // to mirror Redirect's behavior. Show all configured languages plus the
+    // "all languages" option.
+    $languages = $this->languageManager->getLanguages(LanguageInterface::STATE_CONFIGURABLE);
+    $language_options = [LanguageInterface::LANGCODE_NOT_SPECIFIED => $this->t('- All languages -')];
+    foreach ($languages as $language) {
+      $language_options[$language->getId()] = $language->getName();
+    }
+    $form['langcode']['widget'][0]['value'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Language'),
+      '#description' => $this->t('Restrict this experiment to one language, or apply to all languages. Per-language experiments get independent Thompson Sampling state.'),
+      '#options' => $language_options,
+      '#default_value' => $entity->language()->getId(),
     ];
 
     return $form;
-  }
-
-  /**
-   * Machine name existence callback.
-   */
-  public function experimentExists($id): bool {
-    return (bool) $this->entityTypeManager
-      ->getStorage('rl_page_title_experiment')
-      ->load($id);
   }
 
   /**
@@ -135,7 +136,7 @@ class PageTitleExperimentForm extends EntityForm {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     parent::validateForm($form, $form_state);
 
-    $raw_path = trim($form_state->getValue('path') ?? '');
+    $raw_path = trim((string) $form_state->getValue(['path', 0, 'value']));
     if ($raw_path === '') {
       $form_state->setErrorByName('path', $this->t('Path is required.'));
       return;
@@ -152,14 +153,20 @@ class PageTitleExperimentForm extends EntityForm {
     $internal_path = PageTitleExperiment::normalizePath($resolved);
     $form_state->setValue('_resolved_path', $internal_path);
 
+    // Determine target language from the form.
+    $langcode = (string) ($form_state->getValue(['langcode', 0, 'value']) ?? LanguageInterface::LANGCODE_NOT_SPECIFIED);
+
     $entity = $this->entity;
     assert($entity instanceof PageTitleExperiment);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_page_title_experiment')
-      ->loadByProperties(['path' => $internal_path]);
+      ->loadByProperties([
+        'path' => $internal_path,
+        'langcode' => $langcode,
+      ]);
     foreach ($duplicates as $duplicate) {
-      if ($duplicate->id() !== $entity->id()) {
-        $form_state->setErrorByName('path', $this->t('Another experiment (%label) already targets %path. Edit that experiment instead.', [
+      if ((string) $duplicate->id() !== (string) $entity->id()) {
+        $form_state->setErrorByName('path', $this->t('Another experiment (%label) already targets %path in this language. Edit that experiment instead.', [
           '%label' => $duplicate->label(),
           '%path' => $internal_path,
         ]));
@@ -167,24 +174,10 @@ class PageTitleExperimentForm extends EntityForm {
       }
     }
 
-    if (empty(VariantParser::parse($form_state->getValue('variants') ?? ''))) {
+    if (empty(VariantParser::parse((string) $form_state->getValue('variants', '')))) {
       $form_state->setErrorByName('variants', $this->t('Provide at least one variant title.'));
     }
   }
-
-  /**
-   * {@inheritdoc}
-   */
-  /**
-   * RL experiment ID of the previous target, if a retarget is happening.
-   *
-   * Captured in submitForm() and consumed in save() AFTER the new entity has
-   * been written. This makes save+purge atomic from the user's perspective:
-   * if save() fails, the old analytics are still intact and the user can
-   * retry. If purge fails after a successful save, the new entity is fine
-   * and the user sees an error pointing at the orphaned analytics.
-   */
-  protected ?string $pendingPurgeRlExperimentId = NULL;
 
   /**
    * {@inheritdoc}
@@ -196,22 +189,26 @@ class PageTitleExperimentForm extends EntityForm {
     assert($entity instanceof PageTitleExperiment);
 
     // Detect retarget: capture the old RL experiment ID for save() to purge
-    // AFTER the entity is successfully written. We do not purge here because
-    // submitForm() runs before save() and a failed save would orphan the
-    // analytics.
+    // AFTER the entity is successfully written.
     $this->pendingPurgeRlExperimentId = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_page_title_experiment')
         ->loadUnchanged($entity->id());
-      if ($original instanceof PageTitleExperiment && $original->getPath() !== $form_state->getValue('_resolved_path')) {
-        $this->pendingPurgeRlExperimentId = $original->getRlExperimentId();
+      if ($original instanceof PageTitleExperiment) {
+        $original_id = $original->getRlExperimentId();
+        $new_id = PageTitleExperiment::buildRlExperimentId(
+          (string) $form_state->getValue('_resolved_path'),
+          (string) ($form_state->getValue(['langcode', 0, 'value']) ?? LanguageInterface::LANGCODE_NOT_SPECIFIED)
+        );
+        if ($original_id !== $new_id) {
+          $this->pendingPurgeRlExperimentId = $original_id;
+        }
       }
     }
 
-    $entity->setPath($form_state->getValue('_resolved_path'));
-    $entity->setVariants(VariantParser::parse($form_state->getValue('variants')));
-    $entity->set('enabled', (bool) $form_state->getValue('enabled'));
+    $entity->setPath((string) $form_state->getValue('_resolved_path'));
+    $entity->setVariants(VariantParser::parse((string) $form_state->getValue('variants', '')));
   }
 
   /**
@@ -222,17 +219,16 @@ class PageTitleExperimentForm extends EntityForm {
     assert($entity instanceof PageTitleExperiment);
     $status = $entity->save();
 
-    // Register with the RL experiment registry so the tracking endpoint
-    // accepts events for this experiment. Idempotent on the registry side.
+    // Register with the RL experiment registry. Idempotent.
     $this->experimentRegistry->register(
       $entity->getRlExperimentId(),
       'rl_page_title',
       $entity->label()
     );
 
-    // Now that the new entity is safely written, purge analytics for the old
-    // RL ID if this was a retarget. Doing this AFTER save() means a failed
-    // save leaves the original analytics intact for retry.
+    // Now that the new entity is safely written, purge analytics for the
+    // old RL ID if this was a retarget. Doing this AFTER save() means a
+    // failed save leaves the original analytics intact for retry.
     if ($this->pendingPurgeRlExperimentId !== NULL) {
       try {
         $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
@@ -247,7 +243,7 @@ class PageTitleExperimentForm extends EntityForm {
     }
 
     // Invalidate page cache for the target path so the new variants take
-    // effect immediately rather than waiting for the cached page to expire.
+    // effect immediately.
     Cache::invalidateTags(['rl_page_title:' . $entity->getPath()]);
 
     if ($status === SAVED_NEW) {
@@ -256,7 +252,7 @@ class PageTitleExperimentForm extends EntityForm {
     else {
       $this->messenger()->addStatus($this->t('Updated experiment %label.', ['%label' => $entity->label()]));
     }
-    $form_state->setRedirectUrl($entity->toUrl('collection'));
+    $form_state->setRedirectUrl(Url::fromRoute('view.rl_page_title_experiment.page_1'));
     return $status;
   }
 

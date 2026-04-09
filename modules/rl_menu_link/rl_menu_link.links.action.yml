@@ -2,4 +2,4 @@ rl_menu_link.add:
   route_name: entity.rl_menu_link_experiment.add_form
   title: 'Add experiment'
   appears_on:
-    - rl_menu_link.collection
+    - view.rl_menu_link_experiment.page_1

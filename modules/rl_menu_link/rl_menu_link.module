@@ -10,6 +10,7 @@ use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Render\Element;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
@@ -22,7 +23,7 @@ use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 function rl_menu_link_help($route_name, RouteMatchInterface $route_match) {
   if ($route_name === 'help.page.rl_menu_link') {
     return '<p>' . t('A/B test menu link labels using Thompson Sampling. Works for menu_link_content entities and YAML-defined links. Manage experiments at <a href=":url">RL Menu Link experiments</a>.', [
-      ':url' => Url::fromRoute('rl_menu_link.collection')->toString(),
+      ':url' => Url::fromRoute('view.rl_menu_link_experiment.page_1')->toString(),
     ]) . '</p>';
   }
 }
@@ -136,12 +137,17 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
   }
 
   $plugin_id = $entity->getPluginId();
+  // Use the entity's current translation language for the experiment scope.
+  $entity_langcode = $entity->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
 
   /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $existing */
   $existing = NULL;
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_menu_link_experiment')
-    ->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
+    ->loadByProperties([
+      'menu_link_plugin_id' => $plugin_id,
+      'langcode' => $entity_langcode,
+    ]);
   if ($matches) {
     $candidate = reset($matches);
     if ($candidate instanceof MenuLinkExperiment) {
@@ -171,17 +177,20 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
     }
     $form['rl_menu_link']['status'] = [
       '#type' => 'item',
-      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions.', [
-        '@state' => $existing->status() ? t('Active') : t('Disabled'),
+      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions (@lang).', [
+        '@state' => $existing->isPublished() ? t('Active') : t('Disabled'),
         '@variants' => $variant_count,
         '@impressions' => $total,
+        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
       ]) . $report_link,
     ];
   }
   else {
     $form['rl_menu_link']['intro'] = [
       '#type' => 'item',
-      '#markup' => '<p>' . t('Add alternative labels to test which performs best. The original label is always tested as variant 1; the lines below are tested against it.') . '</p>',
+      '#markup' => '<p>' . t('Add alternative labels to test which performs best. The experiment is scoped to the current entity language (@lang).', [
+        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
+      ]) . '</p>',
     ];
   }
 
@@ -196,7 +205,7 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
   $form['rl_menu_link']['enabled'] = [
     '#type' => 'checkbox',
     '#title' => t('Enable experiment'),
-    '#default_value' => $existing ? (bool) $existing->status() : TRUE,
+    '#default_value' => $existing ? (bool) $existing->isPublished() : TRUE,
   ];
 
   $form['rl_menu_link']['advanced_link'] = [
@@ -209,6 +218,10 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
   $form['rl_menu_link']['_plugin_id'] = [
     '#type' => 'value',
     '#value' => $plugin_id,
+  ];
+  $form['rl_menu_link']['_langcode'] = [
+    '#type' => 'value',
+    '#value' => $entity_langcode,
   ];
   if ($existing) {
     $form['rl_menu_link']['_existing_id'] = [
@@ -237,6 +250,7 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
   }
 
   $plugin_id = $values['_plugin_id'] ?? NULL;
+  $langcode = $values['_langcode'] ?? LanguageInterface::LANGCODE_NOT_SPECIFIED;
   if (!$plugin_id) {
     return;
   }
@@ -256,8 +270,8 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
     if (empty($variants)) {
       if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
-        // Purge analytics first. If this fails the config entity is still
-        // around as a recovery anchor.
+        // Purge analytics first. If this fails the entity is still around
+        // as a recovery anchor.
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
         $experiment->delete();
         \Drupal::messenger()->addStatus(t('Menu link experiment removed.'));
@@ -266,26 +280,29 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
     }
 
     if ($experiment === NULL) {
-      // Build a stable machine name aligned with the canonical RL ID.
-      $machine = 'ml_' . substr(MenuLinkExperiment::buildRlExperimentId($plugin_id), strlen('rl_menu_link-'));
       $form_object = $form_state->getFormObject();
       $entity_label = $plugin_id;
       if ($form_object instanceof EntityFormInterface) {
-        $entity = $form_object->getEntity();
-        $entity_label = $entity->label() ?? $plugin_id;
+        $parent = $form_object->getEntity();
+        $entity_label = $parent->label() ?? $plugin_id;
       }
       $label = (string) t('Menu link: @title', ['@title' => $entity_label]);
       $created = $storage->create([
-        'id' => $machine,
         'label' => $label,
         'menu_link_plugin_id' => $plugin_id,
+        'langcode' => $langcode,
       ]);
       assert($created instanceof MenuLinkExperiment);
       $experiment = $created;
     }
 
     $experiment->setVariants($variants);
-    $experiment->set('enabled', !empty($values['enabled']));
+    if (!empty($values['enabled'])) {
+      $experiment->setPublished();
+    }
+    else {
+      $experiment->setUnpublished();
+    }
     $experiment->save();
 
     \Drupal::service('rl.experiment_registry')->register(

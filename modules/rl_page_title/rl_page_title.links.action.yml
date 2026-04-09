@@ -2,4 +2,4 @@ rl_page_title.add:
   route_name: entity.rl_page_title_experiment.add_form
   title: 'Add experiment'
   appears_on:
-    - rl_page_title.collection
+    - view.rl_page_title_experiment.page_1

@@ -2,7 +2,9 @@
 
 namespace Drupal\rl_page_title\Decorator;
 
+use Drupal\Core\Language\LanguageInterface;
 use Drupal\rl\Experiment\VariantExperimentDecoratorBase;
+use Drupal\rl\Experiment\VariantExperimentInterface;
 use Drupal\rl_page_title\Entity\PageTitleExperiment;
 
 /**
@@ -34,14 +36,19 @@ class PageTitleDecorator extends VariantExperimentDecoratorBase {
   /**
    * {@inheritdoc}
    */
-  protected function buildExperimentDisplay(object $experiment): array {
+  protected function buildExperimentDisplay(VariantExperimentInterface $experiment): array {
     assert($experiment instanceof PageTitleExperiment);
+    $langcode = $experiment->language()->getId();
+    $lang_label = $langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED
+      ? (string) t('all languages')
+      : $langcode;
     return [
       '#type' => 'inline_template',
-      '#template' => '{{ label }} <small>({{ path }})</small>',
+      '#template' => '{{ label }} <small>({{ path }}, {{ lang }})</small>',
       '#context' => [
         'label' => $experiment->label() ?: $experiment->getPath(),
         'path' => $experiment->getPath(),
+        'lang' => $lang_label,
       ],
     ];
   }
@@ -49,7 +56,7 @@ class PageTitleDecorator extends VariantExperimentDecoratorBase {
   /**
    * {@inheritdoc}
    */
-  protected function buildOriginalArmDisplay(object $experiment): array {
+  protected function buildOriginalArmDisplay(VariantExperimentInterface $experiment): array {
     return [
       '#type' => 'inline_template',
       '#template' => '<em>{{ "(original title)"|t }}</em>',

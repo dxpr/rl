@@ -3,6 +3,7 @@
 namespace Drupal\rl\Experiment;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Language\LanguageInterface;
 use Drupal\rl\Service\CacheManager;
 use Drupal\rl\Service\ExperimentManagerInterface;
 
@@ -13,6 +14,9 @@ use Drupal\rl\Service\ExperimentManagerInterface;
  * which entity type to load and which property to match on, and that's it.
  * The Thompson scoring + per-request caching + page cache override pattern
  * is identical across consumers and lives here.
+ *
+ * Multilingual lookup model: language-specific match first, then fall back
+ * to LANGCODE_NOT_SPECIFIED ("all languages"). Mirrors the Redirect module.
  */
 abstract class VariantSelectorBase {
 
@@ -38,7 +42,7 @@ abstract class VariantSelectorBase {
   protected CacheManager $cacheManager;
 
   /**
-   * Per-request cache of selection results, keyed by lookup key.
+   * Per-request cache of selection results, keyed by "target|langcode".
    *
    * Value is either a result array (with experiment_id, arm_id, text) or
    * FALSE if a previous lookup found no match.
@@ -70,7 +74,7 @@ abstract class VariantSelectorBase {
   }
 
   /**
-   * The entity type ID of the experiment config entity to load.
+   * The entity type ID of the experiment content entity to load.
    */
   abstract protected function entityTypeId(): string;
 
@@ -90,24 +94,36 @@ abstract class VariantSelectorBase {
   abstract protected function targetProperty(): string;
 
   /**
-   * Look up the variant selection for a given target value.
+   * Look up the variant selection for a given target and language.
+   *
+   * Tries the language-specific match first, then falls back to
+   * LANGCODE_NOT_SPECIFIED ("all languages"). Returns NULL if neither
+   * lookup finds an enabled experiment.
    *
    * @param string $target
    *   The target value (path, plugin ID, etc.) to look up.
+   * @param string $langcode
+   *   The current language code.
    *
    * @return array|null
    *   Array with keys experiment_id, arm_id, text (NULL means original);
    *   or NULL if no enabled experiment matches.
    */
-  public function selectForTarget(string $target): ?array {
-    if (isset($this->resultCache[$target])) {
-      $cached = $this->resultCache[$target];
+  public function selectForTarget(string $target, string $langcode = LanguageInterface::LANGCODE_NOT_SPECIFIED): ?array {
+    $cache_key = $target . '|' . $langcode;
+    if (isset($this->resultCache[$cache_key])) {
+      $cached = $this->resultCache[$cache_key];
       return $cached === FALSE ? NULL : $cached;
     }
 
-    $experiment = $this->loadExperimentByTarget($target);
+    // Language-specific lookup first.
+    $experiment = $this->loadExperimentByTarget($target, $langcode);
+    // Fall back to "all languages" experiment if no language-specific match.
+    if ($experiment === NULL && $langcode !== LanguageInterface::LANGCODE_NOT_SPECIFIED) {
+      $experiment = $this->loadExperimentByTarget($target, LanguageInterface::LANGCODE_NOT_SPECIFIED);
+    }
     if ($experiment === NULL) {
-      $this->resultCache[$target] = FALSE;
+      $this->resultCache[$cache_key] = FALSE;
       return NULL;
     }
 
@@ -125,20 +141,21 @@ abstract class VariantSelectorBase {
       'arm_id' => $best_arm,
       'text' => $experiment->getArmText($best_arm),
     ];
-    $this->resultCache[$target] = $result;
+    $this->resultCache[$cache_key] = $result;
     return $result;
   }
 
   /**
-   * Load an enabled experiment by target value, returning the typed entity.
+   * Load an enabled experiment by target value and langcode.
    *
    * @return \Drupal\rl\Experiment\VariantExperimentInterface|null
    *   The matching experiment, or NULL if none is enabled for this target.
    */
-  protected function loadExperimentByTarget(string $target): ?VariantExperimentInterface {
+  protected function loadExperimentByTarget(string $target, string $langcode): ?VariantExperimentInterface {
     $storage = $this->entityTypeManager->getStorage($this->entityTypeId());
     $matches = $storage->loadByProperties([
       $this->targetProperty() => $target,
+      'langcode' => $langcode,
       'enabled' => TRUE,
     ]);
     if (!$matches) {

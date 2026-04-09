@@ -1,7 +1,0 @@
-rl_page_title.collection:
-  path: '/admin/config/services/rl-page-title'
-  defaults:
-    _entity_list: 'rl_page_title_experiment'
-    _title: 'RL Page Title experiments'
-  requirements:
-    _permission: 'administer rl page title experiments'

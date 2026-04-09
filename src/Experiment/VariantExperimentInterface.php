@@ -2,32 +2,41 @@
 
 namespace Drupal\rl\Experiment;
 
-use Drupal\Core\Config\Entity\ConfigEntityInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
 
 /**
- * Contract for variant-style RL experiment config entities.
+ * Contract for variant-style RL experiment content entities.
  *
- * Modules that ship config entities representing variant experiments
- * (rl_page_title, rl_menu_link, future rl_cta etc.) implement this so the
- * shared base classes (VariantSelectorBase, VariantExperimentListBuilderBase,
- * VariantExperimentDecoratorBase, VariantExperimentDeleteFormBase) can narrow
- * the type without each base class taking a class-string template.
+ * Modules that ship content entities representing variant experiments
+ * (rl_page_title, rl_menu_link, future rl_cta, etc.) implement this so the
+ * shared base classes (VariantSelectorBase, VariantExperimentDecoratorBase,
+ * VariantExperimentDeleteFormBase) can narrow the type without each base
+ * class taking a class-string template.
  *
- * The convention this interface enforces:
+ * Multilingual model: each implementing entity has a langcode entity key.
+ * Each (target, langcode) pair is a separate row, mirroring the Redirect
+ * module's per-language redirects. Implementations should NOT use Drupal's
+ * translation framework; they should store one row per language.
+ * `LanguageInterface::LANGCODE_NOT_SPECIFIED` is the "all languages"
+ * fallback target, looked up only when no language-specific row matches.
  *
+ * The arm convention this interface enforces:
  *   - Arm v0 = original (read live from whatever renders the target).
  *   - Arms v1..vN = stored variant texts, indexed sequentially.
  *
  * Implementations should use VariantArmsTrait, which provides default
  * implementations of getArmIds() and getArmText() for this convention.
  */
-interface VariantExperimentInterface extends ConfigEntityInterface {
+interface VariantExperimentInterface extends ContentEntityInterface {
 
   /**
    * The deterministic RL experiment ID for this entity.
    *
    * Used as the key into the RL parent module's experiment_registry,
-   * arm_data, totals, and snapshots tables.
+   * arm_data, totals, and snapshots tables. The hash includes the
+   * langcode so analytics are scoped per-language: an English experiment
+   * for /blog and a Spanish experiment for /blog get separate Thompson
+   * Sampling state.
    *
    * @return string
    *   The RL experiment ID, formatted as `{module_prefix}-{12-char-sha1}`.

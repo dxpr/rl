@@ -12,6 +12,7 @@ use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Render\Element;
 use Drupal\Core\Render\Markup;
 use Drupal\Core\Routing\RouteMatchInterface;
@@ -24,8 +25,9 @@ use Drupal\rl_page_title\Entity\PageTitleExperiment;
  */
 function rl_page_title_help($route_name, RouteMatchInterface $route_match) {
   if ($route_name === 'help.page.rl_page_title') {
+    $url = Url::fromRoute('view.rl_page_title_experiment.page_1')->toString();
     return '<p>' . t('A/B test page titles for any page using Thompson Sampling. Source-agnostic: works for nodes, Views displays, custom controllers, and any path. Manage experiments at <a href=":url">RL Page Title experiments</a>.', [
-      ':url' => Url::fromRoute('rl_page_title.collection')->toString(),
+      ':url' => $url,
     ]) . '</p>';
   }
 }
@@ -72,9 +74,6 @@ function rl_page_title_preprocess_html(array &$variables) {
  *   A value of the same general shape as $existing.
  */
 function _rl_page_title_replace_head_title($existing, string $replacement) {
-  // Render array case: keep the structure but swap the inner text where we
-  // can find it. Fall back to a plain_text element if the array does not
-  // expose a known text field.
   if (is_array($existing)) {
     if (isset($existing['#markup'])) {
       $existing['#markup'] = $replacement;
@@ -87,38 +86,25 @@ function _rl_page_title_replace_head_title($existing, string $replacement) {
     return ['#plain_text' => $replacement];
   }
 
-  // MarkupInterface case (TranslatableMarkup, FormattableMarkup, etc.). We
-  // cannot mutate these objects in place; the safe replacement is a Markup
-  // wrapper around the new text. Use Markup::create which trusts the input,
-  // safe here because $replacement comes from admin-managed config that
-  // already passed through Twig autoescape on render.
   if ($existing instanceof MarkupInterface) {
     return Markup::create($replacement);
   }
 
-  // Plain string case.
   return $replacement;
 }
 
 /**
  * Implements hook_page_attachments().
  *
- * Always attaches a cache tag for the current internal path, regardless of
- * whether an experiment exists yet. This is critical: if a page is cached
- * BEFORE an experiment is created for it, the cache tag must already be on
- * the cached page so that creating the experiment can invalidate the stale
- * page render. Without this, "creating a new experiment for /blog" would
- * not invalidate the cached /blog page until it expired naturally.
+ * Always attaches a path-scoped cache tag, regardless of whether an
+ * experiment exists yet. If a page is cached BEFORE an experiment is created
+ * for it, the tag must already be there for invalidation to work.
  */
 function rl_page_title_page_attachments(array &$attachments) {
-  // Tag every page with the path-scoped tag so future experiment creation
-  // can invalidate stale renders. This adds two cache tags per request,
-  // which is negligible.
   $internal_path = _rl_page_title_current_internal_path();
   $attachments['#cache']['tags'][] = 'rl_page_title:' . $internal_path;
   $attachments['#cache']['tags'][] = 'rl_page_title:all';
 
-  // Attach tracking JS only when an experiment is actually active.
   $result = _rl_page_title_get_active_variant();
   if (!$result) {
     return;
@@ -137,10 +123,6 @@ function rl_page_title_page_attachments(array &$attachments) {
 
 /**
  * Get the active variant for the current page (cached per request).
- *
- * @return array|null
- *   Selection result with experiment_id, arm_id, text; or NULL if no
- *   experiment is active for the current page.
  */
 function _rl_page_title_get_active_variant(): ?array {
   return \Drupal::service('rl_page_title.variant_selector')->selectForCurrentPage();
@@ -157,7 +139,10 @@ function _rl_page_title_current_internal_path(): string {
  * Implements hook_form_alter().
  *
  * Adds the page title variants vertical tab to content entity edit forms
- * for entities that have a canonical link template.
+ * for entities that have a canonical link template. Uses the entity's
+ * current translation language so the experiment is scoped to that
+ * language; an English node and its Spanish translation get separate
+ * experiments via the same vertical tab.
  */
 function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
   $form_object = $form_state->getFormObject();
@@ -176,11 +161,13 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   if (!$entity->hasLinkTemplate('canonical')) {
     return;
   }
+  if ($entity->getEntityTypeId() === 'rl_page_title_experiment') {
+    return;
+  }
   if (!\Drupal::currentUser()->hasPermission('administer rl page title experiments')) {
     return;
   }
 
-  // Resolve the entity's canonical internal path (normalized).
   try {
     $internal_path = PageTitleExperiment::normalizePath('/' . $entity->toUrl('canonical')->getInternalPath());
   }
@@ -188,12 +175,16 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     return;
   }
 
-  // Look up an existing experiment for this path, if any.
-  /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment|null $existing */
+  // Use the entity's current translation language for the experiment scope.
+  $entity_langcode = $entity->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
+
   $existing = NULL;
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_page_title_experiment')
-    ->loadByProperties(['path' => $internal_path]);
+    ->loadByProperties([
+      'path' => $internal_path,
+      'langcode' => $entity_langcode,
+    ]);
   if ($matches) {
     $candidate = reset($matches);
     if ($candidate instanceof PageTitleExperiment) {
@@ -215,7 +206,6 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     $rl_experiment_id = $existing->getRlExperimentId();
     $total = \Drupal::service('rl.experiment_manager')->getTotalTurns($rl_experiment_id);
     $variant_count = count($existing->getVariants()) + 1;
-    // Only link to the report if there's data to show.
     $report_link = '';
     if ($total > 0) {
       $report_url = Url::fromRoute('rl.reports.experiment_detail', [
@@ -225,17 +215,20 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     }
     $form['rl_page_title']['status'] = [
       '#type' => 'item',
-      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions.', [
-        '@state' => $existing->status() ? t('Active') : t('Disabled'),
+      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions (@lang).', [
+        '@state' => $existing->isPublished() ? t('Active') : t('Disabled'),
         '@variants' => $variant_count,
         '@impressions' => $total,
+        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
       ]) . $report_link,
     ];
   }
   else {
     $form['rl_page_title']['intro'] = [
       '#type' => 'item',
-      '#markup' => '<p>' . t('Add alternative titles to test which performs best. The original title is always tested as variant 1; the lines below are tested against it.') . '</p>',
+      '#markup' => '<p>' . t('Add alternative titles to test which performs best. The original title is always tested as variant 1; the lines below are tested against it. The experiment is scoped to the current entity language (@lang).', [
+        '@lang' => $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? t('all languages') : $entity_langcode,
+      ]) . '</p>',
     ];
   }
 
@@ -250,7 +243,7 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   $form['rl_page_title']['enabled'] = [
     '#type' => 'checkbox',
     '#title' => t('Enable experiment'),
-    '#default_value' => $existing ? (bool) $existing->status() : TRUE,
+    '#default_value' => $existing ? (bool) $existing->isPublished() : TRUE,
   ];
 
   $form['rl_page_title']['advanced_link'] = [
@@ -260,10 +253,13 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
       : '<small>' . t('<a href=":url">Open the full experiment form</a> for advanced options.', [':url' => Url::fromRoute('entity.rl_page_title_experiment.add_form', [], ['query' => ['path' => $internal_path]])->toString()]) . '</small>',
   ];
 
-  // Stash the resolved internal path for the submit handler.
   $form['rl_page_title']['_path'] = [
     '#type' => 'value',
     '#value' => $internal_path,
+  ];
+  $form['rl_page_title']['_langcode'] = [
+    '#type' => 'value',
+    '#value' => $entity_langcode,
   ];
   if ($existing) {
     $form['rl_page_title']['_existing_id'] = [
@@ -272,10 +268,6 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     ];
   }
 
-  // Attach our submit handler to all submit-style actions on the form, not
-  // just the canonical Save button. Workflow modules often add additional
-  // submit actions (publish, save as draft, etc.) and we need the experiment
-  // to update regardless of which action the user clicks.
   if (isset($form['actions']) && is_array($form['actions'])) {
     foreach (Element::children($form['actions']) as $action_key) {
       if (isset($form['actions'][$action_key]['#type']) && $form['actions'][$action_key]['#type'] === 'submit') {
@@ -287,10 +279,6 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
 
 /**
  * Submit handler for the vertical tab on entity forms.
- *
- * Creates, updates, or deletes the experiment based on the textarea content.
- * Wraps writes in a try/catch so a failure here cannot break the user's
- * primary entity save flow.
  */
 function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $form_state) {
   $values = $form_state->getValue('rl_page_title');
@@ -299,6 +287,7 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
   }
 
   $internal_path = $values['_path'] ?? NULL;
+  $langcode = $values['_langcode'] ?? LanguageInterface::LANGCODE_NOT_SPECIFIED;
   if (!$internal_path) {
     return;
   }
@@ -318,8 +307,8 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
     if (empty($variants)) {
       if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
-        // Purge analytics first. If this fails the config entity is still
-        // around as a recovery anchor, avoiding orphaned analytics rows.
+        // Purge analytics first; if it fails, the entity is still around
+        // for a retry.
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
         $experiment->delete();
         \Drupal::messenger()->addStatus(t('Title experiment removed.'));
@@ -328,30 +317,31 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
     }
 
     if ($experiment === NULL) {
-      // Build a stable machine name from the canonical RL experiment ID so
-      // the config and analytics IDs stay aligned.
-      $machine = 'pt_' . substr(PageTitleExperiment::buildRlExperimentId($internal_path), strlen('rl_page_title-'));
       $form_object = $form_state->getFormObject();
       $entity_label = $internal_path;
       if ($form_object instanceof EntityFormInterface) {
-        $entity = $form_object->getEntity();
-        $entity_label = $entity->label() ?? $internal_path;
+        $parent = $form_object->getEntity();
+        $entity_label = $parent->label() ?? $internal_path;
       }
       $label = (string) t('Page title: @entity', ['@entity' => $entity_label]);
       $created = $storage->create([
-        'id' => $machine,
         'label' => $label,
         'path' => $internal_path,
+        'langcode' => $langcode,
       ]);
       assert($created instanceof PageTitleExperiment);
       $experiment = $created;
     }
 
     $experiment->setVariants($variants);
-    $experiment->set('enabled', !empty($values['enabled']));
+    if (!empty($values['enabled'])) {
+      $experiment->setPublished();
+    }
+    else {
+      $experiment->setUnpublished();
+    }
     $experiment->save();
 
-    // Register with the RL experiment registry.
     \Drupal::service('rl.experiment_registry')->register(
       $experiment->getRlExperimentId(),
       'rl_page_title',
@@ -372,13 +362,17 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
  * Implements hook_entity_predelete().
  *
  * Cleans up page title experiments when the target entity is deleted, and
- * also purges the corresponding RL analytics tables.
+ * also purges the corresponding RL analytics tables. All language scopes
+ * for the deleted entity's path are cleaned up at once.
  */
 function rl_page_title_entity_predelete(EntityInterface $entity) {
   if (!$entity instanceof ContentEntityInterface) {
     return;
   }
   if (!$entity->hasLinkTemplate('canonical')) {
+    return;
+  }
+  if ($entity->getEntityTypeId() === 'rl_page_title_experiment') {
     return;
   }
 
@@ -400,8 +394,6 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
       continue;
     }
     $rl_id = $experiment->getRlExperimentId();
-    // Purge analytics first; if it fails, the config entity is still around
-    // for a retry.
     $manager->purgeExperiment($rl_id);
     $experiment->delete();
   }

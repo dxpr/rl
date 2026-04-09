@@ -9,10 +9,28 @@
   follow the "v0 = original, v1..vN = stored variants" convention.
 - New `Drupal\rl\Experiment\VariantParser` static helper for parsing textarea
   variant input into normalized lists.
+- New `Drupal\rl\Experiment\VariantExperimentInterface` extending
+  `ContentEntityInterface`. Variant-style experiment entities implement this
+  to plug into the shared selector / decorator / delete-form base classes.
+- New `Drupal\rl\Experiment\VariantSelectorBase`,
+  `VariantExperimentDecoratorBase`, and `VariantExperimentDeleteFormBase` for
+  consumer modules to extend.
 - New submodule `rl_page_title` for A/B testing page titles on any page (nodes,
-  Views displays, custom controllers, path-based).
+  Views displays, custom controllers, path-based). **Multilingual: per-language
+  experiments scoped via the `langcode` entity key, with an "all languages"
+  fallback. Each language has its own Thompson Sampling state.**
 - New submodule `rl_menu_link` for A/B testing menu link labels (works for both
-  `menu_link_content` entities and YAML-defined links).
+  `menu_link_content` entities and YAML-defined links). **Multilingual: same
+  per-language scoping as rl_page_title.**
+
+### Architecture
+
+- Both new variant submodules use **content entities**, not config entities.
+  This is a deliberate choice to scale to tens of thousands of experiments
+  per site without the config-management cliff and the O(N) lookup penalty
+  of config entities. Lookups are indexed; admin lists use Views; multilingual
+  is first-class via the `langcode` entity key. Mirrors the Redirect module's
+  storage approach.
 
 ### Changed
 

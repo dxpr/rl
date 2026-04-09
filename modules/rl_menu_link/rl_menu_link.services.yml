@@ -5,6 +5,7 @@ services:
       - '@entity_type.manager'
       - '@rl.experiment_manager'
       - '@rl.cache_manager'
+      - '@language_manager'
 
   rl_menu_link.decorator:
     class: Drupal\rl_menu_link\Decorator\MenuLinkDecorator

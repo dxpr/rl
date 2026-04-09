@@ -15,20 +15,40 @@ rendering and stores the variant configuration.
 
 ### Storage
 
-A config entity per experiment, `rl_page_title_experiment`, stores:
+A **content entity** per experiment, `rl_page_title_experiment`, stores:
 
 - `path` - the internal path being tested (e.g., `/node/42`, `/blog`,
   `/user/login`). Aliases are resolved to internal paths on save.
-- `variants` - the alternative title strings.
-- `enabled` - whether the experiment is currently running.
+- `langcode` - the language scope (specific language code, or
+  `LANGCODE_NOT_SPECIFIED` for "all languages")
+- `variants_data` - JSON-encoded list of alternative title strings
+- `enabled` - whether the experiment is currently running
+
+Indexed lookups on `(path, langcode)` keep selector latency constant
+regardless of how many experiments exist on the site. Tested for sites with
+tens of thousands of experiments.
 
 The original title (whatever Drupal would normally render at that path) is
 always tested as **arm v0** and is read live - it is **not** stored on the
 experiment entity. Stored variants are arms v1, v2, ... vN.
 
 The RL experiment ID is a deterministic hash:
-`rl_page_title-{12-char-sha1-of-path}`. The hash avoids collisions between
-paths like `/foo/bar` and `/foo_bar` that naive sanitization would conflate.
+`rl_page_title-{12-char-sha1-of-path-pipe-langcode}`. The hash includes the
+langcode so each language gets its own Thompson Sampling state -- an English
+experiment for `/blog` and a Spanish experiment for `/blog` accumulate
+separate turns and rewards.
+
+### Multilingual
+
+Each (path, langcode) pair is its own experiment row, mirroring the Redirect
+module's per-language redirects. The "all languages" fallback is langcode
+`LANGCODE_NOT_SPECIFIED`. Lookup at runtime tries the current request
+language first, then falls back to "all languages" if no language-specific
+experiment exists.
+
+We do **not** use Drupal's translation framework. Each language gets its
+own row with its own variants list, its own enabled flag, and its own
+analytics. This matches how Redirect handles multilingual.
 
 ### Runtime
 

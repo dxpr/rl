@@ -3,8 +3,10 @@
 namespace Drupal\rl_menu_link\Decorator;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
 use Drupal\rl\Experiment\VariantExperimentDecoratorBase;
+use Drupal\rl\Experiment\VariantExperimentInterface;
 use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 
 /**
@@ -51,16 +53,21 @@ class MenuLinkDecorator extends VariantExperimentDecoratorBase {
   /**
    * {@inheritdoc}
    */
-  protected function buildExperimentDisplay(object $experiment): array {
+  protected function buildExperimentDisplay(VariantExperimentInterface $experiment): array {
     assert($experiment instanceof MenuLinkExperiment);
     $plugin_id = $experiment->getMenuLinkPluginId();
     $original_label = $this->getOriginalLabel($plugin_id) ?? $plugin_id;
+    $langcode = $experiment->language()->getId();
+    $lang_label = $langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED
+      ? (string) t('all languages')
+      : $langcode;
     return [
       '#type' => 'inline_template',
-      '#template' => '{{ label }} <small>({{ plugin_id }})</small>',
+      '#template' => '{{ label }} <small>({{ plugin_id }}, {{ lang }})</small>',
       '#context' => [
         'label' => $experiment->label() ?: $original_label,
         'plugin_id' => $plugin_id,
+        'lang' => $lang_label,
       ],
     ];
   }
@@ -68,7 +75,7 @@ class MenuLinkDecorator extends VariantExperimentDecoratorBase {
   /**
    * {@inheritdoc}
    */
-  protected function buildOriginalArmDisplay(object $experiment): array {
+  protected function buildOriginalArmDisplay(VariantExperimentInterface $experiment): array {
     assert($experiment instanceof MenuLinkExperiment);
     $original = $this->getOriginalLabel($experiment->getMenuLinkPluginId());
     return [

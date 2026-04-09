@@ -6,6 +6,7 @@ services:
       - '@rl.experiment_manager'
       - '@rl.cache_manager'
       - '@path.current'
+      - '@language_manager'
 
   rl_page_title.decorator:
     class: Drupal\rl_page_title\Decorator\PageTitleDecorator

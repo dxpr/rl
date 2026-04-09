@@ -15,21 +15,33 @@ best-performing label.
 
 ### Storage
 
-A config entity per experiment, `rl_menu_link_experiment`, stores:
+A **content entity** per experiment, `rl_menu_link_experiment`, stores:
 
 - `menu_link_plugin_id` - the menu link plugin ID being tested. For
   `menu_link_content` entities this looks like
   `menu_link_content:abc-uuid`. For YAML-defined links it is the link's
   machine name (e.g., `system.admin_content`).
-- `variants` - the alternative label strings.
-- `enabled` - whether the experiment is currently running.
+- `langcode` - the language scope
+- `variants_data` - JSON-encoded list of alternative labels
+- `enabled` - whether the experiment is currently running
+
+Indexed lookups on `(menu_link_plugin_id, langcode)` keep selector latency
+constant regardless of how many experiments exist.
 
 The original label is always tested as **arm v0** and is read live from the
 menu link manager - it is **not** stored on the experiment entity. Stored
 variants are arms v1, v2, ... vN.
 
 The RL experiment ID is a deterministic hash:
-`rl_menu_link-{12-char-sha1-of-plugin-id}`.
+`rl_menu_link-{12-char-sha1-of-plugin-id-pipe-langcode}`. The hash includes
+the langcode so each language has its own Thompson Sampling state.
+
+### Multilingual
+
+Each (plugin_id, langcode) pair is its own experiment row. Lookup tries
+the current request language first, then falls back to "all languages"
+(`LANGCODE_NOT_SPECIFIED`) if no language-specific experiment exists.
+Same model as the Redirect module.
 
 ### Runtime
 

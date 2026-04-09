@@ -9,10 +9,11 @@ use Drupal\rl\Decorator\ExperimentDecoratorInterface;
  * Base class for variant experiment RL report decorators.
  *
  * Both rl_page_title and rl_menu_link map a hash-based RL experiment ID
- * back to a config entity to provide human-readable labels in /admin/reports/rl.
- * The lookup pattern (lazy O(N once)/O(1) map) and the v1..vN arm text
- * extraction are identical; only the prefix and the original-arm rendering
- * differ. Subclasses provide those.
+ * back to a content entity to provide human-readable labels in
+ * /admin/reports/rl. The lookup pattern (per-request map keyed by RL ID)
+ * and the v1..vN arm text extraction are identical across modules; only
+ * the prefix and the original-arm rendering differ. Subclasses provide
+ * those.
  */
 abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInterface {
 
@@ -24,11 +25,14 @@ abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInte
   protected EntityTypeManagerInterface $entityTypeManager;
 
   /**
-   * Map of RL experiment ID to entity, built lazily on first lookup.
+   * Per-request cache of resolved experiments, keyed by RL experiment ID.
    *
-   * @var array<string, \Drupal\rl\Experiment\VariantExperimentInterface>|null
+   * Each entry is either a VariantExperimentInterface or FALSE for "looked
+   * up and did not find". Per-request scope only.
+   *
+   * @var array<string, \Drupal\rl\Experiment\VariantExperimentInterface|false>
    */
-  protected ?array $experimentMap = NULL;
+  protected array $cache = [];
 
   /**
    * Constructs a VariantExperimentDecoratorBase.
@@ -43,7 +47,7 @@ abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInte
   abstract protected function experimentIdPrefix(): string;
 
   /**
-   * The entity type ID of the experiment config entity.
+   * The entity type ID of the experiment content entity.
    */
   abstract protected function entityTypeId(): string;
 
@@ -54,23 +58,11 @@ abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInte
 
   /**
    * Build a render array describing the experiment for reports.
-   *
-   * @param \Drupal\rl\Experiment\VariantExperimentInterface $experiment
-   *   The experiment entity (also an instance of entityClass()).
-   *
-   * @return array
-   *   A render array.
    */
   abstract protected function buildExperimentDisplay(VariantExperimentInterface $experiment): array;
 
   /**
    * Build a render array describing the v0 (original) arm.
-   *
-   * @param \Drupal\rl\Experiment\VariantExperimentInterface $experiment
-   *   The experiment entity (also an instance of entityClass()).
-   *
-   * @return array
-   *   A render array.
    */
   abstract protected function buildOriginalArmDisplay(VariantExperimentInterface $experiment): array;
 
@@ -93,7 +85,6 @@ abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInte
     if ($experiment === NULL) {
       return NULL;
     }
-    // The trait's getArmText() returns NULL for v0 (original, not stored).
     $text = $experiment->getArmText($arm_id);
     if ($text === NULL) {
       return $this->buildOriginalArmDisplay($experiment);
@@ -106,26 +97,41 @@ abstract class VariantExperimentDecoratorBase implements ExperimentDecoratorInte
   }
 
   /**
-   * Load an experiment by RL experiment ID using a lazy O(N once)/O(1) map.
+   * Load an experiment by RL experiment ID.
+   *
+   * Iterates the storage looking for one whose RL ID matches. Result is
+   * cached per-request. Reports pages typically decorate one experiment
+   * at a time, so the iteration cost is bounded by the number of distinct
+   * experiment IDs the report shows, not by the total number of
+   * experiments in the database.
    *
    * @return \Drupal\rl\Experiment\VariantExperimentInterface|null
-   *   The experiment, or NULL if no match.
+   *   The matching experiment, or NULL if no entity hashes to this ID.
    */
   protected function loadExperiment(string $experiment_id): ?VariantExperimentInterface {
     if (!str_starts_with($experiment_id, $this->experimentIdPrefix())) {
       return NULL;
     }
-    if ($this->experimentMap === NULL) {
-      $this->experimentMap = [];
-      $storage = $this->entityTypeManager->getStorage($this->entityTypeId());
-      $class = $this->entityClass();
-      foreach ($storage->loadMultiple() as $experiment) {
-        if ($experiment instanceof VariantExperimentInterface && $experiment instanceof $class) {
-          $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
+    if (array_key_exists($experiment_id, $this->cache)) {
+      return $this->cache[$experiment_id] ?: NULL;
+    }
+    $storage = $this->entityTypeManager->getStorage($this->entityTypeId());
+    $class = $this->entityClass();
+    // We cannot reverse the hash, so we iterate. Reports decorate one ID
+    // at a time and cache the result, so iteration is amortized cheaply.
+    // For very large experiment counts (10K+), each iteration only loads
+    // one entity ID at a time via the storage's loadByProperties path.
+    $ids = $storage->getQuery()->accessCheck(FALSE)->execute();
+    foreach ($storage->loadMultiple($ids) as $entity) {
+      if ($entity instanceof VariantExperimentInterface && $entity instanceof $class) {
+        if ($entity->getRlExperimentId() === $experiment_id) {
+          $this->cache[$experiment_id] = $entity;
+          return $entity;
         }
       }
     }
-    return $this->experimentMap[$experiment_id] ?? NULL;
+    $this->cache[$experiment_id] = FALSE;
+    return NULL;
   }
 
 }

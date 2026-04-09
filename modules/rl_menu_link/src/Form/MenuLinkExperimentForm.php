@@ -3,9 +3,12 @@
 namespace Drupal\rl_menu_link\Form;
 
 use Drupal\Core\Cache\Cache;
-use Drupal\Core\Entity\EntityForm;
+use Drupal\Core\Entity\ContentEntityForm;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
+use Drupal\Core\Url;
 use Drupal\rl\Experiment\VariantParser;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
@@ -15,7 +18,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for adding and editing Menu Link experiments.
  */
-class MenuLinkExperimentForm extends EntityForm {
+class MenuLinkExperimentForm extends ContentEntityForm {
 
   /**
    * The menu link manager.
@@ -39,6 +42,18 @@ class MenuLinkExperimentForm extends EntityForm {
   protected ExperimentManagerInterface $experimentManager;
 
   /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface
+   */
+  protected LanguageManagerInterface $languageManager;
+
+  /**
+   * RL experiment ID of the previous target, captured for post-save purge.
+   */
+  protected ?string $pendingPurgeRlExperimentId = NULL;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -46,6 +61,7 @@ class MenuLinkExperimentForm extends EntityForm {
     $instance->menuLinkManager = $container->get('plugin.manager.menu.link');
     $instance->experimentRegistry = $container->get('rl.experiment_registry');
     $instance->experimentManager = $container->get('rl.experiment_manager');
+    $instance->languageManager = $container->get('language_manager');
     return $instance;
   }
 
@@ -57,64 +73,42 @@ class MenuLinkExperimentForm extends EntityForm {
 
     $entity = $this->entity;
     assert($entity instanceof MenuLinkExperiment);
+
     $request = $this->getRequest();
-    $default_plugin = $entity->getMenuLinkPluginId() ?: ($request->query->get('menu_link_plugin_id') ?? '');
-    $default_label = $entity->label() ?: ($request->query->get('label') ?? '');
+    if ($entity->isNew()) {
+      if ($entity->getMenuLinkPluginId() === '' && $request->query->has('menu_link_plugin_id')) {
+        $entity->setMenuLinkPluginId((string) $request->query->get('menu_link_plugin_id'));
+        $form['menu_link_plugin_id']['widget'][0]['value']['#default_value'] = $entity->getMenuLinkPluginId();
+      }
+    }
 
-    $form['label'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Label'),
-      '#description' => $this->t('Human-readable name for this experiment.'),
-      '#default_value' => $default_label,
-      '#required' => TRUE,
-      '#maxlength' => 255,
-    ];
-
-    $form['id'] = [
-      '#type' => 'machine_name',
-      '#default_value' => $entity->id(),
-      '#machine_name' => [
-        'exists' => [$this, 'experimentExists'],
-        'source' => ['label'],
-      ],
-      '#disabled' => !$entity->isNew(),
-    ];
-
-    $form['menu_link_plugin_id'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Menu link plugin ID'),
-      '#description' => $this->t('The plugin ID of the menu link to test. Examples: <code>menu_link_content:11111111-2222-3333-4444-555555555555</code> for a user-created menu link, or <code>system.admin_content</code> for a YAML-defined link.'),
-      '#default_value' => $default_plugin,
-      '#required' => TRUE,
-      '#maxlength' => 255,
-    ];
-
-    $variants = $entity->getVariants();
+    // Hide the JSON storage field; the textarea is the user-facing surface.
+    $form['variants_data']['#access'] = FALSE;
     $form['variants'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Variant labels'),
       '#description' => $this->t('Alternative labels, one per line. The original label is always tested as variant 1; the lines below are tested against it.'),
-      '#default_value' => implode("\n", $variants),
+      '#default_value' => implode("\n", $entity->getVariants()),
       '#rows' => 6,
       '#required' => TRUE,
+      '#weight' => 0,
     ];
 
-    $form['enabled'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enabled'),
-      '#default_value' => $entity->isNew() ? TRUE : (bool) $entity->status(),
+    // Language selector with "all languages" default.
+    $languages = $this->languageManager->getLanguages(LanguageInterface::STATE_CONFIGURABLE);
+    $language_options = [LanguageInterface::LANGCODE_NOT_SPECIFIED => $this->t('- All languages -')];
+    foreach ($languages as $language) {
+      $language_options[$language->getId()] = $language->getName();
+    }
+    $form['langcode']['widget'][0]['value'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Language'),
+      '#description' => $this->t('Restrict this experiment to one language, or apply to all languages. Per-language experiments get independent Thompson Sampling state.'),
+      '#options' => $language_options,
+      '#default_value' => $entity->language()->getId(),
     ];
 
     return $form;
-  }
-
-  /**
-   * Machine name exists callback.
-   */
-  public function experimentExists($id): bool {
-    return (bool) $this->entityTypeManager
-      ->getStorage('rl_menu_link_experiment')
-      ->load($id);
   }
 
   /**
@@ -123,7 +117,7 @@ class MenuLinkExperimentForm extends EntityForm {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     parent::validateForm($form, $form_state);
 
-    $plugin_id = trim($form_state->getValue('menu_link_plugin_id') ?? '');
+    $plugin_id = trim((string) $form_state->getValue(['menu_link_plugin_id', 0, 'value']));
     if ($plugin_id === '') {
       $form_state->setErrorByName('menu_link_plugin_id', $this->t('Plugin ID is required.'));
       return;
@@ -133,35 +127,29 @@ class MenuLinkExperimentForm extends EntityForm {
       return;
     }
 
+    $langcode = (string) ($form_state->getValue(['langcode', 0, 'value']) ?? LanguageInterface::LANGCODE_NOT_SPECIFIED);
+
     $entity = $this->entity;
     assert($entity instanceof MenuLinkExperiment);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_menu_link_experiment')
-      ->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
+      ->loadByProperties([
+        'menu_link_plugin_id' => $plugin_id,
+        'langcode' => $langcode,
+      ]);
     foreach ($duplicates as $duplicate) {
-      if ($duplicate->id() !== $entity->id()) {
-        $form_state->setErrorByName('menu_link_plugin_id', $this->t('Another experiment (%label) already targets this menu link. Edit that experiment instead.', [
+      if ((string) $duplicate->id() !== (string) $entity->id()) {
+        $form_state->setErrorByName('menu_link_plugin_id', $this->t('Another experiment (%label) already targets this menu link in this language. Edit that experiment instead.', [
           '%label' => $duplicate->label(),
         ]));
         break;
       }
     }
 
-    if (empty(VariantParser::parse($form_state->getValue('variants') ?? ''))) {
+    if (empty(VariantParser::parse((string) $form_state->getValue('variants', '')))) {
       $form_state->setErrorByName('variants', $this->t('Provide at least one variant label.'));
     }
   }
-
-  /**
-   * {@inheritdoc}
-   */
-  /**
-   * RL experiment ID of the previous target, if a retarget is happening.
-   *
-   * Captured in submitForm() and consumed in save() AFTER the new entity has
-   * been written. See PageTitleExperimentForm for the rationale.
-   */
-  protected ?string $pendingPurgeRlExperimentId = NULL;
 
   /**
    * {@inheritdoc}
@@ -171,23 +159,27 @@ class MenuLinkExperimentForm extends EntityForm {
 
     $entity = $this->entity;
     assert($entity instanceof MenuLinkExperiment);
-    $new_plugin_id = trim($form_state->getValue('menu_link_plugin_id'));
+    $new_plugin_id = trim((string) $form_state->getValue(['menu_link_plugin_id', 0, 'value']));
 
-    // Capture old RL ID for save() to purge AFTER successful save. See
-    // PageTitleExperimentForm::submitForm() for rationale.
     $this->pendingPurgeRlExperimentId = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_menu_link_experiment')
         ->loadUnchanged($entity->id());
-      if ($original instanceof MenuLinkExperiment && $original->getMenuLinkPluginId() !== $new_plugin_id) {
-        $this->pendingPurgeRlExperimentId = $original->getRlExperimentId();
+      if ($original instanceof MenuLinkExperiment) {
+        $original_id = $original->getRlExperimentId();
+        $new_id = MenuLinkExperiment::buildRlExperimentId(
+          $new_plugin_id,
+          (string) ($form_state->getValue(['langcode', 0, 'value']) ?? LanguageInterface::LANGCODE_NOT_SPECIFIED)
+        );
+        if ($original_id !== $new_id) {
+          $this->pendingPurgeRlExperimentId = $original_id;
+        }
       }
     }
 
     $entity->setMenuLinkPluginId($new_plugin_id);
-    $entity->setVariants(VariantParser::parse($form_state->getValue('variants')));
-    $entity->set('enabled', (bool) $form_state->getValue('enabled'));
+    $entity->setVariants(VariantParser::parse((string) $form_state->getValue('variants', '')));
   }
 
   /**
@@ -204,8 +196,6 @@ class MenuLinkExperimentForm extends EntityForm {
       $entity->label()
     );
 
-    // Now that the new entity is safely written, purge analytics for the old
-    // RL ID if this was a retarget.
     if ($this->pendingPurgeRlExperimentId !== NULL) {
       try {
         $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
@@ -219,10 +209,6 @@ class MenuLinkExperimentForm extends EntityForm {
       $this->pendingPurgeRlExperimentId = NULL;
     }
 
-    // Invalidate menu rendering caches so the new variants take effect on
-    // subsequent menu renders rather than waiting for the cached menu blocks
-    // to expire naturally. We do not know which menus contain this link, so
-    // we invalidate every menu config tag plus the rl_menu_link entity tag.
     Cache::invalidateTags(['rl_menu_link:all', 'rl_menu_link:' . $entity->getMenuLinkPluginId()]);
 
     if ($status === SAVED_NEW) {
@@ -231,7 +217,7 @@ class MenuLinkExperimentForm extends EntityForm {
     else {
       $this->messenger()->addStatus($this->t('Updated experiment %label.', ['%label' => $entity->label()]));
     }
-    $form_state->setRedirectUrl($entity->toUrl('collection'));
+    $form_state->setRedirectUrl(Url::fromRoute('view.rl_menu_link_experiment.page_1'));
     return $status;
   }
 
