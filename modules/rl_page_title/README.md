@@ -97,6 +97,20 @@ follow-up if site builders need tuning.
 - `administer rl page title experiments` - create, edit, delete experiments.
   Restricted access.
 
+## Trash module compatibility
+
+On sites with the [Trash](https://www.drupal.org/project/trash) module
+enabled, deleting a node sends it to the trash rather than removing it
+from the database. The `hook_entity_predelete` cleanup that this module
+relies on for orphan removal **only fires when the trashed node is
+purged**, not on the initial soft-delete. This is correct semantically:
+the trashed node still has the same internal path, so the experiment
+remains valid until the node is permanently removed. Restored nodes
+keep their experiment intact. Purged nodes trigger the standard
+cleanup. Site builders running Trash should be aware that experiment
+rows linger in the admin list for as long as their target node sits in
+the trash bin.
+
 ## Known limitations
 
 - **State divergence on the vertical tab path**: when the inline submit

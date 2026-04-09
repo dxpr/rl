@@ -34,21 +34,46 @@ function rl_page_title_help($route_name, RouteMatchInterface $route_match) {
 
 /**
  * Implements hook_preprocess_page_title().
+ *
+ * Captures the original title text in a per-request static so the
+ * preprocess_html hook can do a targeted substitution within whatever
+ * structure the head_title has been built into (which may already have
+ * been mutated by metatag, dxpr_seo, etc.).
  */
 function rl_page_title_preprocess_page_title(array &$variables) {
   $result = _rl_page_title_get_active_variant();
-  if ($result && $result['text'] !== NULL) {
-    $variables['title'] = $result['text'];
+  if (!$result || $result['text'] === NULL) {
+    return;
   }
+  $original = (string) $variables['title'];
+  if ($original !== '') {
+    $captured = &drupal_static('rl_page_title_original', NULL);
+    $captured = $original;
+  }
+  $variables['title'] = $result['text'];
 }
 
 /**
  * Implements hook_preprocess_html().
  *
- * Replaces the <title> tag content with the winning variant while preserving
- * the existing structure type (string, MarkupInterface, or render array).
- * Modules like Metatag install a TranslatableMarkup or other MarkupInterface
- * here, and we must not silently downgrade those to a plain string.
+ * Replaces the page-name portion of the <title> tag with the winning
+ * variant while preserving the site name suffix and any other content
+ * upstream modules added.
+ *
+ * Why a targeted substitution rather than overwriting head_title.title:
+ *
+ * - In a vanilla Drupal site, head_title is a multi-key array like
+ *   `['title' => 'Home', 'name' => 'DXPR CMS']` joined by ` | `.
+ *   Replacing the `title` value gives "Welcome | DXPR CMS" naturally.
+ * - With Metatag installed, metatag_preprocess_html collapses the array
+ *   into a single key with the FULL consolidated string (including the
+ *   site name), e.g. `['title' => 'Home | DXPR CMS']`. Replacing the
+ *   value here would drop the site name.
+ *
+ * Doing a substring replacement of the original page title within
+ * whatever string the upstream module produced handles both cases:
+ * "Home" -> "Welcome" inside "Home" yields "Welcome", and the same
+ * substitution inside "Home | DXPR CMS" yields "Welcome | DXPR CMS".
  */
 function rl_page_title_preprocess_html(array &$variables) {
   $result = _rl_page_title_get_active_variant();
@@ -59,38 +84,102 @@ function rl_page_title_preprocess_html(array &$variables) {
     return;
   }
 
-  $variables['head_title']['title'] = _rl_page_title_replace_head_title($variables['head_title']['title'], $result['text']);
+  // Resolve the original title text. Prefer the value captured during
+  // preprocess_page_title; fall back to the title resolver for pages
+  // without a rendered page title block.
+  $original = drupal_static('rl_page_title_original', NULL);
+  if ($original === NULL || $original === '') {
+    $original = _rl_page_title_resolve_route_title();
+  }
+  if ($original === NULL || $original === '') {
+    return;
+  }
+
+  $variables['head_title']['title'] = _rl_page_title_replace_head_title(
+    $variables['head_title']['title'],
+    $original,
+    $result['text']
+  );
 }
 
 /**
- * Replace the head title content while preserving the structure type.
+ * Replace the page-name portion of the head title structure.
  *
  * @param mixed $existing
  *   The current head_title.title value (string, render array, MarkupInterface).
+ * @param string $original
+ *   The original page title text to look for inside $existing.
  * @param string $replacement
- *   The new title text to substitute.
+ *   The variant text to substitute for $original.
  *
  * @return mixed
  *   A value of the same general shape as $existing.
  */
-function _rl_page_title_replace_head_title($existing, string $replacement) {
+function _rl_page_title_replace_head_title($existing, string $original, string $replacement) {
+  // Render array case: keep the structure but replace the inner text where
+  // we can find it. Fall back to a plain_text element if the array does
+  // not expose a known text field.
   if (is_array($existing)) {
     if (isset($existing['#markup'])) {
-      $existing['#markup'] = $replacement;
+      $existing['#markup'] = _rl_page_title_substitute((string) $existing['#markup'], $original, $replacement);
       return $existing;
     }
     if (isset($existing['#plain_text'])) {
-      $existing['#plain_text'] = $replacement;
+      $existing['#plain_text'] = _rl_page_title_substitute((string) $existing['#plain_text'], $original, $replacement);
       return $existing;
     }
     return ['#plain_text' => $replacement];
   }
 
+  // MarkupInterface case (TranslatableMarkup, FormattableMarkup, etc.). We
+  // cannot mutate these objects in place; the safe replacement is a Markup
+  // wrapper around the substituted string.
   if ($existing instanceof MarkupInterface) {
-    return Markup::create($replacement);
+    return Markup::create(_rl_page_title_substitute((string) $existing, $original, $replacement));
   }
 
-  return $replacement;
+  // Plain string case.
+  return _rl_page_title_substitute((string) $existing, $original, $replacement);
+}
+
+/**
+ * Substitute the first occurrence of $original with $replacement.
+ *
+ * Falls back to the replacement value if the original cannot be found
+ * in the haystack (defensive default rather than leaving the title
+ * untouched, since the caller has already determined that an
+ * experiment is active for this page).
+ */
+function _rl_page_title_substitute(string $haystack, string $original, string $replacement): string {
+  $position = strpos($haystack, $original);
+  if ($position === FALSE) {
+    return $replacement;
+  }
+  return substr_replace($haystack, $replacement, $position, strlen($original));
+}
+
+/**
+ * Resolve the original route title for the current request.
+ *
+ * Used as a fallback when preprocess_page_title did not run (e.g., the
+ * page title block was not placed on the page).
+ */
+function _rl_page_title_resolve_route_title(): ?string {
+  try {
+    $request = \Drupal::request();
+    $route = \Drupal::routeMatch()->getRouteObject();
+    if (!$route) {
+      return NULL;
+    }
+    $title = \Drupal::service('title_resolver')->getTitle($request, $route);
+    if ($title === NULL) {
+      return NULL;
+    }
+    return is_string($title) ? $title : (string) $title;
+  }
+  catch (\Exception $e) {
+    return NULL;
+  }
 }
 
 /**
