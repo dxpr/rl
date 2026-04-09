@@ -1,0 +1,22 @@
+rl_page_title.rl_page_title_experiment.*:
+  type: config_entity
+  label: 'RL Page Title experiment'
+  mapping:
+    id:
+      type: string
+      label: 'Machine name'
+    label:
+      type: label
+      label: 'Label'
+    path:
+      type: string
+      label: 'Internal path'
+    variants:
+      type: sequence
+      label: 'Variant titles'
+      sequence:
+        type: string
+        label: 'Variant'
+    enabled:
+      type: boolean
+      label: 'Enabled'

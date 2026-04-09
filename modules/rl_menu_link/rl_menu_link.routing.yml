@@ -1,0 +1,7 @@
+rl_menu_link.collection:
+  path: '/admin/config/services/rl-menu-link'
+  defaults:
+    _entity_list: 'rl_menu_link_experiment'
+    _title: 'RL Menu Link experiments'
+  requirements:
+    _permission: 'administer rl menu link experiments'

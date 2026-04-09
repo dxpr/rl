@@ -1,0 +1,5 @@
+rl_page_title.collection:
+  title: 'RL Page Title experiments'
+  description: 'A/B test page titles using Thompson Sampling.'
+  parent: system.admin_config_services
+  route_name: rl_page_title.collection

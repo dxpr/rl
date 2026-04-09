@@ -1,0 +1,17 @@
+services:
+  rl_page_title.variant_selector:
+    class: Drupal\rl_page_title\Service\TitleVariantSelector
+    arguments:
+      - '@entity_type.manager'
+      - '@rl.experiment_manager'
+      - '@rl.cache_manager'
+      - '@path.current'
+      - '@path_alias.manager'
+      - '@language_manager'
+
+  rl_page_title.decorator:
+    class: Drupal\rl_page_title\Decorator\PageTitleDecorator
+    arguments:
+      - '@entity_type.manager'
+    tags:
+      - { name: rl_experiment_decorator }

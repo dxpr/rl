@@ -1,0 +1,5 @@
+rl_menu_link.collection:
+  title: 'RL Menu Link experiments'
+  description: 'A/B test menu link labels using Thompson Sampling.'
+  parent: system.admin_config_services
+  route_name: rl_menu_link.collection

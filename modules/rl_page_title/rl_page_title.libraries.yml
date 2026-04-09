@@ -1,0 +1,7 @@
+tracking:
+  js:
+    js/title-tracking.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once

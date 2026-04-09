@@ -1,0 +1,15 @@
+services:
+  rl_menu_link.variant_selector:
+    class: Drupal\rl_menu_link\Service\MenuLinkVariantSelector
+    arguments:
+      - '@entity_type.manager'
+      - '@rl.experiment_manager'
+      - '@rl.cache_manager'
+
+  rl_menu_link.decorator:
+    class: Drupal\rl_menu_link\Decorator\MenuLinkDecorator
+    arguments:
+      - '@entity_type.manager'
+      - '@plugin.manager.menu.link'
+    tags:
+      - { name: rl_experiment_decorator }

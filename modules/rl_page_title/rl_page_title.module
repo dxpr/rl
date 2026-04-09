@@ -1,0 +1,281 @@
+<?php
+
+/**
+ * @file
+ * RL Page Title: A/B test page titles for any page.
+ */
+
+use Drupal\Core\Entity\ContentEntityFormInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Url;
+
+/**
+ * Implements hook_help().
+ */
+function rl_page_title_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name === 'help.page.rl_page_title') {
+    return '<p>' . t('A/B test page titles for any page using Thompson Sampling. Source-agnostic: works for nodes, Views displays, custom controllers, and any path. Manage experiments at <a href=":url">RL Page Title experiments</a>.', [
+      ':url' => Url::fromRoute('rl_page_title.collection')->toString(),
+    ]) . '</p>';
+  }
+}
+
+/**
+ * Implements hook_preprocess_page_title().
+ */
+function rl_page_title_preprocess_page_title(array &$variables) {
+  $result = _rl_page_title_get_active_variant();
+  if ($result && $result['text'] !== NULL) {
+    $variables['title'] = $result['text'];
+  }
+}
+
+/**
+ * Implements hook_preprocess_html().
+ */
+function rl_page_title_preprocess_html(array &$variables) {
+  $result = _rl_page_title_get_active_variant();
+  if ($result && $result['text'] !== NULL && isset($variables['head_title']['title'])) {
+    $variables['head_title']['title'] = $result['text'];
+  }
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function rl_page_title_page_attachments(array &$attachments) {
+  $result = _rl_page_title_get_active_variant();
+  if (!$result) {
+    return;
+  }
+
+  $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
+  $base_path = \Drupal::request()->getBasePath();
+
+  $attachments['#attached']['library'][] = 'rl_page_title/tracking';
+  $attachments['#attached']['drupalSettings']['rlPageTitle'] = [
+    'experimentId' => $result['experiment_id'],
+    'armId' => $result['arm_id'],
+    'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
+  ];
+}
+
+/**
+ * Get the active variant for the current page (cached per request).
+ *
+ * @return array|null
+ *   Selection result with experiment_id, arm_id, text; or NULL if no
+ *   experiment is active for the current page.
+ */
+function _rl_page_title_get_active_variant(): ?array {
+  return \Drupal::service('rl_page_title.variant_selector')->selectForCurrentPage();
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Adds the page title variants vertical tab to content entity edit forms
+ * for entities that have a canonical link template.
+ */
+function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
+  $form_object = $form_state->getFormObject();
+  if (!($form_object instanceof ContentEntityFormInterface)) {
+    return;
+  }
+  $operation = $form_object->getOperation();
+  if (!in_array($operation, ['default', 'edit'], TRUE)) {
+    return;
+  }
+
+  $entity = $form_object->getEntity();
+  if (!$entity instanceof ContentEntityInterface || $entity->isNew()) {
+    return;
+  }
+  if (!$entity->hasLinkTemplate('canonical')) {
+    return;
+  }
+  if (!\Drupal::currentUser()->hasPermission('administer rl page title experiments')) {
+    return;
+  }
+
+  // Resolve the entity's canonical internal path.
+  try {
+    $internal_path = '/' . $entity->toUrl('canonical')->getInternalPath();
+  }
+  catch (\Exception $e) {
+    return;
+  }
+
+  // Look up an existing experiment for this path, if any.
+  $existing = NULL;
+  $matches = \Drupal::entityTypeManager()
+    ->getStorage('rl_page_title_experiment')
+    ->loadByProperties(['path' => $internal_path]);
+  if ($matches) {
+    $existing = reset($matches);
+  }
+
+  $form['rl_page_title'] = [
+    '#type' => 'details',
+    '#title' => t('Title variants'),
+    '#group' => 'advanced',
+    '#open' => FALSE,
+    '#weight' => 50,
+    '#tree' => TRUE,
+    '#access' => TRUE,
+  ];
+
+  if ($existing) {
+    $rl_experiment_id = $existing->getRlExperimentId();
+    $total = \Drupal::service('rl.experiment_manager')->getTotalTurns($rl_experiment_id);
+    $variant_count = count($existing->getVariants()) + 1;
+    $report_url = Url::fromRoute('rl.reports.experiment_detail', [
+      'experiment_id' => $rl_experiment_id,
+    ]);
+    $form['rl_page_title']['status'] = [
+      '#type' => 'item',
+      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions. <a href=":report" target="_blank">View report</a>', [
+        '@state' => $existing->status() ? t('Active') : t('Disabled'),
+        '@variants' => $variant_count,
+        '@impressions' => $total,
+        ':report' => $report_url->toString(),
+      ]),
+    ];
+  }
+  else {
+    $form['rl_page_title']['intro'] = [
+      '#type' => 'item',
+      '#markup' => '<p>' . t('Add alternative titles to test which performs best. The original title is always tested as variant 1; the lines below are tested against it.') . '</p>',
+    ];
+  }
+
+  $form['rl_page_title']['variants'] = [
+    '#type' => 'textarea',
+    '#title' => t('Alternative titles'),
+    '#description' => t('One alternative per line. Leave empty to remove the experiment.'),
+    '#default_value' => $existing ? implode("\n", $existing->getVariants()) : '',
+    '#rows' => 4,
+  ];
+
+  $form['rl_page_title']['enabled'] = [
+    '#type' => 'checkbox',
+    '#title' => t('Enable experiment'),
+    '#default_value' => $existing ? (bool) $existing->status() : TRUE,
+  ];
+
+  $form['rl_page_title']['advanced_link'] = [
+    '#type' => 'item',
+    '#markup' => $existing
+      ? '<small>' . t('<a href=":url">Open the full experiment form</a> for advanced options.', [':url' => $existing->toUrl('edit-form')->toString()]) . '</small>'
+      : '<small>' . t('<a href=":url">Open the full experiment form</a> for advanced options.', [':url' => Url::fromRoute('entity.rl_page_title_experiment.add_form', [], ['query' => ['path' => $internal_path]])->toString()]) . '</small>',
+  ];
+
+  // Stash the resolved internal path for the submit handler.
+  $form['rl_page_title']['_path'] = [
+    '#type' => 'value',
+    '#value' => $internal_path,
+  ];
+  if ($existing) {
+    $form['rl_page_title']['_existing_id'] = [
+      '#type' => 'value',
+      '#value' => $existing->id(),
+    ];
+  }
+
+  $form['actions']['submit']['#submit'][] = '_rl_page_title_entity_form_submit';
+}
+
+/**
+ * Submit handler for the vertical tab on entity forms.
+ *
+ * Creates, updates, or deletes the experiment based on the textarea content.
+ */
+function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $form_state) {
+  $values = $form_state->getValue('rl_page_title');
+  if (empty($values)) {
+    return;
+  }
+
+  $internal_path = $values['_path'] ?? NULL;
+  if (!$internal_path) {
+    return;
+  }
+
+  // Parse variant lines.
+  $variants = [];
+  foreach (preg_split('/\r\n|\r|\n/', (string) ($values['variants'] ?? '')) as $line) {
+    $line = trim($line);
+    if ($line !== '') {
+      $variants[] = $line;
+    }
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
+  $existing_id = $values['_existing_id'] ?? NULL;
+  $experiment = $existing_id ? $storage->load($existing_id) : NULL;
+
+  if (empty($variants)) {
+    if ($experiment) {
+      $experiment->delete();
+      \Drupal::messenger()->addStatus(t('Title experiment removed.'));
+    }
+    return;
+  }
+
+  if (!$experiment) {
+    // Build a stable machine name from the path.
+    $machine = 'page_title_' . substr(sha1($internal_path), 0, 16);
+    $form_object = $form_state->getFormObject();
+    /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
+    $entity = $form_object->getEntity();
+    $label = (string) t('Page title: @entity', ['@entity' => $entity->label() ?? $internal_path]);
+    $experiment = $storage->create([
+      'id' => $machine,
+      'label' => $label,
+      'path' => $internal_path,
+    ]);
+  }
+
+  $experiment->setVariants($variants);
+  $experiment->set('enabled', !empty($values['enabled']));
+  $experiment->save();
+
+  // Register with the RL experiment registry.
+  \Drupal::service('rl.experiment_registry')->register(
+    $experiment->getRlExperimentId(),
+    'rl_page_title',
+    $experiment->label()
+  );
+
+  \Drupal::messenger()->addStatus(t('Title experiment saved.'));
+}
+
+/**
+ * Implements hook_entity_predelete().
+ *
+ * Cleans up page title experiments when the target entity is deleted.
+ */
+function rl_page_title_entity_predelete(EntityInterface $entity) {
+  if (!$entity instanceof ContentEntityInterface) {
+    return;
+  }
+  if (!$entity->hasLinkTemplate('canonical')) {
+    return;
+  }
+
+  try {
+    $internal_path = '/' . $entity->toUrl('canonical')->getInternalPath();
+  }
+  catch (\Exception $e) {
+    return;
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
+  $matches = $storage->loadByProperties(['path' => $internal_path]);
+  if ($matches) {
+    $storage->delete($matches);
+  }
+}
