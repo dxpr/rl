@@ -7,7 +7,6 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Path\PathValidatorInterface;
 use Drupal\path_alias\AliasManagerInterface;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
-use Drupal\rl_page_title\Entity\PageTitleExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
