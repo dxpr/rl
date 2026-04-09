@@ -10,6 +10,7 @@ use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Element;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
 use Drupal\rl\Experiment\VariantParser;
@@ -232,7 +233,7 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   // submit actions (publish, save as draft, etc.) and we need the experiment
   // to update regardless of which action the user clicks.
   if (isset($form['actions']) && is_array($form['actions'])) {
-    foreach (\Drupal\Core\Render\Element::children($form['actions']) as $action_key) {
+    foreach (Element::children($form['actions']) as $action_key) {
       if (isset($form['actions'][$action_key]['#type']) && $form['actions'][$action_key]['#type'] === 'submit') {
         $form['actions'][$action_key]['#submit'][] = '_rl_page_title_entity_form_submit';
       }
