@@ -2,152 +2,42 @@
 
 namespace Drupal\rl_menu_link;
 
-use Drupal\Core\Config\Entity\ConfigEntityListBuilder;
 use Drupal\Core\Entity\EntityInterface;
-use Drupal\Core\Entity\EntityTypeInterface;
-use Drupal\Core\Url;
-use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl\Experiment\VariantExperimentListBuilderBase;
 use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * List builder for Menu Link experiments.
  */
-class MenuLinkExperimentListBuilder extends ConfigEntityListBuilder {
-
-  /**
-   * The RL experiment manager.
-   *
-   * @var \Drupal\rl\Service\ExperimentManagerInterface
-   */
-  protected ExperimentManagerInterface $experimentManager;
-
-  /**
-   * Pre-fetched RL stats keyed by RL experiment ID.
-   *
-   * @var array<string, array{turns:int, leader_arm:string|null, leader_score:float}>
-   */
-  protected array $statsCache = [];
+class MenuLinkExperimentListBuilder extends VariantExperimentListBuilderBase {
 
   /**
    * {@inheritdoc}
    */
-  public static function createInstance(ContainerInterface $container, EntityTypeInterface $entity_type) {
-    $instance = parent::createInstance($container, $entity_type);
-    $instance->experimentManager = $container->get('rl.experiment_manager');
-    return $instance;
+  protected function entityClass(): string {
+    return MenuLinkExperiment::class;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildHeader() {
-    $header['label'] = $this->t('Label');
-    $header['plugin_id'] = $this->t('Menu link plugin ID');
-    $header['variants'] = $this->t('Variants');
-    $header['impressions'] = $this->t('Impressions');
-    $header['leader'] = $this->t('Leader');
-    $header['score'] = $this->t('Posterior mean');
-    $header['status'] = $this->t('Status');
-    return $header + parent::buildHeader();
+  protected function targetColumnLabel(): string {
+    return $this->t('Menu link plugin ID');
   }
 
   /**
    * {@inheritdoc}
    */
-  public function render() {
-    $entities = $this->load();
-    foreach ($entities as $entity) {
-      if (!$entity instanceof MenuLinkExperiment) {
-        continue;
-      }
-      $rl_id = $entity->getRlExperimentId();
-      $this->statsCache[$rl_id] = $this->computeStats($rl_id);
-    }
-    $build = parent::render();
-    $build['table']['#empty'] = $this->t('No menu link experiments yet. Add one to start A/B testing.');
-    return $build;
-  }
-
-  /**
-   * Compute the impression count and leader for an experiment.
-   *
-   * @return array
-   *   Stats for the experiment with keys: turns (int), leader_arm (string|null),
-   *   leader_score (float, the Beta posterior mean of the leading arm).
-   */
-  protected function computeStats(string $rl_experiment_id): array {
-    $turns = $this->experimentManager->getTotalTurns($rl_experiment_id);
-    $leader_arm = NULL;
-    $leader_score = 0.0;
-    if ($turns > 0) {
-      foreach ($this->experimentManager->getAllArmsData($rl_experiment_id) as $arm) {
-        $alpha = $arm->rewards + 1;
-        $beta = max(1, $arm->turns - $arm->rewards + 1);
-        $score = $alpha / ($alpha + $beta);
-        if ($score > $leader_score) {
-          $leader_score = $score;
-          $leader_arm = $arm->arm_id;
-        }
-      }
-    }
-    return [
-      'turns' => (int) $turns,
-      'leader_arm' => $leader_arm,
-      'leader_score' => $leader_score,
-    ];
+  protected function emptyMessage(): string {
+    return $this->t('No menu link experiments yet. Add one to start A/B testing.');
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildRow(EntityInterface $entity) {
-    if (!$entity instanceof MenuLinkExperiment) {
-      return parent::buildRow($entity);
-    }
-    $rl_id = $entity->getRlExperimentId();
-    $stats = $this->statsCache[$rl_id] ?? ['turns' => 0, 'leader_arm' => NULL, 'leader_score' => 0.0];
-
-    $row['label'] = $entity->label();
-    $row['plugin_id'] = $entity->getMenuLinkPluginId();
-    $row['variants'] = count($entity->getVariants()) + 1;
-    $row['impressions'] = $stats['turns'];
-
-    if ($stats['turns'] > 0 && $stats['leader_arm']) {
-      $arm_text = $entity->getArmText($stats['leader_arm']);
-      $row['leader'] = $arm_text ?? $this->t('(original)');
-      $row['score'] = number_format($stats['leader_score'] * 100, 1) . '%';
-    }
-    else {
-      $row['leader'] = $this->t('(no data)');
-      $row['score'] = '--';
-    }
-
-    $row['status'] = $entity->status() ? $this->t('Active') : $this->t('Disabled');
-
-    return $row + parent::buildRow($entity);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getDefaultOperations(EntityInterface $entity) {
-    $operations = parent::getDefaultOperations($entity);
-    if (!$entity instanceof MenuLinkExperiment) {
-      return $operations;
-    }
-    $rl_id = $entity->getRlExperimentId();
-    $stats = $this->statsCache[$rl_id] ?? ['turns' => 0];
-    if ($stats['turns'] > 0) {
-      $operations['report'] = [
-        'title' => $this->t('Report'),
-        'url' => Url::fromRoute('rl.reports.experiment_detail', [
-          'experiment_id' => $rl_id,
-        ]),
-        'weight' => 30,
-      ];
-    }
-    return $operations;
+  protected function targetColumnValue(EntityInterface $entity): string {
+    assert($entity instanceof MenuLinkExperiment);
+    return $entity->getMenuLinkPluginId();
   }
 
 }

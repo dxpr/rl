@@ -2,6 +2,7 @@
 
 namespace Drupal\rl_menu_link\Form;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
@@ -189,6 +190,12 @@ class MenuLinkExperimentForm extends EntityForm {
       'rl_menu_link',
       $entity->label()
     );
+
+    // Invalidate menu rendering caches so the new variants take effect on
+    // subsequent menu renders rather than waiting for the cached menu blocks
+    // to expire naturally. We do not know which menus contain this link, so
+    // we invalidate every menu config tag plus the rl_menu_link entity tag.
+    Cache::invalidateTags(['config:system.menu', 'rl_menu_link:' . $entity->getMenuLinkPluginId()]);
 
     if ($status === SAVED_NEW) {
       $this->messenger()->addStatus($this->t('Created experiment %label.', ['%label' => $entity->label()]));

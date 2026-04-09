@@ -4,6 +4,7 @@ namespace Drupal\rl_page_title\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
 use Drupal\rl\Experiment\VariantArmsTrait;
+use Drupal\rl\Experiment\VariantExperimentInterface;
 
 /**
  * Defines the Page Title Experiment config entity.
@@ -48,7 +49,7 @@ use Drupal\rl\Experiment\VariantArmsTrait;
  *   },
  * )
  */
-class PageTitleExperiment extends ConfigEntityBase {
+class PageTitleExperiment extends ConfigEntityBase implements VariantExperimentInterface {
 
   use VariantArmsTrait;
 

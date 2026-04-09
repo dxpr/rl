@@ -176,6 +176,11 @@ class ExperimentManager implements ExperimentManagerInterface {
    * {@inheritdoc}
    */
   public function purgeExperiment($experiment_id) {
+    // Start a transaction. If any of the deletes throw, we let the exception
+    // propagate; the transaction manager rolls back automatically when the
+    // transaction object goes out of scope without being committed. This is
+    // the recommended pattern in Drupal 10.2+; explicit rollBack() calls are
+    // deprecated.
     $transaction = $this->database->startTransaction();
     try {
       $this->database->delete('rl_arm_data')
@@ -192,13 +197,17 @@ class ExperimentManager implements ExperimentManagerInterface {
         ->execute();
     }
     catch (\Exception $e) {
-      $transaction->rollBack();
       $this->loggerFactory->get('rl')->error('Failed to purge experiment @id: @message', [
         '@id' => $experiment_id,
         '@message' => $e->getMessage(),
       ]);
+      // Re-throw so the transaction is rolled back when $transaction is
+      // destructed and so callers know the operation failed.
       throw $e;
     }
+    // Reference $transaction to ensure it stays in scope until the deletes
+    // complete; the transaction commits when this variable goes out of scope.
+    unset($transaction);
   }
 
   /**

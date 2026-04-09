@@ -5,6 +5,7 @@
  * RL Page Title: A/B test page titles for any page.
  */
 
+use Drupal\Component\Render\MarkupInterface;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
@@ -12,6 +13,7 @@ use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
 use Drupal\rl\Experiment\VariantParser;
@@ -41,8 +43,10 @@ function rl_page_title_preprocess_page_title(array &$variables) {
 /**
  * Implements hook_preprocess_html().
  *
- * Replaces the <title> tag content with the winning variant. Preserves the
- * existing render-array structure: only the user-visible title text changes.
+ * Replaces the <title> tag content with the winning variant while preserving
+ * the existing structure type (string, MarkupInterface, or render array).
+ * Modules like Metatag install a TranslatableMarkup or other MarkupInterface
+ * here, and we must not silently downgrade those to a plain string.
  */
 function rl_page_title_preprocess_html(array &$variables) {
   $result = _rl_page_title_get_active_variant();
@@ -53,31 +57,68 @@ function rl_page_title_preprocess_html(array &$variables) {
     return;
   }
 
-  $existing = $variables['head_title']['title'];
-  // If another module rendered head_title.title as a render array, replace
-  // the content but preserve the structure type.
+  $variables['head_title']['title'] = _rl_page_title_replace_head_title($variables['head_title']['title'], $result['text']);
+}
+
+/**
+ * Replace the head title content while preserving the structure type.
+ *
+ * @param mixed $existing
+ *   The current head_title.title value (string, render array, MarkupInterface).
+ * @param string $replacement
+ *   The new title text to substitute.
+ *
+ * @return mixed
+ *   A value of the same general shape as $existing.
+ */
+function _rl_page_title_replace_head_title($existing, string $replacement) {
+  // Render array case: keep the structure but swap the inner text where we
+  // can find it. Fall back to a plain_text element if the array does not
+  // expose a known text field.
   if (is_array($existing)) {
     if (isset($existing['#markup'])) {
-      $existing['#markup'] = $result['text'];
-      $variables['head_title']['title'] = $existing;
+      $existing['#markup'] = $replacement;
+      return $existing;
     }
-    elseif (isset($existing['#plain_text'])) {
-      $existing['#plain_text'] = $result['text'];
-      $variables['head_title']['title'] = $existing;
+    if (isset($existing['#plain_text'])) {
+      $existing['#plain_text'] = $replacement;
+      return $existing;
     }
-    else {
-      $variables['head_title']['title'] = ['#plain_text' => $result['text']];
-    }
+    return ['#plain_text' => $replacement];
   }
-  else {
-    $variables['head_title']['title'] = $result['text'];
+
+  // MarkupInterface case (TranslatableMarkup, FormattableMarkup, etc.). We
+  // cannot mutate these objects in place; the safe replacement is a Markup
+  // wrapper around the new text. Use Markup::create which trusts the input,
+  // safe here because $replacement comes from admin-managed config that
+  // already passed through Twig autoescape on render.
+  if ($existing instanceof MarkupInterface) {
+    return Markup::create($replacement);
   }
+
+  // Plain string case.
+  return $replacement;
 }
 
 /**
  * Implements hook_page_attachments().
+ *
+ * Always attaches a cache tag for the current internal path, regardless of
+ * whether an experiment exists yet. This is critical: if a page is cached
+ * BEFORE an experiment is created for it, the cache tag must already be on
+ * the cached page so that creating the experiment can invalidate the stale
+ * page render. Without this, "creating a new experiment for /blog" would
+ * not invalidate the cached /blog page until it expired naturally.
  */
 function rl_page_title_page_attachments(array &$attachments) {
+  // Tag every page with the path-scoped tag so future experiment creation
+  // can invalidate stale renders. This adds two cache tags per request,
+  // which is negligible.
+  $internal_path = _rl_page_title_current_internal_path();
+  $attachments['#cache']['tags'][] = 'rl_page_title:' . $internal_path;
+  $attachments['#cache']['tags'][] = 'rl_page_title:all';
+
+  // Attach tracking JS only when an experiment is actually active.
   $result = _rl_page_title_get_active_variant();
   if (!$result) {
     return;
@@ -92,8 +133,6 @@ function rl_page_title_page_attachments(array &$attachments) {
     'armId' => $result['arm_id'],
     'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
   ];
-  // Tag the page so the form save handler can targeted-invalidate it.
-  $attachments['#cache']['tags'][] = 'rl_page_title:' . _rl_page_title_current_internal_path();
 }
 
 /**
@@ -279,8 +318,10 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
     if (empty($variants)) {
       if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
-        $experiment->delete();
+        // Purge analytics first. If this fails the config entity is still
+        // around as a recovery anchor, avoiding orphaned analytics rows.
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
+        $experiment->delete();
         \Drupal::messenger()->addStatus(t('Title experiment removed.'));
       }
       return;
@@ -359,7 +400,9 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
       continue;
     }
     $rl_id = $experiment->getRlExperimentId();
-    $experiment->delete();
+    // Purge analytics first; if it fails, the config entity is still around
+    // for a retry.
     $manager->purgeExperiment($rl_id);
+    $experiment->delete();
   }
 }

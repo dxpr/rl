@@ -5,6 +5,7 @@
  * RL Menu Link: A/B test menu link labels.
  */
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
@@ -38,23 +39,39 @@ function rl_menu_link_preprocess_menu(array &$variables) {
     return;
   }
 
-  $touched = FALSE;
-  _rl_menu_link_process_items($variables['items'], $touched);
+  $touched_plugin_ids = [];
+  _rl_menu_link_process_items($variables['items'], $touched_plugin_ids);
 
-  if ($touched) {
+  // Always attach the rl_menu_link:all tag so any future experiment creation
+  // can invalidate cached menu output even for menus that did not have an
+  // experiment when they were first cached.
+  $variables['#cache']['tags'][] = 'rl_menu_link:all';
+
+  if (!empty($touched_plugin_ids)) {
     $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
     $base_path = \Drupal::request()->getBasePath();
     $variables['#attached']['library'][] = 'rl_menu_link/tracking';
     $variables['#attached']['drupalSettings']['rlMenuLink'] = [
       'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
     ];
+    // Add per-plugin-id tags so each experiment can invalidate the menus
+    // that contain its specific link.
+    foreach ($touched_plugin_ids as $plugin_id) {
+      $variables['#cache']['tags'][] = 'rl_menu_link:' . $plugin_id;
+    }
   }
 }
 
 /**
  * Recursively process menu items, swapping titles for winning variants.
+ *
+ * @param array $items
+ *   The menu items render array (passed by reference).
+ * @param array $touched_plugin_ids
+ *   Plugin IDs that received a variant override during this walk, indexed
+ *   by themselves for fast deduplication. Passed by reference.
  */
-function _rl_menu_link_process_items(array &$items, bool &$touched) {
+function _rl_menu_link_process_items(array &$items, array &$touched_plugin_ids) {
   /** @var \Drupal\rl_menu_link\Service\MenuLinkVariantSelector $selector */
   $selector = \Drupal::service('rl_menu_link.variant_selector');
 
@@ -80,12 +97,12 @@ function _rl_menu_link_process_items(array &$items, bool &$touched) {
             'data-rl-ml-arm-id' => $result['arm_id'],
           ]);
         }
-        $touched = TRUE;
+        $touched_plugin_ids[$plugin_id] = $plugin_id;
       }
     }
 
     if (!empty($item['below'])) {
-      _rl_menu_link_process_items($item['below'], $touched);
+      _rl_menu_link_process_items($item['below'], $touched_plugin_ids);
     }
   }
 }
@@ -239,8 +256,10 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
     if (empty($variants)) {
       if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
-        $experiment->delete();
+        // Purge analytics first. If this fails the config entity is still
+        // around as a recovery anchor.
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
+        $experiment->delete();
         \Drupal::messenger()->addStatus(t('Menu link experiment removed.'));
       }
       return;
@@ -274,6 +293,9 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
       'rl_menu_link',
       $experiment->label()
     );
+
+    // Invalidate menu caches so the new variants take effect immediately.
+    Cache::invalidateTags(['rl_menu_link:all', 'rl_menu_link:' . $experiment->getMenuLinkPluginId()]);
 
     \Drupal::messenger()->addStatus(t('Menu link experiment saved.'));
   }
@@ -310,7 +332,9 @@ function rl_menu_link_entity_predelete(EntityInterface $entity) {
       continue;
     }
     $rl_id = $experiment->getRlExperimentId();
-    $experiment->delete();
+    // Purge analytics first; if it fails, the config entity is still around
+    // for a retry.
     $manager->purgeExperiment($rl_id);
+    $experiment->delete();
   }
 }

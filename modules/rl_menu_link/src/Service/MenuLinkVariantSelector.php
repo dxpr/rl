@@ -2,117 +2,40 @@
 
 namespace Drupal\rl_menu_link\Service;
 
-use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\rl\Service\CacheManager;
-use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl\Experiment\VariantSelectorBase;
 use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 
 /**
  * Selects the winning variant for a menu link by its plugin ID.
  */
-class MenuLinkVariantSelector {
+class MenuLinkVariantSelector extends VariantSelectorBase {
 
   /**
-   * Page cache TTL applied while a menu link experiment is active.
-   *
-   * @internal Promote to module config in a follow-up if needed.
+   * {@inheritdoc}
    */
-  protected const EXPERIMENT_CACHE_TTL = 60;
+  protected function entityTypeId(): string {
+    return 'rl_menu_link_experiment';
+  }
 
   /**
-   * The entity type manager.
-   *
-   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   * {@inheritdoc}
    */
-  protected EntityTypeManagerInterface $entityTypeManager;
+  protected function entityClass(): string {
+    return MenuLinkExperiment::class;
+  }
 
   /**
-   * The RL experiment manager.
-   *
-   * @var \Drupal\rl\Service\ExperimentManagerInterface
+   * {@inheritdoc}
    */
-  protected ExperimentManagerInterface $experimentManager;
-
-  /**
-   * The RL cache manager.
-   *
-   * @var \Drupal\rl\Service\CacheManager
-   */
-  protected CacheManager $cacheManager;
-
-  /**
-   * Per-request cache, keyed by plugin ID. False = no experiment.
-   *
-   * @var array<string, array|false>
-   */
-  protected array $cache = [];
-
-  /**
-   * Constructs a MenuLinkVariantSelector.
-   */
-  public function __construct(
-    EntityTypeManagerInterface $entity_type_manager,
-    ExperimentManagerInterface $experiment_manager,
-    CacheManager $cache_manager,
-  ) {
-    $this->entityTypeManager = $entity_type_manager;
-    $this->experimentManager = $experiment_manager;
-    $this->cacheManager = $cache_manager;
+  protected function targetProperty(): string {
+    return 'menu_link_plugin_id';
   }
 
   /**
    * Select the winning variant for a menu link plugin ID.
-   *
-   * @return array|null
-   *   Array with experiment_id, arm_id, text, or NULL if no active experiment.
    */
   public function selectForPluginId(string $plugin_id): ?array {
-    $plugin_id = trim($plugin_id);
-    if (isset($this->cache[$plugin_id])) {
-      $cached = $this->cache[$plugin_id];
-      return $cached === FALSE ? NULL : $cached;
-    }
-
-    $experiment = $this->loadExperimentByPluginId($plugin_id);
-    if (!$experiment) {
-      $this->cache[$plugin_id] = FALSE;
-      return NULL;
-    }
-
-    $rl_experiment_id = $experiment->getRlExperimentId();
-    $arm_ids = $experiment->getArmIds();
-    $scores = $this->experimentManager->getThompsonScores($rl_experiment_id, NULL, $arm_ids);
-    arsort($scores);
-    $best_arm = (string) key($scores);
-
-    $this->cacheManager->overridePageCacheIfShorter(self::EXPERIMENT_CACHE_TTL);
-
-    $result = [
-      'experiment_id' => $rl_experiment_id,
-      'arm_id' => $best_arm,
-      'text' => $experiment->getArmText($best_arm),
-    ];
-    $this->cache[$plugin_id] = $result;
-    return $result;
-  }
-
-  /**
-   * Load an enabled experiment for a given plugin ID.
-   *
-   * @return \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null
-   *   The matching experiment, or NULL if none is enabled for this plugin ID.
-   */
-  protected function loadExperimentByPluginId(string $plugin_id): ?MenuLinkExperiment {
-    $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
-    $matches = $storage->loadByProperties([
-      'menu_link_plugin_id' => $plugin_id,
-      'enabled' => TRUE,
-    ]);
-    if (!$matches) {
-      return NULL;
-    }
-    $experiment = reset($matches);
-    return $experiment instanceof MenuLinkExperiment ? $experiment : NULL;
+    return $this->selectForTarget(trim($plugin_id));
   }
 
 }

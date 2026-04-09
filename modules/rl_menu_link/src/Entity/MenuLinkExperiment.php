@@ -4,6 +4,7 @@ namespace Drupal\rl_menu_link\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
 use Drupal\rl\Experiment\VariantArmsTrait;
+use Drupal\rl\Experiment\VariantExperimentInterface;
 
 /**
  * Defines the Menu Link Experiment config entity.
@@ -48,7 +49,7 @@ use Drupal\rl\Experiment\VariantArmsTrait;
  *   },
  * )
  */
-class MenuLinkExperiment extends ConfigEntityBase {
+class MenuLinkExperiment extends ConfigEntityBase implements VariantExperimentInterface {
 
   use VariantArmsTrait;
 
