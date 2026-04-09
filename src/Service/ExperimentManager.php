@@ -175,6 +175,20 @@ class ExperimentManager implements ExperimentManagerInterface {
   /**
    * {@inheritdoc}
    */
+  public function getTotalTurnsMultiple(array $experiment_ids): array {
+    return $this->storage->getTotalTurnsMultiple($experiment_ids);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAllArmsDataMultiple(array $experiment_ids): array {
+    return $this->storage->getAllArmsDataMultiple($experiment_ids);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function purgeExperiment($experiment_id) {
     // Start a transaction. If any of the deletes throw, we let the exception
     // propagate; the transaction manager rolls back automatically when the

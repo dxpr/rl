@@ -16,16 +16,28 @@
 
 ### Changed
 
-- **BC break (minor):** `ExperimentManagerInterface` now declares a new method
-  `purgeExperiment(string $experiment_id)`. Any downstream consumer that
-  directly implements this interface (rather than extending the concrete
-  `ExperimentManager` class) will need to add this method to satisfy the
-  contract. The method removes turns, rewards, totals, snapshots, and the
-  registry entry for an experiment in a single transaction. There are no
-  known external implementations of `ExperimentManagerInterface` at the time
-  of this change.
+- **BC break (minor):** `ExperimentManagerInterface` now declares three new
+  methods:
+  - `purgeExperiment(string $experiment_id)` - removes turns, rewards,
+    totals, snapshots, and registry entry for an experiment in a single
+    transaction.
+  - `getTotalTurnsMultiple(array $experiment_ids): array` - batched lookup
+    of total turns for many experiments in one query, used by list builders
+    to avoid N+1 query patterns.
+  - `getAllArmsDataMultiple(array $experiment_ids): array` - batched lookup
+    of arm data for many experiments in one query, paired with
+    `getTotalTurnsMultiple()`.
 
-  Mitigation for downstream maintainers: copy the implementation from
-  `ExperimentManager::purgeExperiment()`, which uses transactional deletes
-  across `rl_arm_data`, `rl_experiment_totals`, `rl_arm_snapshots`, and
-  `rl_experiment_registry`. The method is straightforward to implement.
+  The same three methods are also added to `ExperimentDataStorageInterface`
+  (the lower-level storage contract).
+
+  Any downstream consumer that directly implements either interface (rather
+  than extending the concrete classes) will need to add these methods to
+  satisfy the contract. There are no known external implementations of
+  either interface at the time of this change.
+
+  Mitigation for downstream maintainers: copy the implementations from
+  `ExperimentManager` and `ExperimentDataStorage`. The batch methods are
+  thin `IN`-clause wrappers around the existing single-row queries; the
+  purge method uses transactional deletes across `rl_arm_data`,
+  `rl_experiment_totals`, `rl_arm_snapshots`, and `rl_experiment_registry`.

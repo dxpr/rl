@@ -84,10 +84,21 @@ abstract class VariantExperimentListBuilderBase extends ConfigEntityListBuilder 
    * {@inheritdoc}
    */
   public function render() {
+    $rl_ids = [];
     foreach ($this->load() as $entity) {
       if ($entity instanceof VariantExperimentInterface) {
-        $rl_id = $entity->getRlExperimentId();
-        $this->statsCache[$rl_id] = $this->computeStats($rl_id);
+        $rl_ids[] = $entity->getRlExperimentId();
+      }
+    }
+    if (!empty($rl_ids)) {
+      // Two queries total regardless of how many experiments are listed.
+      $turns_map = $this->experimentManager->getTotalTurnsMultiple($rl_ids);
+      $arms_map = $this->experimentManager->getAllArmsDataMultiple($rl_ids);
+      foreach ($rl_ids as $rl_id) {
+        $this->statsCache[$rl_id] = $this->computeStatsFromBatch(
+          $turns_map[$rl_id] ?? 0,
+          $arms_map[$rl_id] ?? []
+        );
       }
     }
     $build = parent::render();
@@ -96,18 +107,22 @@ abstract class VariantExperimentListBuilderBase extends ConfigEntityListBuilder 
   }
 
   /**
-   * Compute stats for a single experiment (one DB lookup per call).
+   * Compute stats for a single experiment from pre-fetched batch data.
+   *
+   * @param int $turns
+   *   Total turns from the batch.
+   * @param array $arms
+   *   Arm data objects keyed by arm_id from the batch.
    *
    * @return array
    *   Stats with keys: turns (int), leader_arm (string|null),
    *   leader_score (float, the Beta posterior mean of the leading arm).
    */
-  protected function computeStats(string $rl_experiment_id): array {
-    $turns = $this->experimentManager->getTotalTurns($rl_experiment_id);
+  protected function computeStatsFromBatch(int $turns, array $arms): array {
     $leader_arm = NULL;
     $leader_score = 0.0;
     if ($turns > 0) {
-      foreach ($this->experimentManager->getAllArmsData($rl_experiment_id) as $arm) {
+      foreach ($arms as $arm) {
         $alpha = $arm->rewards + 1;
         $beta = max(1, $arm->turns - $arm->rewards + 1);
         $score = $alpha / ($alpha + $beta);
@@ -118,10 +133,27 @@ abstract class VariantExperimentListBuilderBase extends ConfigEntityListBuilder 
       }
     }
     return [
-      'turns' => (int) $turns,
+      'turns' => $turns,
       'leader_arm' => $leader_arm,
       'leader_score' => $leader_score,
     ];
+  }
+
+  /**
+   * Compute stats for a single experiment (lazy fallback for standalone use).
+   *
+   * Used by getDefaultOperations() when called outside the normal render()
+   * pipeline so the cache is empty. Issues two queries; the batch path in
+   * render() avoids this.
+   *
+   * @return array
+   *   Stats with keys: turns, leader_arm, leader_score.
+   */
+  protected function computeStats(string $rl_experiment_id): array {
+    return $this->computeStatsFromBatch(
+      $this->experimentManager->getTotalTurns($rl_experiment_id),
+      $this->experimentManager->getAllArmsData($rl_experiment_id)
+    );
   }
 
   /**

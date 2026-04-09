@@ -73,6 +73,29 @@ interface ExperimentManagerInterface {
   public function getTotalTurns($experiment_id);
 
   /**
+   * Gets total turns for a batch of experiments in one query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, int>
+   *   Total turns keyed by experiment ID; missing experiments have value 0.
+   */
+  public function getTotalTurnsMultiple(array $experiment_ids): array;
+
+  /**
+   * Gets arms data for a batch of experiments in one query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, array>
+   *   Outer array keyed by experiment ID; inner array is arm data objects
+   *   keyed by arm_id (same shape as getAllArmsData()).
+   */
+  public function getAllArmsDataMultiple(array $experiment_ids): array;
+
+  /**
    * Gets Thompson Sampling scores for all arms in an experiment.
    *
    * @param string $experiment_id
