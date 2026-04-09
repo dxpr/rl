@@ -90,4 +90,16 @@ interface ExperimentManagerInterface {
    */
   public function getThompsonScores($experiment_id, $time_window_seconds = NULL, array $requested_arms = []);
 
+  /**
+   * Purges all data for an experiment.
+   *
+   * Removes turns, rewards, totals, snapshots, and the registry entry for the
+   * given experiment ID. Used when a consumer module deletes or retargets an
+   * experiment and needs to clean up the analytics tables transactionally.
+   *
+   * @param string $experiment_id
+   *   The experiment ID to purge.
+   */
+  public function purgeExperiment($experiment_id);
+
 }

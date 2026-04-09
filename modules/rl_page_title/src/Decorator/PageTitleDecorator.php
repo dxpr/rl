@@ -2,7 +2,6 @@
 
 namespace Drupal\rl_page_title\Decorator;
 
-use Drupal\Component\Utility\Html;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
 use Drupal\rl_page_title\Entity\PageTitleExperiment;
@@ -20,11 +19,11 @@ class PageTitleDecorator implements ExperimentDecoratorInterface {
   protected EntityTypeManagerInterface $entityTypeManager;
 
   /**
-   * Cache of experiments keyed by RL experiment ID.
+   * Map of RL experiment ID to entity, built lazily on first lookup.
    *
-   * @var array<string, \Drupal\rl_page_title\Entity\PageTitleExperiment|false>
+   * @var array<string, \Drupal\rl_page_title\Entity\PageTitleExperiment>|null
    */
-  protected array $cache = [];
+  protected ?array $experimentMap = NULL;
 
   /**
    * Constructs a PageTitleDecorator.
@@ -42,7 +41,12 @@ class PageTitleDecorator implements ExperimentDecoratorInterface {
       return NULL;
     }
     return [
-      '#markup' => Html::escape($experiment->label() ?: $experiment->getPath()) . ' <small>(' . Html::escape($experiment->getPath()) . ')</small>',
+      '#type' => 'inline_template',
+      '#template' => '{{ label }} <small>({{ path }})</small>',
+      '#context' => [
+        'label' => $experiment->label() ?: $experiment->getPath(),
+        'path' => $experiment->getPath(),
+      ],
     ];
   }
 
@@ -57,33 +61,34 @@ class PageTitleDecorator implements ExperimentDecoratorInterface {
     $text = $experiment->getArmText($arm_id);
     if ($text === NULL) {
       // v0 = original title, not stored in the experiment entity.
-      return ['#markup' => '<em>' . Html::escape((string) t('(original title)')) . '</em>'];
+      return [
+        '#type' => 'inline_template',
+        '#template' => '<em>{{ "(original title)"|t }}</em>',
+      ];
     }
-    return ['#markup' => Html::escape($text)];
+    return [
+      '#type' => 'inline_template',
+      '#template' => '{{ text }}',
+      '#context' => ['text' => $text],
+    ];
   }
 
   /**
-   * Load an experiment by RL experiment ID.
+   * Load an experiment by RL experiment ID using a lazy O(N once)/O(1) map.
    */
   protected function loadExperiment(string $experiment_id): ?PageTitleExperiment {
     if (!str_starts_with($experiment_id, 'rl_page_title-')) {
       return NULL;
     }
-    if (array_key_exists($experiment_id, $this->cache)) {
-      return $this->cache[$experiment_id] ?: NULL;
-    }
-    // Hash-based IDs cannot be reversed; load all experiments and match.
-    // This is acceptable because experiment count is low (config entities).
-    $storage = $this->entityTypeManager->getStorage('rl_page_title_experiment');
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $experiment */
-    foreach ($storage->loadMultiple() as $experiment) {
-      if ($experiment->getRlExperimentId() === $experiment_id) {
-        $this->cache[$experiment_id] = $experiment;
-        return $experiment;
+    if ($this->experimentMap === NULL) {
+      $this->experimentMap = [];
+      $storage = $this->entityTypeManager->getStorage('rl_page_title_experiment');
+      /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $experiment */
+      foreach ($storage->loadMultiple() as $experiment) {
+        $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
       }
     }
-    $this->cache[$experiment_id] = FALSE;
-    return NULL;
+    return $this->experimentMap[$experiment_id] ?? NULL;
   }
 
 }

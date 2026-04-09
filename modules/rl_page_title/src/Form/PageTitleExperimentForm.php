@@ -2,11 +2,15 @@
 
 namespace Drupal\rl_page_title\Form;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Path\PathValidatorInterface;
 use Drupal\path_alias\AliasManagerInterface;
+use Drupal\rl\Experiment\VariantParser;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
+use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_page_title\Entity\PageTitleExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -36,6 +40,13 @@ class PageTitleExperimentForm extends EntityForm {
   protected ExperimentRegistryInterface $experimentRegistry;
 
   /**
+   * The RL experiment manager (for purging on retarget).
+   *
+   * @var \Drupal\rl\Service\ExperimentManagerInterface
+   */
+  protected ExperimentManagerInterface $experimentManager;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -43,6 +54,7 @@ class PageTitleExperimentForm extends EntityForm {
     $instance->pathValidator = $container->get('path.validator');
     $instance->aliasManager = $container->get('path_alias.manager');
     $instance->experimentRegistry = $container->get('rl.experiment_registry');
+    $instance->experimentManager = $container->get('rl.experiment_manager');
     return $instance;
   }
 
@@ -123,20 +135,39 @@ class PageTitleExperimentForm extends EntityForm {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     parent::validateForm($form, $form_state);
 
-    $path = trim($form_state->getValue('path') ?? '');
-    if ($path === '') {
+    $raw_path = trim($form_state->getValue('path') ?? '');
+    if ($raw_path === '') {
       $form_state->setErrorByName('path', $this->t('Path is required.'));
       return;
     }
-    if ($path[0] !== '/') {
+    if ($raw_path[0] !== '/') {
       $form_state->setErrorByName('path', $this->t('Path must start with a slash.'));
     }
-    elseif (!$this->pathValidator->isValid($path)) {
-      $form_state->setErrorByName('path', $this->t('The path %path does not match a valid Drupal route.', ['%path' => $path]));
+    elseif (!$this->pathValidator->isValid($raw_path)) {
+      $form_state->setErrorByName('path', $this->t('The path %path does not match a valid Drupal route.', ['%path' => $raw_path]));
     }
 
-    $variants = $this->parseVariants($form_state->getValue('variants') ?? '');
-    if (empty($variants)) {
+    // Resolve to canonical internal path and check for duplicates.
+    $resolved = $this->aliasManager->getPathByAlias($raw_path);
+    $internal_path = PageTitleExperiment::normalizePath($resolved);
+    $form_state->setValue('_resolved_path', $internal_path);
+
+    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
+    $entity = $this->entity;
+    $duplicates = $this->entityTypeManager
+      ->getStorage('rl_page_title_experiment')
+      ->loadByProperties(['path' => $internal_path]);
+    foreach ($duplicates as $duplicate) {
+      if ($duplicate->id() !== $entity->id()) {
+        $form_state->setErrorByName('path', $this->t('Another experiment (%label) already targets %path. Edit that experiment instead.', [
+          '%label' => $duplicate->label(),
+          '%path' => $internal_path,
+        ]));
+        break;
+      }
+    }
+
+    if (empty(VariantParser::parse($form_state->getValue('variants') ?? ''))) {
       $form_state->setErrorByName('variants', $this->t('Provide at least one variant title.'));
     }
   }
@@ -147,14 +178,21 @@ class PageTitleExperimentForm extends EntityForm {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
-    $raw_path = trim($form_state->getValue('path'));
-    // Resolve alias to internal path so matching at runtime is exact.
-    $internal_path = $this->aliasManager->getPathByAlias($raw_path);
-
     /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->entity;
-    $entity->setPath($internal_path);
-    $entity->setVariants($this->parseVariants($form_state->getValue('variants')));
+
+    // If the path is being retargeted, purge analytics for the old RL ID.
+    if (!$entity->isNew()) {
+      $original = $this->entityTypeManager
+        ->getStorage('rl_page_title_experiment')
+        ->loadUnchanged($entity->id());
+      if ($original && $original->getPath() !== $form_state->getValue('_resolved_path')) {
+        $this->experimentManager->purgeExperiment($original->getRlExperimentId());
+      }
+    }
+
+    $entity->setPath($form_state->getValue('_resolved_path'));
+    $entity->setVariants(VariantParser::parse($form_state->getValue('variants')));
     $entity->set('enabled', (bool) $form_state->getValue('enabled'));
   }
 
@@ -167,12 +205,16 @@ class PageTitleExperimentForm extends EntityForm {
     $status = $entity->save();
 
     // Register with the RL experiment registry so the tracking endpoint
-    // accepts events for this experiment.
+    // accepts events for this experiment. Idempotent on the registry side.
     $this->experimentRegistry->register(
       $entity->getRlExperimentId(),
       'rl_page_title',
       $entity->label()
     );
+
+    // Invalidate page cache for the target path so the new variants take
+    // effect immediately rather than waiting for the cached page to expire.
+    Cache::invalidateTags(['rl_page_title:' . $entity->getPath()]);
 
     if ($status === SAVED_NEW) {
       $this->messenger()->addStatus($this->t('Created experiment %label.', ['%label' => $entity->label()]));
@@ -182,26 +224,6 @@ class PageTitleExperimentForm extends EntityForm {
     }
     $form_state->setRedirectUrl($entity->toUrl('collection'));
     return $status;
-  }
-
-  /**
-   * Parse the variants textarea into a list of trimmed, non-empty lines.
-   *
-   * @param string $raw
-   *   The raw textarea value.
-   *
-   * @return string[]
-   */
-  protected function parseVariants(string $raw): array {
-    $lines = preg_split('/\r\n|\r|\n/', $raw);
-    $cleaned = [];
-    foreach ($lines as $line) {
-      $line = trim($line);
-      if ($line !== '') {
-        $cleaned[] = $line;
-      }
-    }
-    return $cleaned;
   }
 
 }

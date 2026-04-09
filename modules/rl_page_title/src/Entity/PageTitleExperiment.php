@@ -3,6 +3,7 @@
 namespace Drupal\rl_page_title\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\rl\Experiment\VariantArmsTrait;
 
 /**
  * Defines the Page Title Experiment config entity.
@@ -20,7 +21,7 @@ use Drupal\Core\Config\Entity\ConfigEntityBase;
  *       "default" = "Drupal\rl_page_title\Form\PageTitleExperimentForm",
  *       "add" = "Drupal\rl_page_title\Form\PageTitleExperimentForm",
  *       "edit" = "Drupal\rl_page_title\Form\PageTitleExperimentForm",
- *       "delete" = "Drupal\Core\Entity\EntityDeleteForm",
+ *       "delete" = "Drupal\rl_page_title\Form\PageTitleExperimentDeleteForm",
  *     },
  *     "route_provider" = {
  *       "html" = "Drupal\Core\Entity\Routing\AdminHtmlRouteProvider",
@@ -48,6 +49,8 @@ use Drupal\Core\Config\Entity\ConfigEntityBase;
  * )
  */
 class PageTitleExperiment extends ConfigEntityBase {
+
+  use VariantArmsTrait;
 
   /**
    * The experiment ID (machine name).
@@ -92,17 +95,32 @@ class PageTitleExperiment extends ConfigEntityBase {
   }
 
   /**
-   * Set the internal path.
+   * Set the internal path. Normalizes to leading slash, no trailing slash.
    */
   public function setPath(string $path): static {
-    $this->path = $path;
+    $this->path = self::normalizePath($path);
     return $this;
   }
 
   /**
-   * Get the variant titles.
+   * Normalize a path to the canonical form used for storage and matching.
    *
-   * @return string[]
+   * Ensures a leading slash and removes any trailing slash so that runtime
+   * lookup matches save-time storage exactly.
+   */
+  public static function normalizePath(string $path): string {
+    $path = trim($path);
+    if ($path === '' || $path === '/') {
+      return '/';
+    }
+    if ($path[0] !== '/') {
+      $path = '/' . $path;
+    }
+    return rtrim($path, '/');
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function getVariants(): array {
     return array_values($this->variants ?? []);
@@ -129,42 +147,14 @@ class PageTitleExperiment extends ConfigEntityBase {
    * Build a deterministic RL experiment ID from a path.
    *
    * @param string $path
-   *   The internal path.
+   *   The internal path. Will be normalized first so callers can pass either
+   *   canonical or non-canonical input and get the same result.
    *
    * @return string
    *   The RL experiment ID, in format: rl_page_title-{12-char-sha1}.
    */
   public static function buildRlExperimentId(string $path): string {
-    return 'rl_page_title-' . substr(sha1($path), 0, 12);
-  }
-
-  /**
-   * Build arm IDs for this experiment.
-   *
-   * @return string[]
-   *   Arm IDs: v0 (original) plus v1..vN for each stored variant.
-   */
-  public function getArmIds(): array {
-    $arm_ids = ['v0'];
-    foreach ($this->getVariants() as $i => $_unused) {
-      $arm_ids[] = 'v' . ($i + 1);
-    }
-    return $arm_ids;
-  }
-
-  /**
-   * Get the text for a given arm.
-   *
-   * @return string|null
-   *   The variant text, or NULL for v0 (original, not stored).
-   */
-  public function getArmText(string $arm_id): ?string {
-    if ($arm_id === 'v0') {
-      return NULL;
-    }
-    $index = (int) substr($arm_id, 1) - 1;
-    $variants = $this->getVariants();
-    return $variants[$index] ?? NULL;
+    return self::buildVariantExperimentId('rl_page_title', self::normalizePath($path));
   }
 
 }

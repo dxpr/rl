@@ -2,7 +2,6 @@
 
 namespace Drupal\rl_menu_link\Decorator;
 
-use Drupal\Component\Utility\Html;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
@@ -28,11 +27,11 @@ class MenuLinkDecorator implements ExperimentDecoratorInterface {
   protected MenuLinkManagerInterface $menuLinkManager;
 
   /**
-   * Cache of experiments, keyed by RL experiment ID.
+   * Map of RL experiment ID to entity, built lazily on first lookup.
    *
-   * @var array<string, \Drupal\rl_menu_link\Entity\MenuLinkExperiment|false>
+   * @var array<string, \Drupal\rl_menu_link\Entity\MenuLinkExperiment>|null
    */
-  protected array $cache = [];
+  protected ?array $experimentMap = NULL;
 
   /**
    * Constructs a MenuLinkDecorator.
@@ -53,7 +52,12 @@ class MenuLinkDecorator implements ExperimentDecoratorInterface {
     $plugin_id = $experiment->getMenuLinkPluginId();
     $original_label = $this->getOriginalLabel($plugin_id) ?? $plugin_id;
     return [
-      '#markup' => Html::escape($experiment->label() ?: $original_label) . ' <small>(' . Html::escape($plugin_id) . ')</small>',
+      '#type' => 'inline_template',
+      '#template' => '{{ label }} <small>({{ plugin_id }})</small>',
+      '#context' => [
+        'label' => $experiment->label() ?: $original_label,
+        'plugin_id' => $plugin_id,
+      ],
     ];
   }
 
@@ -69,32 +73,34 @@ class MenuLinkDecorator implements ExperimentDecoratorInterface {
     if ($text === NULL) {
       $original = $this->getOriginalLabel($experiment->getMenuLinkPluginId());
       return [
-        '#markup' => '<em>' . Html::escape($original ?: (string) t('(original)')) . '</em>',
+        '#type' => 'inline_template',
+        '#template' => '<em>{{ label }}</em>',
+        '#context' => ['label' => $original ?: (string) t('(original)')],
       ];
     }
-    return ['#markup' => Html::escape($text)];
+    return [
+      '#type' => 'inline_template',
+      '#template' => '{{ text }}',
+      '#context' => ['text' => $text],
+    ];
   }
 
   /**
-   * Load an experiment by RL experiment ID.
+   * Load an experiment by RL experiment ID using a lazy O(N once)/O(1) map.
    */
   protected function loadExperiment(string $experiment_id): ?MenuLinkExperiment {
     if (!str_starts_with($experiment_id, 'rl_menu_link-')) {
       return NULL;
     }
-    if (array_key_exists($experiment_id, $this->cache)) {
-      return $this->cache[$experiment_id] ?: NULL;
-    }
-    $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $experiment */
-    foreach ($storage->loadMultiple() as $experiment) {
-      if ($experiment->getRlExperimentId() === $experiment_id) {
-        $this->cache[$experiment_id] = $experiment;
-        return $experiment;
+    if ($this->experimentMap === NULL) {
+      $this->experimentMap = [];
+      $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
+      /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $experiment */
+      foreach ($storage->loadMultiple() as $experiment) {
+        $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
       }
     }
-    $this->cache[$experiment_id] = FALSE;
-    return NULL;
+    return $this->experimentMap[$experiment_id] ?? NULL;
   }
 
   /**

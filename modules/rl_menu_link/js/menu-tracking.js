@@ -6,6 +6,10 @@
  * and a reward when the user clicks the link. Tracked anchors are identified
  * by data-rl-ml-experiment-id and data-rl-ml-arm-id attributes injected by
  * the preprocess_menu hook.
+ *
+ * Reward dedupe key includes the arm ID, so when Thompson Sampling rotates
+ * the variant on a later visit in the same session the new arm still gets
+ * credit on the next click.
  */
 
 (function (Drupal, drupalSettings, once) {
@@ -28,7 +32,7 @@
           return;
         }
 
-        // Turn tracking via IntersectionObserver (impression on visibility).
+        // Turn tracking via IntersectionObserver.
         if ('IntersectionObserver' in window) {
           var observer = new IntersectionObserver(function (entries) {
             entries.forEach(function (entry) {
@@ -41,13 +45,12 @@
           observer.observe(anchor);
         }
         else {
-          // No IntersectionObserver: send turn immediately.
           _send('turn', experimentId, armId);
         }
 
         // Reward tracking on click.
         anchor.addEventListener('click', function () {
-          var rewardKey = 'rl-ml-reward-' + experimentId;
+          var rewardKey = 'rl-ml-reward-' + experimentId + '-' + armId;
           if (sessionStorage.getItem(rewardKey)) {
             return;
           }

@@ -3,6 +3,7 @@
 namespace Drupal\rl_menu_link\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\rl\Experiment\VariantArmsTrait;
 
 /**
  * Defines the Menu Link Experiment config entity.
@@ -20,7 +21,7 @@ use Drupal\Core\Config\Entity\ConfigEntityBase;
  *       "default" = "Drupal\rl_menu_link\Form\MenuLinkExperimentForm",
  *       "add" = "Drupal\rl_menu_link\Form\MenuLinkExperimentForm",
  *       "edit" = "Drupal\rl_menu_link\Form\MenuLinkExperimentForm",
- *       "delete" = "Drupal\Core\Entity\EntityDeleteForm",
+ *       "delete" = "Drupal\rl_menu_link\Form\MenuLinkExperimentDeleteForm",
  *     },
  *     "route_provider" = {
  *       "html" = "Drupal\Core\Entity\Routing\AdminHtmlRouteProvider",
@@ -48,6 +49,8 @@ use Drupal\Core\Config\Entity\ConfigEntityBase;
  * )
  */
 class MenuLinkExperiment extends ConfigEntityBase {
+
+  use VariantArmsTrait;
 
   /**
    * The experiment ID (machine name).
@@ -95,14 +98,12 @@ class MenuLinkExperiment extends ConfigEntityBase {
    * Set the menu link plugin ID.
    */
   public function setMenuLinkPluginId(string $plugin_id): static {
-    $this->menu_link_plugin_id = $plugin_id;
+    $this->menu_link_plugin_id = trim($plugin_id);
     return $this;
   }
 
   /**
-   * Get variant labels.
-   *
-   * @return string[]
+   * {@inheritdoc}
    */
   public function getVariants(): array {
     return array_values($this->variants ?? []);
@@ -129,35 +130,7 @@ class MenuLinkExperiment extends ConfigEntityBase {
    * Build a deterministic RL experiment ID from a plugin ID.
    */
   public static function buildRlExperimentId(string $plugin_id): string {
-    return 'rl_menu_link-' . substr(sha1($plugin_id), 0, 12);
-  }
-
-  /**
-   * Build arm IDs (v0 = original, v1..vN = stored variants).
-   *
-   * @return string[]
-   */
-  public function getArmIds(): array {
-    $arm_ids = ['v0'];
-    foreach ($this->getVariants() as $i => $_unused) {
-      $arm_ids[] = 'v' . ($i + 1);
-    }
-    return $arm_ids;
-  }
-
-  /**
-   * Get the text for an arm ID.
-   *
-   * @return string|null
-   *   The variant text or NULL for v0 (original).
-   */
-  public function getArmText(string $arm_id): ?string {
-    if ($arm_id === 'v0') {
-      return NULL;
-    }
-    $index = (int) substr($arm_id, 1) - 1;
-    $variants = $this->getVariants();
-    return $variants[$index] ?? NULL;
+    return self::buildVariantExperimentId('rl_menu_link', trim($plugin_id));
   }
 
 }

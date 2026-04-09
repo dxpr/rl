@@ -5,12 +5,15 @@
  * RL Page Title: A/B test page titles for any page.
  */
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
+use Drupal\rl\Experiment\VariantParser;
+use Drupal\rl_page_title\Entity\PageTitleExperiment;
 
 /**
  * Implements hook_help().
@@ -35,10 +38,36 @@ function rl_page_title_preprocess_page_title(array &$variables) {
 
 /**
  * Implements hook_preprocess_html().
+ *
+ * Replaces the <title> tag content with the winning variant. Preserves the
+ * existing render-array structure: only the user-visible title text changes.
  */
 function rl_page_title_preprocess_html(array &$variables) {
   $result = _rl_page_title_get_active_variant();
-  if ($result && $result['text'] !== NULL && isset($variables['head_title']['title'])) {
+  if (!$result || $result['text'] === NULL) {
+    return;
+  }
+  if (!isset($variables['head_title']['title'])) {
+    return;
+  }
+
+  $existing = $variables['head_title']['title'];
+  // If another module rendered head_title.title as a render array, replace
+  // the content but preserve the structure type.
+  if (is_array($existing)) {
+    if (isset($existing['#markup'])) {
+      $existing['#markup'] = $result['text'];
+      $variables['head_title']['title'] = $existing;
+    }
+    elseif (isset($existing['#plain_text'])) {
+      $existing['#plain_text'] = $result['text'];
+      $variables['head_title']['title'] = $existing;
+    }
+    else {
+      $variables['head_title']['title'] = ['#plain_text' => $result['text']];
+    }
+  }
+  else {
     $variables['head_title']['title'] = $result['text'];
   }
 }
@@ -61,6 +90,8 @@ function rl_page_title_page_attachments(array &$attachments) {
     'armId' => $result['arm_id'],
     'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
   ];
+  // Tag the page so the form save handler can targeted-invalidate it.
+  $attachments['#cache']['tags'][] = 'rl_page_title:' . _rl_page_title_current_internal_path();
 }
 
 /**
@@ -72,6 +103,13 @@ function rl_page_title_page_attachments(array &$attachments) {
  */
 function _rl_page_title_get_active_variant(): ?array {
   return \Drupal::service('rl_page_title.variant_selector')->selectForCurrentPage();
+}
+
+/**
+ * Get the canonical internal path for the current request.
+ */
+function _rl_page_title_current_internal_path(): string {
+  return PageTitleExperiment::normalizePath(\Drupal::service('path.current')->getPath());
 }
 
 /**
@@ -101,9 +139,9 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     return;
   }
 
-  // Resolve the entity's canonical internal path.
+  // Resolve the entity's canonical internal path (normalized).
   try {
-    $internal_path = '/' . $entity->toUrl('canonical')->getInternalPath();
+    $internal_path = PageTitleExperiment::normalizePath('/' . $entity->toUrl('canonical')->getInternalPath());
   }
   catch (\Exception $e) {
     return;
@@ -132,17 +170,21 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     $rl_experiment_id = $existing->getRlExperimentId();
     $total = \Drupal::service('rl.experiment_manager')->getTotalTurns($rl_experiment_id);
     $variant_count = count($existing->getVariants()) + 1;
-    $report_url = Url::fromRoute('rl.reports.experiment_detail', [
-      'experiment_id' => $rl_experiment_id,
-    ]);
+    // Only link to the report if there's data to show.
+    $report_link = '';
+    if ($total > 0) {
+      $report_url = Url::fromRoute('rl.reports.experiment_detail', [
+        'experiment_id' => $rl_experiment_id,
+      ]);
+      $report_link = ' <a href="' . $report_url->toString() . '" target="_blank">' . t('View report') . '</a>';
+    }
     $form['rl_page_title']['status'] = [
       '#type' => 'item',
-      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions. <a href=":report" target="_blank">View report</a>', [
+      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions.', [
         '@state' => $existing->status() ? t('Active') : t('Disabled'),
         '@variants' => $variant_count,
         '@impressions' => $total,
-        ':report' => $report_url->toString(),
-      ]),
+      ]) . $report_link,
     ];
   }
   else {
@@ -185,13 +227,25 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
     ];
   }
 
-  $form['actions']['submit']['#submit'][] = '_rl_page_title_entity_form_submit';
+  // Attach our submit handler to all submit-style actions on the form, not
+  // just the canonical Save button. Workflow modules often add additional
+  // submit actions (publish, save as draft, etc.) and we need the experiment
+  // to update regardless of which action the user clicks.
+  if (isset($form['actions']) && is_array($form['actions'])) {
+    foreach (\Drupal\Core\Render\Element::children($form['actions']) as $action_key) {
+      if (isset($form['actions'][$action_key]['#type']) && $form['actions'][$action_key]['#type'] === 'submit') {
+        $form['actions'][$action_key]['#submit'][] = '_rl_page_title_entity_form_submit';
+      }
+    }
+  }
 }
 
 /**
  * Submit handler for the vertical tab on entity forms.
  *
  * Creates, updates, or deletes the experiment based on the textarea content.
+ * Wraps writes in a try/catch so a failure here cannot break the user's
+ * primary entity save flow.
  */
 function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $form_state) {
   $values = $form_state->getValue('rl_page_title');
@@ -204,59 +258,64 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
     return;
   }
 
-  // Parse variant lines.
-  $variants = [];
-  foreach (preg_split('/\r\n|\r|\n/', (string) ($values['variants'] ?? '')) as $line) {
-    $line = trim($line);
-    if ($line !== '') {
-      $variants[] = $line;
-    }
-  }
-
+  $variants = VariantParser::parse((string) ($values['variants'] ?? ''));
   $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
   $existing_id = $values['_existing_id'] ?? NULL;
+  /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment|null $experiment */
   $experiment = $existing_id ? $storage->load($existing_id) : NULL;
 
-  if (empty($variants)) {
-    if ($experiment) {
-      $experiment->delete();
-      \Drupal::messenger()->addStatus(t('Title experiment removed.'));
+  try {
+    if (empty($variants)) {
+      if ($experiment) {
+        $rl_id = $experiment->getRlExperimentId();
+        $experiment->delete();
+        \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
+        \Drupal::messenger()->addStatus(t('Title experiment removed.'));
+      }
+      return;
     }
-    return;
+
+    if (!$experiment) {
+      // Build a stable machine name from the canonical RL experiment ID so
+      // the config and analytics IDs stay aligned.
+      $machine = 'pt_' . substr(PageTitleExperiment::buildRlExperimentId($internal_path), strlen('rl_page_title-'));
+      $form_object = $form_state->getFormObject();
+      /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
+      $entity = $form_object->getEntity();
+      $label = (string) t('Page title: @entity', ['@entity' => $entity->label() ?? $internal_path]);
+      $experiment = $storage->create([
+        'id' => $machine,
+        'label' => $label,
+        'path' => $internal_path,
+      ]);
+    }
+
+    $experiment->setVariants($variants);
+    $experiment->set('enabled', !empty($values['enabled']));
+    $experiment->save();
+
+    // Register with the RL experiment registry.
+    \Drupal::service('rl.experiment_registry')->register(
+      $experiment->getRlExperimentId(),
+      'rl_page_title',
+      $experiment->label()
+    );
+
+    Cache::invalidateTags(['rl_page_title:' . $experiment->getPath()]);
+
+    \Drupal::messenger()->addStatus(t('Title experiment saved.'));
   }
-
-  if (!$experiment) {
-    // Build a stable machine name from the path.
-    $machine = 'page_title_' . substr(sha1($internal_path), 0, 16);
-    $form_object = $form_state->getFormObject();
-    /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
-    $entity = $form_object->getEntity();
-    $label = (string) t('Page title: @entity', ['@entity' => $entity->label() ?? $internal_path]);
-    $experiment = $storage->create([
-      'id' => $machine,
-      'label' => $label,
-      'path' => $internal_path,
-    ]);
+  catch (\Exception $e) {
+    \Drupal::logger('rl_page_title')->error('Failed to save title experiment from entity form: @message', ['@message' => $e->getMessage()]);
+    \Drupal::messenger()->addError(t('Could not save title experiment: @message', ['@message' => $e->getMessage()]));
   }
-
-  $experiment->setVariants($variants);
-  $experiment->set('enabled', !empty($values['enabled']));
-  $experiment->save();
-
-  // Register with the RL experiment registry.
-  \Drupal::service('rl.experiment_registry')->register(
-    $experiment->getRlExperimentId(),
-    'rl_page_title',
-    $experiment->label()
-  );
-
-  \Drupal::messenger()->addStatus(t('Title experiment saved.'));
 }
 
 /**
  * Implements hook_entity_predelete().
  *
- * Cleans up page title experiments when the target entity is deleted.
+ * Cleans up page title experiments when the target entity is deleted, and
+ * also purges the corresponding RL analytics tables.
  */
 function rl_page_title_entity_predelete(EntityInterface $entity) {
   if (!$entity instanceof ContentEntityInterface) {
@@ -267,7 +326,7 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
   }
 
   try {
-    $internal_path = '/' . $entity->toUrl('canonical')->getInternalPath();
+    $internal_path = PageTitleExperiment::normalizePath('/' . $entity->toUrl('canonical')->getInternalPath());
   }
   catch (\Exception $e) {
     return;
@@ -275,7 +334,14 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
 
   $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
   $matches = $storage->loadByProperties(['path' => $internal_path]);
-  if ($matches) {
-    $storage->delete($matches);
+  if (!$matches) {
+    return;
+  }
+  $manager = \Drupal::service('rl.experiment_manager');
+  foreach ($matches as $experiment) {
+    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $experiment */
+    $rl_id = $experiment->getRlExperimentId();
+    $experiment->delete();
+    $manager->purgeExperiment($rl_id);
   }
 }

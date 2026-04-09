@@ -173,6 +173,35 @@ class ExperimentManager implements ExperimentManagerInterface {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function purgeExperiment($experiment_id) {
+    $transaction = $this->database->startTransaction();
+    try {
+      $this->database->delete('rl_arm_data')
+        ->condition('experiment_id', $experiment_id)
+        ->execute();
+      $this->database->delete('rl_experiment_totals')
+        ->condition('experiment_id', $experiment_id)
+        ->execute();
+      $this->database->delete('rl_arm_snapshots')
+        ->condition('experiment_id', $experiment_id)
+        ->execute();
+      $this->database->delete('rl_experiment_registry')
+        ->condition('experiment_id', $experiment_id)
+        ->execute();
+    }
+    catch (\Exception $e) {
+      $transaction->rollBack();
+      $this->loggerFactory->get('rl')->error('Failed to purge experiment @id: @message', [
+        '@id' => $experiment_id,
+        '@message' => $e->getMessage(),
+      ]);
+      throw $e;
+    }
+  }
+
+  /**
    * Logs Thompson Sampling scores for debugging.
    *
    * @param string $experiment_id

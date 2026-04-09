@@ -5,7 +5,9 @@ namespace Drupal\rl_menu_link\Form;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
+use Drupal\rl\Experiment\VariantParser;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
+use Drupal\rl\Service\ExperimentManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -28,12 +30,20 @@ class MenuLinkExperimentForm extends EntityForm {
   protected ExperimentRegistryInterface $experimentRegistry;
 
   /**
+   * The RL experiment manager.
+   *
+   * @var \Drupal\rl\Service\ExperimentManagerInterface
+   */
+  protected ExperimentManagerInterface $experimentManager;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
     $instance = parent::create($container);
     $instance->menuLinkManager = $container->get('plugin.manager.menu.link');
     $instance->experimentRegistry = $container->get('rl.experiment_registry');
+    $instance->experimentManager = $container->get('rl.experiment_manager');
     return $instance;
   }
 
@@ -114,13 +124,28 @@ class MenuLinkExperimentForm extends EntityForm {
     $plugin_id = trim($form_state->getValue('menu_link_plugin_id') ?? '');
     if ($plugin_id === '') {
       $form_state->setErrorByName('menu_link_plugin_id', $this->t('Plugin ID is required.'));
+      return;
     }
-    elseif (!$this->menuLinkManager->hasDefinition($plugin_id)) {
+    if (!$this->menuLinkManager->hasDefinition($plugin_id)) {
       $form_state->setErrorByName('menu_link_plugin_id', $this->t('No menu link with plugin ID %id is registered.', ['%id' => $plugin_id]));
+      return;
     }
 
-    $variants = $this->parseVariants($form_state->getValue('variants') ?? '');
-    if (empty($variants)) {
+    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
+    $entity = $this->entity;
+    $duplicates = $this->entityTypeManager
+      ->getStorage('rl_menu_link_experiment')
+      ->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
+    foreach ($duplicates as $duplicate) {
+      if ($duplicate->id() !== $entity->id()) {
+        $form_state->setErrorByName('menu_link_plugin_id', $this->t('Another experiment (%label) already targets this menu link. Edit that experiment instead.', [
+          '%label' => $duplicate->label(),
+        ]));
+        break;
+      }
+    }
+
+    if (empty(VariantParser::parse($form_state->getValue('variants') ?? ''))) {
       $form_state->setErrorByName('variants', $this->t('Provide at least one variant label.'));
     }
   }
@@ -133,8 +158,20 @@ class MenuLinkExperimentForm extends EntityForm {
 
     /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->entity;
-    $entity->setMenuLinkPluginId(trim($form_state->getValue('menu_link_plugin_id')));
-    $entity->setVariants($this->parseVariants($form_state->getValue('variants')));
+    $new_plugin_id = trim($form_state->getValue('menu_link_plugin_id'));
+
+    // If the plugin ID is being retargeted, purge analytics for the old ID.
+    if (!$entity->isNew()) {
+      $original = $this->entityTypeManager
+        ->getStorage('rl_menu_link_experiment')
+        ->loadUnchanged($entity->id());
+      if ($original && $original->getMenuLinkPluginId() !== $new_plugin_id) {
+        $this->experimentManager->purgeExperiment($original->getRlExperimentId());
+      }
+    }
+
+    $entity->setMenuLinkPluginId($new_plugin_id);
+    $entity->setVariants(VariantParser::parse($form_state->getValue('variants')));
     $entity->set('enabled', (bool) $form_state->getValue('enabled'));
   }
 
@@ -160,23 +197,6 @@ class MenuLinkExperimentForm extends EntityForm {
     }
     $form_state->setRedirectUrl($entity->toUrl('collection'));
     return $status;
-  }
-
-  /**
-   * Parse the variants textarea into a list of trimmed, non-empty lines.
-   *
-   * @return string[]
-   */
-  protected function parseVariants(string $raw): array {
-    $lines = preg_split('/\r\n|\r|\n/', $raw);
-    $cleaned = [];
-    foreach ($lines as $line) {
-      $line = trim($line);
-      if ($line !== '') {
-        $cleaned[] = $line;
-      }
-    }
-    return $cleaned;
   }
 
 }

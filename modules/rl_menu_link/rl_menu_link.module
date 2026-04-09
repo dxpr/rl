@@ -10,6 +10,8 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
+use Drupal\rl\Experiment\VariantParser;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 
 /**
  * Implements hook_help().
@@ -26,24 +28,23 @@ function rl_menu_link_help($route_name, RouteMatchInterface $route_match) {
  * Implements hook_preprocess_menu().
  *
  * Walks the menu tree and replaces link titles with the winning variant.
- * Also collects per-link experiment data into drupalSettings for tracking.
+ * Tracking is wired entirely through data attributes injected onto the
+ * rendered anchors; the JS reads them directly from the DOM.
  */
 function rl_menu_link_preprocess_menu(array &$variables) {
   if (empty($variables['items'])) {
     return;
   }
 
-  $tracking = &drupal_static('rl_menu_link_tracking', []);
-  _rl_menu_link_process_items($variables['items'], $tracking);
+  $touched = FALSE;
+  _rl_menu_link_process_items($variables['items'], $touched);
 
-  if (!empty($tracking)) {
+  if ($touched) {
     $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
     $base_path = \Drupal::request()->getBasePath();
-
     $variables['#attached']['library'][] = 'rl_menu_link/tracking';
     $variables['#attached']['drupalSettings']['rlMenuLink'] = [
       'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
-      'experiments' => array_values($tracking),
     ];
   }
 }
@@ -51,7 +52,7 @@ function rl_menu_link_preprocess_menu(array &$variables) {
 /**
  * Recursively process menu items, swapping titles for winning variants.
  */
-function _rl_menu_link_process_items(array &$items, array &$tracking) {
+function _rl_menu_link_process_items(array &$items, bool &$touched) {
   /** @var \Drupal\rl_menu_link\Service\MenuLinkVariantSelector $selector */
   $selector = \Drupal::service('rl_menu_link.variant_selector');
 
@@ -67,11 +68,6 @@ function _rl_menu_link_process_items(array &$items, array &$tracking) {
         if ($result['text'] !== NULL) {
           $item['title'] = $result['text'];
         }
-        $tracking[$plugin_id] = [
-          'pluginId' => $plugin_id,
-          'experimentId' => $result['experiment_id'],
-          'armId' => $result['arm_id'],
-        ];
         // Attach data attributes to the rendered anchor so the tracking JS
         // can find this link and report turns/rewards for the correct
         // experiment.
@@ -82,11 +78,12 @@ function _rl_menu_link_process_items(array &$items, array &$tracking) {
             'data-rl-ml-arm-id' => $result['arm_id'],
           ]);
         }
+        $touched = TRUE;
       }
     }
 
     if (!empty($item['below'])) {
-      _rl_menu_link_process_items($item['below'], $tracking);
+      _rl_menu_link_process_items($item['below'], $touched);
     }
   }
 }
@@ -99,6 +96,10 @@ function _rl_menu_link_process_items(array &$items, array &$tracking) {
 function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
   $form_object = $form_state->getFormObject();
   if (!$form_object instanceof ContentEntityFormInterface) {
+    return;
+  }
+  $operation = $form_object->getOperation();
+  if (!in_array($operation, ['default', 'edit'], TRUE)) {
     return;
   }
   $entity = $form_object->getEntity();
@@ -138,17 +139,20 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
     $rl_experiment_id = $existing->getRlExperimentId();
     $total = \Drupal::service('rl.experiment_manager')->getTotalTurns($rl_experiment_id);
     $variant_count = count($existing->getVariants()) + 1;
-    $report_url = Url::fromRoute('rl.reports.experiment_detail', [
-      'experiment_id' => $rl_experiment_id,
-    ]);
+    $report_link = '';
+    if ($total > 0) {
+      $report_url = Url::fromRoute('rl.reports.experiment_detail', [
+        'experiment_id' => $rl_experiment_id,
+      ]);
+      $report_link = ' <a href="' . $report_url->toString() . '" target="_blank">' . t('View report') . '</a>';
+    }
     $form['rl_menu_link']['status'] = [
       '#type' => 'item',
-      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions. <a href=":report" target="_blank">View report</a>', [
+      '#markup' => t('<strong>@state</strong>: @variants variants, @impressions impressions.', [
         '@state' => $existing->status() ? t('Active') : t('Disabled'),
         '@variants' => $variant_count,
         '@impressions' => $total,
-        ':report' => $report_url->toString(),
-      ]),
+      ]) . $report_link,
     ];
   }
   else {
@@ -190,7 +194,14 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
     ];
   }
 
-  $form['actions']['submit']['#submit'][] = '_rl_menu_link_form_submit';
+  // Attach our submit handler to all submit-style actions.
+  if (isset($form['actions']) && is_array($form['actions'])) {
+    foreach (\Drupal\Core\Render\Element::children($form['actions']) as $action_key) {
+      if (isset($form['actions'][$action_key]['#type']) && $form['actions'][$action_key]['#type'] === 'submit') {
+        $form['actions'][$action_key]['#submit'][] = '_rl_menu_link_form_submit';
+      }
+    }
+  }
 }
 
 /**
@@ -207,57 +218,60 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
     return;
   }
 
-  $variants = [];
-  foreach (preg_split('/\r\n|\r|\n/', (string) ($values['variants'] ?? '')) as $line) {
-    $line = trim($line);
-    if ($line !== '') {
-      $variants[] = $line;
-    }
-  }
-
+  $variants = VariantParser::parse((string) ($values['variants'] ?? ''));
   $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
   $existing_id = $values['_existing_id'] ?? NULL;
+  /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $experiment */
   $experiment = $existing_id ? $storage->load($existing_id) : NULL;
 
-  if (empty($variants)) {
-    if ($experiment) {
-      $experiment->delete();
-      \Drupal::messenger()->addStatus(t('Menu link experiment removed.'));
+  try {
+    if (empty($variants)) {
+      if ($experiment) {
+        $rl_id = $experiment->getRlExperimentId();
+        $experiment->delete();
+        \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
+        \Drupal::messenger()->addStatus(t('Menu link experiment removed.'));
+      }
+      return;
     }
-    return;
+
+    if (!$experiment) {
+      // Build a stable machine name aligned with the canonical RL ID.
+      $machine = 'ml_' . substr(MenuLinkExperiment::buildRlExperimentId($plugin_id), strlen('rl_menu_link-'));
+      $form_object = $form_state->getFormObject();
+      /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
+      $entity = $form_object->getEntity();
+      $label = (string) t('Menu link: @title', ['@title' => $entity->label() ?? $plugin_id]);
+      $experiment = $storage->create([
+        'id' => $machine,
+        'label' => $label,
+        'menu_link_plugin_id' => $plugin_id,
+      ]);
+    }
+
+    $experiment->setVariants($variants);
+    $experiment->set('enabled', !empty($values['enabled']));
+    $experiment->save();
+
+    \Drupal::service('rl.experiment_registry')->register(
+      $experiment->getRlExperimentId(),
+      'rl_menu_link',
+      $experiment->label()
+    );
+
+    \Drupal::messenger()->addStatus(t('Menu link experiment saved.'));
   }
-
-  if (!$experiment) {
-    $machine = 'menu_link_' . substr(sha1($plugin_id), 0, 16);
-    $form_object = $form_state->getFormObject();
-    /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
-    $entity = $form_object->getEntity();
-    $label = (string) t('Menu link: @title', ['@title' => $entity->label() ?? $plugin_id]);
-    $experiment = $storage->create([
-      'id' => $machine,
-      'label' => $label,
-      'menu_link_plugin_id' => $plugin_id,
-    ]);
+  catch (\Exception $e) {
+    \Drupal::logger('rl_menu_link')->error('Failed to save menu link experiment from entity form: @message', ['@message' => $e->getMessage()]);
+    \Drupal::messenger()->addError(t('Could not save menu link experiment: @message', ['@message' => $e->getMessage()]));
   }
-
-  $experiment->setVariants($variants);
-  $experiment->set('enabled', !empty($values['enabled']));
-  $experiment->save();
-
-  \Drupal::service('rl.experiment_registry')->register(
-    $experiment->getRlExperimentId(),
-    'rl_menu_link',
-    $experiment->label()
-  );
-
-  \Drupal::messenger()->addStatus(t('Menu link experiment saved.'));
 }
 
 /**
  * Implements hook_entity_predelete().
  *
  * Cleans up menu link experiments when the menu link content entity is
- * deleted.
+ * deleted, and purges associated RL analytics.
  */
 function rl_menu_link_entity_predelete(EntityInterface $entity) {
   if ($entity->getEntityTypeId() !== 'menu_link_content') {
@@ -271,7 +285,14 @@ function rl_menu_link_entity_predelete(EntityInterface $entity) {
 
   $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
   $matches = $storage->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
-  if ($matches) {
-    $storage->delete($matches);
+  if (!$matches) {
+    return;
+  }
+  $manager = \Drupal::service('rl.experiment_manager');
+  foreach ($matches as $experiment) {
+    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $experiment */
+    $rl_id = $experiment->getRlExperimentId();
+    $experiment->delete();
+    $manager->purgeExperiment($rl_id);
   }
 }

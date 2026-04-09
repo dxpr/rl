@@ -12,6 +12,13 @@ use Drupal\rl\Service\ExperimentManagerInterface;
 class MenuLinkVariantSelector {
 
   /**
+   * Page cache TTL applied while a menu link experiment is active.
+   *
+   * @internal Promote to module config in a follow-up if needed.
+   */
+  protected const EXPERIMENT_CACHE_TTL = 60;
+
+  /**
    * The entity type manager.
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
@@ -59,6 +66,7 @@ class MenuLinkVariantSelector {
    *   Array with experiment_id, arm_id, text, or NULL if no active experiment.
    */
   public function selectForPluginId(string $plugin_id): ?array {
+    $plugin_id = trim($plugin_id);
     if (isset($this->cache[$plugin_id])) {
       $cached = $this->cache[$plugin_id];
       return $cached === FALSE ? NULL : $cached;
@@ -76,7 +84,7 @@ class MenuLinkVariantSelector {
     arsort($scores);
     $best_arm = (string) key($scores);
 
-    $this->cacheManager->overridePageCacheIfShorter(60);
+    $this->cacheManager->overridePageCacheIfShorter(self::EXPERIMENT_CACHE_TTL);
 
     $result = [
       'experiment_id' => $rl_experiment_id,
