@@ -91,7 +91,7 @@ class PageTitleExperiment extends ConfigEntityBase {
    * Get the internal path.
    */
   public function getPath(): string {
-    return $this->path ?? '';
+    return $this->path;
   }
 
   /**
@@ -123,13 +123,14 @@ class PageTitleExperiment extends ConfigEntityBase {
    * {@inheritdoc}
    */
   public function getVariants(): array {
-    return array_values($this->variants ?? []);
+    return array_values($this->variants);
   }
 
   /**
    * Set the variant titles.
    *
    * @param string[] $variants
+   *   List of alternative titles to test against the original.
    */
   public function setVariants(array $variants): static {
     $this->variants = array_values($variants);

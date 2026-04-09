@@ -8,6 +8,7 @@ use Drupal\Core\Menu\MenuLinkManagerInterface;
 use Drupal\rl\Experiment\VariantParser;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -53,8 +54,8 @@ class MenuLinkExperimentForm extends EntityForm {
   public function form(array $form, FormStateInterface $form_state) {
     $form = parent::form($form, $form_state);
 
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof MenuLinkExperiment);
     $request = $this->getRequest();
     $default_plugin = $entity->getMenuLinkPluginId() ?: ($request->query->get('menu_link_plugin_id') ?? '');
     $default_label = $entity->label() ?: ($request->query->get('label') ?? '');
@@ -131,8 +132,8 @@ class MenuLinkExperimentForm extends EntityForm {
       return;
     }
 
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof MenuLinkExperiment);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_menu_link_experiment')
       ->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
@@ -156,8 +157,8 @@ class MenuLinkExperimentForm extends EntityForm {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof MenuLinkExperiment);
     $new_plugin_id = trim($form_state->getValue('menu_link_plugin_id'));
 
     // If the plugin ID is being retargeted, purge analytics for the old ID.
@@ -165,7 +166,7 @@ class MenuLinkExperimentForm extends EntityForm {
       $original = $this->entityTypeManager
         ->getStorage('rl_menu_link_experiment')
         ->loadUnchanged($entity->id());
-      if ($original && $original->getMenuLinkPluginId() !== $new_plugin_id) {
+      if ($original instanceof MenuLinkExperiment && $original->getMenuLinkPluginId() !== $new_plugin_id) {
         $this->experimentManager->purgeExperiment($original->getRlExperimentId());
       }
     }
@@ -179,8 +180,8 @@ class MenuLinkExperimentForm extends EntityForm {
    * {@inheritdoc}
    */
   public function save(array $form, FormStateInterface $form_state) {
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof MenuLinkExperiment);
     $status = $entity->save();
 
     $this->experimentRegistry->register(

@@ -17,6 +17,7 @@ trait VariantArmsTrait {
    * Returns the list of stored variant texts.
    *
    * @return string[]
+   *   The variant text strings, indexed sequentially from 0.
    */
   abstract public function getVariants(): array;
 
@@ -24,6 +25,7 @@ trait VariantArmsTrait {
    * Build arm IDs: v0 (original) plus v1..vN for each stored variant.
    *
    * @return string[]
+   *   The arm identifiers, with v0 reserved for the original (un-stored) text.
    */
   public function getArmIds(): array {
     $arm_ids = ['v0'];

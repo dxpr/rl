@@ -64,8 +64,8 @@ class PageTitleExperimentForm extends EntityForm {
   public function form(array $form, FormStateInterface $form_state) {
     $form = parent::form($form, $form_state);
 
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof PageTitleExperiment);
 
     // Pre-populate from query parameters (for deep links from contextual UIs).
     $request = $this->getRequest();
@@ -152,8 +152,8 @@ class PageTitleExperimentForm extends EntityForm {
     $internal_path = PageTitleExperiment::normalizePath($resolved);
     $form_state->setValue('_resolved_path', $internal_path);
 
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof PageTitleExperiment);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_page_title_experiment')
       ->loadByProperties(['path' => $internal_path]);
@@ -178,15 +178,15 @@ class PageTitleExperimentForm extends EntityForm {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof PageTitleExperiment);
 
     // If the path is being retargeted, purge analytics for the old RL ID.
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_page_title_experiment')
         ->loadUnchanged($entity->id());
-      if ($original && $original->getPath() !== $form_state->getValue('_resolved_path')) {
+      if ($original instanceof PageTitleExperiment && $original->getPath() !== $form_state->getValue('_resolved_path')) {
         $this->experimentManager->purgeExperiment($original->getRlExperimentId());
       }
     }
@@ -200,8 +200,8 @@ class PageTitleExperimentForm extends EntityForm {
    * {@inheritdoc}
    */
   public function save(array $form, FormStateInterface $form_state) {
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->entity;
+    assert($entity instanceof PageTitleExperiment);
     $status = $entity->save();
 
     // Register with the RL experiment registry so the tracking endpoint

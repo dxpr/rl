@@ -83,9 +83,10 @@ class PageTitleDecorator implements ExperimentDecoratorInterface {
     if ($this->experimentMap === NULL) {
       $this->experimentMap = [];
       $storage = $this->entityTypeManager->getStorage('rl_page_title_experiment');
-      /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $experiment */
       foreach ($storage->loadMultiple() as $experiment) {
-        $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
+        if ($experiment instanceof PageTitleExperiment) {
+          $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
+        }
       }
     }
     return $this->experimentMap[$experiment_id] ?? NULL;

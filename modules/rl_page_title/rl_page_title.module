@@ -8,6 +8,7 @@
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
@@ -149,12 +150,16 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   }
 
   // Look up an existing experiment for this path, if any.
+  /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment|null $existing */
   $existing = NULL;
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_page_title_experiment')
     ->loadByProperties(['path' => $internal_path]);
   if ($matches) {
-    $existing = reset($matches);
+    $candidate = reset($matches);
+    if ($candidate instanceof PageTitleExperiment) {
+      $existing = $candidate;
+    }
   }
 
   $form['rl_page_title'] = [
@@ -262,12 +267,17 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
   $variants = VariantParser::parse((string) ($values['variants'] ?? ''));
   $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
   $existing_id = $values['_existing_id'] ?? NULL;
-  /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment|null $experiment */
-  $experiment = $existing_id ? $storage->load($existing_id) : NULL;
+  $experiment = NULL;
+  if ($existing_id) {
+    $loaded = $storage->load($existing_id);
+    if ($loaded instanceof PageTitleExperiment) {
+      $experiment = $loaded;
+    }
+  }
 
   try {
     if (empty($variants)) {
-      if ($experiment) {
+      if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
         $experiment->delete();
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
@@ -276,19 +286,24 @@ function _rl_page_title_entity_form_submit(array &$form, FormStateInterface $for
       return;
     }
 
-    if (!$experiment) {
+    if ($experiment === NULL) {
       // Build a stable machine name from the canonical RL experiment ID so
       // the config and analytics IDs stay aligned.
       $machine = 'pt_' . substr(PageTitleExperiment::buildRlExperimentId($internal_path), strlen('rl_page_title-'));
       $form_object = $form_state->getFormObject();
-      /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
-      $entity = $form_object->getEntity();
-      $label = (string) t('Page title: @entity', ['@entity' => $entity->label() ?? $internal_path]);
-      $experiment = $storage->create([
+      $entity_label = $internal_path;
+      if ($form_object instanceof EntityFormInterface) {
+        $entity = $form_object->getEntity();
+        $entity_label = $entity->label() ?? $internal_path;
+      }
+      $label = (string) t('Page title: @entity', ['@entity' => $entity_label]);
+      $created = $storage->create([
         'id' => $machine,
         'label' => $label,
         'path' => $internal_path,
       ]);
+      assert($created instanceof PageTitleExperiment);
+      $experiment = $created;
     }
 
     $experiment->setVariants($variants);
@@ -340,7 +355,9 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
   }
   $manager = \Drupal::service('rl.experiment_manager');
   foreach ($matches as $experiment) {
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $experiment */
+    if (!$experiment instanceof PageTitleExperiment) {
+      continue;
+    }
     $rl_id = $experiment->getRlExperimentId();
     $experiment->delete();
     $manager->purgeExperiment($rl_id);

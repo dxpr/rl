@@ -5,6 +5,7 @@ namespace Drupal\rl_menu_link\Form;
 use Drupal\Core\Entity\EntityDeleteForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -41,13 +42,17 @@ class MenuLinkExperimentDeleteForm extends EntityDeleteForm {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
     $entity = $this->getEntity();
-    $rl_experiment_id = $entity->getRlExperimentId();
+    $rl_experiment_id = NULL;
+    if ($entity instanceof MenuLinkExperiment) {
+      $rl_experiment_id = $entity->getRlExperimentId();
+    }
 
     parent::submitForm($form, $form_state);
 
-    $this->experimentManager->purgeExperiment($rl_experiment_id);
+    if ($rl_experiment_id !== NULL) {
+      $this->experimentManager->purgeExperiment($rl_experiment_id);
+    }
   }
 
 }

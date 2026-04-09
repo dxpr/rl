@@ -5,6 +5,7 @@ namespace Drupal\rl_menu_link\Service;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Service\CacheManager;
 use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 
 /**
  * Selects the winning variant for a menu link by its plugin ID.
@@ -99,14 +100,19 @@ class MenuLinkVariantSelector {
    * Load an enabled experiment for a given plugin ID.
    *
    * @return \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null
+   *   The matching experiment, or NULL if none is enabled for this plugin ID.
    */
-  protected function loadExperimentByPluginId(string $plugin_id) {
+  protected function loadExperimentByPluginId(string $plugin_id): ?MenuLinkExperiment {
     $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
     $matches = $storage->loadByProperties([
       'menu_link_plugin_id' => $plugin_id,
       'enabled' => TRUE,
     ]);
-    return $matches ? reset($matches) : NULL;
+    if (!$matches) {
+      return NULL;
+    }
+    $experiment = reset($matches);
+    return $experiment instanceof MenuLinkExperiment ? $experiment : NULL;
   }
 
 }

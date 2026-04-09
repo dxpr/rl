@@ -91,7 +91,7 @@ class MenuLinkExperiment extends ConfigEntityBase {
    * Get the menu link plugin ID.
    */
   public function getMenuLinkPluginId(): string {
-    return $this->menu_link_plugin_id ?? '';
+    return $this->menu_link_plugin_id;
   }
 
   /**
@@ -106,13 +106,14 @@ class MenuLinkExperiment extends ConfigEntityBase {
    * {@inheritdoc}
    */
   public function getVariants(): array {
-    return array_values($this->variants ?? []);
+    return array_values($this->variants);
   }
 
   /**
    * Set variant labels.
    *
    * @param string[] $variants
+   *   List of alternative labels to test against the original.
    */
   public function setVariants(array $variants): static {
     $this->variants = array_values($variants);

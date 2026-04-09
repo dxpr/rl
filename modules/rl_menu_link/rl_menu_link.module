@@ -6,6 +6,7 @@
  */
 
 use Drupal\Core\Entity\ContentEntityFormInterface;
+use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
@@ -119,12 +120,16 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
 
   $plugin_id = $entity->getPluginId();
 
+  /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $existing */
   $existing = NULL;
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_menu_link_experiment')
     ->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
   if ($matches) {
-    $existing = reset($matches);
+    $candidate = reset($matches);
+    if ($candidate instanceof MenuLinkExperiment) {
+      $existing = $candidate;
+    }
   }
 
   $form['rl_menu_link'] = [
@@ -222,12 +227,17 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
   $variants = VariantParser::parse((string) ($values['variants'] ?? ''));
   $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
   $existing_id = $values['_existing_id'] ?? NULL;
-  /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $experiment */
-  $experiment = $existing_id ? $storage->load($existing_id) : NULL;
+  $experiment = NULL;
+  if ($existing_id) {
+    $loaded = $storage->load($existing_id);
+    if ($loaded instanceof MenuLinkExperiment) {
+      $experiment = $loaded;
+    }
+  }
 
   try {
     if (empty($variants)) {
-      if ($experiment) {
+      if ($experiment !== NULL) {
         $rl_id = $experiment->getRlExperimentId();
         $experiment->delete();
         \Drupal::service('rl.experiment_manager')->purgeExperiment($rl_id);
@@ -236,18 +246,23 @@ function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state)
       return;
     }
 
-    if (!$experiment) {
+    if ($experiment === NULL) {
       // Build a stable machine name aligned with the canonical RL ID.
       $machine = 'ml_' . substr(MenuLinkExperiment::buildRlExperimentId($plugin_id), strlen('rl_menu_link-'));
       $form_object = $form_state->getFormObject();
-      /** @var \Drupal\Core\Entity\ContentEntityInterface $entity */
-      $entity = $form_object->getEntity();
-      $label = (string) t('Menu link: @title', ['@title' => $entity->label() ?? $plugin_id]);
-      $experiment = $storage->create([
+      $entity_label = $plugin_id;
+      if ($form_object instanceof EntityFormInterface) {
+        $entity = $form_object->getEntity();
+        $entity_label = $entity->label() ?? $plugin_id;
+      }
+      $label = (string) t('Menu link: @title', ['@title' => $entity_label]);
+      $created = $storage->create([
         'id' => $machine,
         'label' => $label,
         'menu_link_plugin_id' => $plugin_id,
       ]);
+      assert($created instanceof MenuLinkExperiment);
+      $experiment = $created;
     }
 
     $experiment->setVariants($variants);
@@ -291,7 +306,9 @@ function rl_menu_link_entity_predelete(EntityInterface $entity) {
   }
   $manager = \Drupal::service('rl.experiment_manager');
   foreach ($matches as $experiment) {
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $experiment */
+    if (!$experiment instanceof MenuLinkExperiment) {
+      continue;
+    }
     $rl_id = $experiment->getRlExperimentId();
     $experiment->delete();
     $manager->purgeExperiment($rl_id);

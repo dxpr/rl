@@ -5,6 +5,7 @@ namespace Drupal\rl_page_title\Form;
 use Drupal\Core\Entity\EntityDeleteForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_page_title\Entity\PageTitleExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -43,14 +44,18 @@ class PageTitleExperimentDeleteForm extends EntityDeleteForm {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    /** @var \Drupal\rl_page_title\Entity\PageTitleExperiment $entity */
     $entity = $this->getEntity();
-    $rl_experiment_id = $entity->getRlExperimentId();
+    $rl_experiment_id = NULL;
+    if ($entity instanceof PageTitleExperiment) {
+      $rl_experiment_id = $entity->getRlExperimentId();
+    }
 
     parent::submitForm($form, $form_state);
 
     // Purge RL analytics for this experiment.
-    $this->experimentManager->purgeExperiment($rl_experiment_id);
+    if ($rl_experiment_id !== NULL) {
+      $this->experimentManager->purgeExperiment($rl_experiment_id);
+    }
   }
 
 }

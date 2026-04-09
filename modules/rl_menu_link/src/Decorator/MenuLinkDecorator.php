@@ -95,9 +95,10 @@ class MenuLinkDecorator implements ExperimentDecoratorInterface {
     if ($this->experimentMap === NULL) {
       $this->experimentMap = [];
       $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
-      /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $experiment */
       foreach ($storage->loadMultiple() as $experiment) {
-        $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
+        if ($experiment instanceof MenuLinkExperiment) {
+          $this->experimentMap[$experiment->getRlExperimentId()] = $experiment;
+        }
       }
     }
     return $this->experimentMap[$experiment_id] ?? NULL;

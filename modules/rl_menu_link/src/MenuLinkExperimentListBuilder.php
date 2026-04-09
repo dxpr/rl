@@ -7,6 +7,7 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Url;
 use Drupal\rl\Service\ExperimentManagerInterface;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -57,7 +58,9 @@ class MenuLinkExperimentListBuilder extends ConfigEntityListBuilder {
   public function render() {
     $entities = $this->load();
     foreach ($entities as $entity) {
-      /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
+      if (!$entity instanceof MenuLinkExperiment) {
+        continue;
+      }
       $rl_id = $entity->getRlExperimentId();
       $this->statsCache[$rl_id] = $this->computeStats($rl_id);
     }
@@ -69,7 +72,9 @@ class MenuLinkExperimentListBuilder extends ConfigEntityListBuilder {
   /**
    * Compute the impression count and leader for an experiment.
    *
-   * @return array{turns:int, leader_arm:string|null, leader_score:float}
+   * @return array
+   *   Stats for the experiment with keys: turns (int), leader_arm (string|null),
+   *   leader_score (float, the Beta posterior mean of the leading arm).
    */
   protected function computeStats(string $rl_experiment_id): array {
     $turns = $this->experimentManager->getTotalTurns($rl_experiment_id);
@@ -97,7 +102,9 @@ class MenuLinkExperimentListBuilder extends ConfigEntityListBuilder {
    * {@inheritdoc}
    */
   public function buildRow(EntityInterface $entity) {
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
+    if (!$entity instanceof MenuLinkExperiment) {
+      return parent::buildRow($entity);
+    }
     $rl_id = $entity->getRlExperimentId();
     $stats = $this->statsCache[$rl_id] ?? ['turns' => 0, 'leader_arm' => NULL, 'leader_score' => 0.0];
 
@@ -126,7 +133,9 @@ class MenuLinkExperimentListBuilder extends ConfigEntityListBuilder {
    */
   public function getDefaultOperations(EntityInterface $entity) {
     $operations = parent::getDefaultOperations($entity);
-    /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment $entity */
+    if (!$entity instanceof MenuLinkExperiment) {
+      return $operations;
+    }
     $rl_id = $entity->getRlExperimentId();
     $stats = $this->statsCache[$rl_id] ?? ['turns' => 0];
     if ($stats['turns'] > 0) {

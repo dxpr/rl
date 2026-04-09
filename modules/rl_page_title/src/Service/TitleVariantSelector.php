@@ -124,14 +124,19 @@ class TitleVariantSelector {
    * Load an enabled experiment for a given internal path.
    *
    * @return \Drupal\rl_page_title\Entity\PageTitleExperiment|null
+   *   The matching experiment, or NULL if none is enabled for this path.
    */
-  protected function loadExperimentByPath(string $internal_path) {
+  protected function loadExperimentByPath(string $internal_path): ?PageTitleExperiment {
     $storage = $this->entityTypeManager->getStorage('rl_page_title_experiment');
     $matches = $storage->loadByProperties([
       'path' => $internal_path,
       'enabled' => TRUE,
     ]);
-    return $matches ? reset($matches) : NULL;
+    if (!$matches) {
+      return NULL;
+    }
+    $experiment = reset($matches);
+    return $experiment instanceof PageTitleExperiment ? $experiment : NULL;
   }
 
   /**
