@@ -100,14 +100,12 @@ Saving or deleting an experiment invalidates two cache tags:
 
 ## Tests
 
-Unit and kernel tests live under `tests/`:
+Kernel tests live under `tests/Kernel/`:
 
-- `Unit/Entity/MenuLinkExperimentTest.php` - RL experiment ID
-  determinism, plugin ID whitespace handling.
-- `Kernel/MenuLinkVariantSelectorTest.php` - selector behavior with
+- `MenuLinkVariantSelectorTest.php` - selector behavior with
   enabled and disabled experiments, plugin ID normalization.
-- `Kernel/MenuLinkDecoratorTest.php` - decorator output for v0/v1/vN.
-- `Kernel/MenuLinkEntityPredeleteTest.php` - entity-delete cleanup of
+- `MenuLinkDecoratorTest.php` - decorator output for v0/v1/vN.
+- `MenuLinkEntityPredeleteTest.php` - entity-delete cleanup of
   both the config entity and the RL analytics tables.
 
 Run via `docker compose --profile test run phpunit-tests` from the rl

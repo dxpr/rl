@@ -100,15 +100,13 @@ follow-up if site builders need tuning.
 
 ## Tests
 
-Unit and kernel tests live under `tests/`:
+Kernel tests live under `tests/Kernel/`:
 
-- `Unit/Entity/PageTitleExperimentTest.php` - path normalization, RL
-  experiment ID determinism.
-- `Kernel/PageTitleVariantSelectorTest.php` - selector behavior with enabled
+- `PageTitleVariantSelectorTest.php` - selector behavior with enabled
   and disabled experiments, path normalization, per-request caching.
-- `Kernel/PageTitleDecoratorTest.php` - decorator output for v0/v1/vN and
+- `PageTitleDecoratorTest.php` - decorator output for v0/v1/vN and
   unknown experiments.
-- `Kernel/PageTitleEntityPredeleteTest.php` - entity-delete cleanup of both
+- `PageTitleEntityPredeleteTest.php` - entity-delete cleanup of both
   the config entity and the RL analytics tables.
 
 Run via `docker compose --profile test run phpunit-tests` from the rl module
