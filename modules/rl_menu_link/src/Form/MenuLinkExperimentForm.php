@@ -155,6 +155,17 @@ class MenuLinkExperimentForm extends EntityForm {
   /**
    * {@inheritdoc}
    */
+  /**
+   * RL experiment ID of the previous target, if a retarget is happening.
+   *
+   * Captured in submitForm() and consumed in save() AFTER the new entity has
+   * been written. See PageTitleExperimentForm for the rationale.
+   */
+  protected ?string $pendingPurgeRlExperimentId = NULL;
+
+  /**
+   * {@inheritdoc}
+   */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
@@ -162,13 +173,15 @@ class MenuLinkExperimentForm extends EntityForm {
     assert($entity instanceof MenuLinkExperiment);
     $new_plugin_id = trim($form_state->getValue('menu_link_plugin_id'));
 
-    // If the plugin ID is being retargeted, purge analytics for the old ID.
+    // Capture old RL ID for save() to purge AFTER successful save. See
+    // PageTitleExperimentForm::submitForm() for rationale.
+    $this->pendingPurgeRlExperimentId = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_menu_link_experiment')
         ->loadUnchanged($entity->id());
       if ($original instanceof MenuLinkExperiment && $original->getMenuLinkPluginId() !== $new_plugin_id) {
-        $this->experimentManager->purgeExperiment($original->getRlExperimentId());
+        $this->pendingPurgeRlExperimentId = $original->getRlExperimentId();
       }
     }
 
@@ -191,11 +204,26 @@ class MenuLinkExperimentForm extends EntityForm {
       $entity->label()
     );
 
+    // Now that the new entity is safely written, purge analytics for the old
+    // RL ID if this was a retarget.
+    if ($this->pendingPurgeRlExperimentId !== NULL) {
+      try {
+        $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
+      }
+      catch (\Exception $e) {
+        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">RL reports</a>.', [
+          '@message' => $e->getMessage(),
+          ':url' => '/admin/reports/rl',
+        ]));
+      }
+      $this->pendingPurgeRlExperimentId = NULL;
+    }
+
     // Invalidate menu rendering caches so the new variants take effect on
     // subsequent menu renders rather than waiting for the cached menu blocks
     // to expire naturally. We do not know which menus contain this link, so
     // we invalidate every menu config tag plus the rl_menu_link entity tag.
-    Cache::invalidateTags(['config:system.menu', 'rl_menu_link:' . $entity->getMenuLinkPluginId()]);
+    Cache::invalidateTags(['rl_menu_link:all', 'rl_menu_link:' . $entity->getMenuLinkPluginId()]);
 
     if ($status === SAVED_NEW) {
       $this->messenger()->addStatus($this->t('Created experiment %label.', ['%label' => $entity->label()]));

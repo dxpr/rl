@@ -175,19 +175,37 @@ class PageTitleExperimentForm extends EntityForm {
   /**
    * {@inheritdoc}
    */
+  /**
+   * RL experiment ID of the previous target, if a retarget is happening.
+   *
+   * Captured in submitForm() and consumed in save() AFTER the new entity has
+   * been written. This makes save+purge atomic from the user's perspective:
+   * if save() fails, the old analytics are still intact and the user can
+   * retry. If purge fails after a successful save, the new entity is fine
+   * and the user sees an error pointing at the orphaned analytics.
+   */
+  protected ?string $pendingPurgeRlExperimentId = NULL;
+
+  /**
+   * {@inheritdoc}
+   */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
     $entity = $this->entity;
     assert($entity instanceof PageTitleExperiment);
 
-    // If the path is being retargeted, purge analytics for the old RL ID.
+    // Detect retarget: capture the old RL experiment ID for save() to purge
+    // AFTER the entity is successfully written. We do not purge here because
+    // submitForm() runs before save() and a failed save would orphan the
+    // analytics.
+    $this->pendingPurgeRlExperimentId = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_page_title_experiment')
         ->loadUnchanged($entity->id());
       if ($original instanceof PageTitleExperiment && $original->getPath() !== $form_state->getValue('_resolved_path')) {
-        $this->experimentManager->purgeExperiment($original->getRlExperimentId());
+        $this->pendingPurgeRlExperimentId = $original->getRlExperimentId();
       }
     }
 
@@ -211,6 +229,22 @@ class PageTitleExperimentForm extends EntityForm {
       'rl_page_title',
       $entity->label()
     );
+
+    // Now that the new entity is safely written, purge analytics for the old
+    // RL ID if this was a retarget. Doing this AFTER save() means a failed
+    // save leaves the original analytics intact for retry.
+    if ($this->pendingPurgeRlExperimentId !== NULL) {
+      try {
+        $this->experimentManager->purgeExperiment($this->pendingPurgeRlExperimentId);
+      }
+      catch (\Exception $e) {
+        $this->messenger()->addWarning($this->t('Experiment retargeted, but old analytics could not be purged: @message. The previous experiment data is now orphaned and can be cleared manually from <a href=":url">RL reports</a>.', [
+          '@message' => $e->getMessage(),
+          ':url' => '/admin/reports/rl',
+        ]));
+      }
+      $this->pendingPurgeRlExperimentId = NULL;
+    }
 
     // Invalidate page cache for the target path so the new variants take
     // effect immediately rather than waiting for the cached page to expire.

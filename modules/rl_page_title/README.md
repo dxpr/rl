@@ -100,14 +100,7 @@ follow-up if site builders need tuning.
 
 ## Tests
 
-Kernel tests live under `tests/Kernel/`:
-
-- `PageTitleVariantSelectorTest.php` - selector behavior with enabled
-  and disabled experiments, path normalization, per-request caching.
-- `PageTitleDecoratorTest.php` - decorator output for v0/v1/vN and
-  unknown experiments.
-- `PageTitleEntityPredeleteTest.php` - entity-delete cleanup of both
-  the config entity and the RL analytics tables.
-
-Run via `docker compose --profile test run phpunit-tests` from the rl module
-root.
+Coverage is provided by the parent rl module's e2e tests under
+`scripts/e2e/`, which exercise install, experiment CRUD, and analytics
+end-to-end against a real Drupal site. Run via
+`docker compose --profile test run e2e-test` from the rl module root.

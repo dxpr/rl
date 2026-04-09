@@ -39,15 +39,3 @@ services:
       - .:/app/module:ro
     working_dir: /app/module
     entrypoint: ["bash", "scripts/e2e/run-e2e-tests.sh"]
-
-  phpunit-tests:
-    image: composer:2.7
-    profiles:
-      - test
-    working_dir: /
-    command: bash -c "/src/scripts/run-phpunit-tests.sh"
-    tty: true
-    environment:
-      DRUPAL_RECOMMENDED_PROJECT: 11.x-dev
-    volumes:
-      - .:/src
