@@ -201,9 +201,11 @@ final class RlPageTitleCommands extends RlCommandsBase {
     $internal_path = PageTitleExperiment::normalizePath($resolved);
     $langcode = (string) ($options['langcode'] ?? LanguageInterface::LANGCODE_NOT_SPECIFIED);
 
+    // Indexed duplicate detection against the UNIQUE lookup_hash column.
+    $lookup_hash = PageTitleExperiment::computeLookupHash($internal_path, $langcode);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_page_title_experiment')
-      ->loadByProperties(['path' => $internal_path, 'langcode' => $langcode]);
+      ->loadByProperties(['lookup_hash' => $lookup_hash]);
     if ($duplicates) {
       $existing = reset($duplicates);
       return $this->error(

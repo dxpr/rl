@@ -2,6 +2,7 @@
 
 namespace Drupal\rl_page_title\Entity;
 
+use Drupal\Component\Utility\Crypt;
 use Drupal\Core\Entity\ContentEntityBase;
 use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityPublishedTrait;
@@ -17,9 +18,15 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *
  * Stored as a content entity (not config) so the same module can scale to
  * tens of thousands of experiments per site without the config-management
- * pollution and O(N) lookup penalties of config entities. Indexed lookups
- * on (path, langcode) keep selector latency constant regardless of how
- * many experiments exist.
+ * pollution and O(N) lookup penalties of config entities.
+ *
+ * Scale story mirrors the Redirect module: a computed `lookup_hash` base
+ * field holds sha256(normalized_path | langcode) and is backed by a UNIQUE
+ * index, giving O(1) duplicate detection at save time and O(1) runtime
+ * selection regardless of how many experiments exist. A secondary index
+ * on (path, langcode) keeps target-only queries (hook_entity_predelete
+ * cleanup, Views filters) indexed as well. See
+ * \Drupal\rl_page_title\PageTitleExperimentStorageSchema.
  *
  * Multilingual model: each (path, langcode) is its own row, mirroring
  * the Redirect module. The "all languages" fallback is langcode
@@ -35,6 +42,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *   label_plural = @Translation("page title experiments"),
  *   admin_permission = "administer rl page title experiments",
  *   handlers = {
+ *     "storage_schema" = "Drupal\rl_page_title\PageTitleExperimentStorageSchema",
  *     "form" = {
  *       "default" = "Drupal\rl_page_title\Form\PageTitleExperimentForm",
  *       "add" = "Drupal\rl_page_title\Form\PageTitleExperimentForm",
@@ -103,6 +111,17 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
       ->setDescription(t('JSON-encoded list of variant title strings.'))
       ->setRequired(TRUE);
 
+    // Computed hash of (normalized path, langcode). Populated in preSave()
+    // and backed by a UNIQUE index via PageTitleExperimentStorageSchema.
+    // This is the column the runtime selector and form-level duplicate
+    // detection query against, giving O(1) lookup regardless of row count.
+    $fields['lookup_hash'] = BaseFieldDefinition::create('string')
+      ->setLabel(t('Lookup hash'))
+      ->setDescription(t('Computed sha256(path|langcode). Uniquely identifies an experiment for indexed runtime lookup.'))
+      ->setRequired(TRUE)
+      ->setSetting('max_length', 64)
+      ->setReadOnly(TRUE);
+
     // The 'enabled' field comes from publishedBaseFieldDefinitions(); we
     // narrow the type so the chained mutators are PHPStan-clean.
     $enabled = $fields['enabled'];
@@ -132,7 +151,13 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
   public function preSave(EntityStorageInterface $storage) {
     parent::preSave($storage);
     // Always normalize the path before saving so runtime lookups match.
-    $this->set('path', self::normalizePath($this->getPath()));
+    $normalized = self::normalizePath($this->getPath());
+    $this->set('path', $normalized);
+    // Recompute the lookup hash from the normalized path and current
+    // langcode. This is what backs the UNIQUE index and the runtime
+    // selector's indexed lookup.
+    $langcode = $this->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
+    $this->set('lookup_hash', self::computeLookupHash($normalized, $langcode));
   }
 
   /**
@@ -211,6 +236,20 @@ class PageTitleExperiment extends ContentEntityBase implements VariantExperiment
   public static function buildRlExperimentId(string $path, string $langcode = LanguageInterface::LANGCODE_NOT_SPECIFIED): string {
     $key = self::normalizePath($path) . '|' . $langcode;
     return self::buildVariantExperimentId('rl_page_title', $key);
+  }
+
+  /**
+   * Compute the deterministic lookup hash for a (path, langcode) pair.
+   *
+   * This is the column backed by the UNIQUE index and is used for indexed
+   * duplicate detection (form validation, Drush create) and indexed runtime
+   * selection (TitleVariantSelector). Unlike the RL experiment ID, this
+   * hash is only used internally by the entity's own lookup path.
+   *
+   * Mirrors the Redirect module's Redirect::generateHash() pattern.
+   */
+  public static function computeLookupHash(string $path, string $langcode = LanguageInterface::LANGCODE_NOT_SPECIFIED): string {
+    return Crypt::hashBase64(self::normalizePath($path) . '|' . $langcode);
   }
 
 }

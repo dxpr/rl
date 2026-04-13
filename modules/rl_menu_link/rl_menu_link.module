@@ -141,14 +141,13 @@ function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $
   // Use the entity's current translation language for the experiment scope.
   $entity_langcode = $entity->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
 
+  // Indexed lookup against the UNIQUE lookup_hash column.
   /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $existing */
   $existing = NULL;
+  $lookup_hash = MenuLinkExperiment::computeLookupHash($plugin_id, $entity_langcode);
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_menu_link_experiment')
-    ->loadByProperties([
-      'menu_link_plugin_id' => $plugin_id,
-      'langcode' => $entity_langcode,
-    ]);
+    ->loadByProperties(['lookup_hash' => $lookup_hash]);
   if ($matches) {
     $candidate = reset($matches);
     if ($candidate instanceof MenuLinkExperiment) {

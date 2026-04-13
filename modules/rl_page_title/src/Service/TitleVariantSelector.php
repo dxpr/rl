@@ -80,8 +80,8 @@ class TitleVariantSelector extends VariantSelectorBase {
   /**
    * {@inheritdoc}
    */
-  protected function targetProperty(): string {
-    return 'path';
+  protected function computeLookupHash(string $target, string $langcode): string {
+    return PageTitleExperiment::computeLookupHash($target, $langcode);
   }
 
   /**

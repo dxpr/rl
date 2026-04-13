@@ -185,12 +185,11 @@ final class RlMenuLinkCommands extends RlCommandsBase {
 
     $langcode = (string) ($options['langcode'] ?? LanguageInterface::LANGCODE_NOT_SPECIFIED);
 
+    // Indexed duplicate detection against the UNIQUE lookup_hash column.
+    $lookup_hash = MenuLinkExperiment::computeLookupHash($pluginId, $langcode);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_menu_link_experiment')
-      ->loadByProperties([
-        'menu_link_plugin_id' => $pluginId,
-        'langcode' => $langcode,
-      ]);
+      ->loadByProperties(['lookup_hash' => $lookup_hash]);
     if ($duplicates) {
       $existing = reset($duplicates);
       return $this->error(

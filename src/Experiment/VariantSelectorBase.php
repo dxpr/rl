@@ -116,19 +116,23 @@ abstract class VariantSelectorBase {
   abstract protected function entityClass(): string;
 
   /**
-   * The property name on the experiment entity that holds the lookup target.
+   * Compute the entity's lookup hash for a (target, langcode) pair.
    *
-   * For rl_page_title this is `path`; for rl_menu_link it is
-   * `menu_link_plugin_id`.
+   * The concrete subclass delegates to its entity class's static
+   * computeLookupHash() helper so the hash algorithm stays colocated
+   * with the entity definition. The hash is used as the indexed lookup
+   * key in loadExperimentByLookupHashes(), matching the Redirect
+   * module's hash-based lookup pattern.
    */
-  abstract protected function targetProperty(): string;
+  abstract protected function computeLookupHash(string $target, string $langcode): string;
 
   /**
    * Look up the variant selection for a given target and language.
    *
    * Tries the language-specific match first, then falls back to
-   * LANGCODE_NOT_SPECIFIED ("all languages"). Returns NULL if neither
-   * lookup finds an enabled experiment.
+   * LANGCODE_NOT_SPECIFIED ("all languages"). Both candidates are
+   * resolved in a single indexed query against the UNIQUE lookup_hash
+   * column, matching the Redirect module's pattern.
    *
    * @param string $target
    *   The target value (path, plugin ID, etc.) to look up.
@@ -146,12 +150,15 @@ abstract class VariantSelectorBase {
       return $cached === FALSE ? NULL : $cached;
     }
 
-    // Language-specific lookup first.
-    $experiment = $this->loadExperimentByTarget($target, $langcode);
-    // Fall back to "all languages" experiment if no language-specific match.
-    if ($experiment === NULL && $langcode !== LanguageInterface::LANGCODE_NOT_SPECIFIED) {
-      $experiment = $this->loadExperimentByTarget($target, LanguageInterface::LANGCODE_NOT_SPECIFIED);
+    // Build candidate lookup hashes in priority order: language-specific
+    // first, then the "all languages" fallback. A single indexed query
+    // resolves both.
+    $candidate_hashes = [$this->computeLookupHash($target, $langcode)];
+    if ($langcode !== LanguageInterface::LANGCODE_NOT_SPECIFIED) {
+      $candidate_hashes[] = $this->computeLookupHash($target, LanguageInterface::LANGCODE_NOT_SPECIFIED);
     }
+
+    $experiment = $this->loadExperimentByLookupHashes($candidate_hashes);
     if ($experiment === NULL) {
       $this->resultCache[$cache_key] = FALSE;
       return NULL;
@@ -196,27 +203,52 @@ abstract class VariantSelectorBase {
   }
 
   /**
-   * Load an enabled experiment by target value and langcode.
+   * Load an enabled experiment by candidate lookup hashes.
+   *
+   * Issues a single indexed query against the UNIQUE lookup_hash column
+   * with an IN clause over the candidate hashes, then picks the match
+   * whose hash appears earliest in $candidate_hashes. This preserves
+   * the "language-specific first, then all-languages fallback" ordering
+   * in exactly one DB round-trip regardless of which candidate matches.
+   *
+   * Mirrors RedirectRepository::findMatchingRedirect().
+   *
+   * @param string[] $candidate_hashes
+   *   Candidate lookup hashes in priority order.
    *
    * @return \Drupal\rl\Experiment\VariantExperimentInterface|null
-   *   The matching experiment, or NULL if none is enabled for this target.
+   *   The highest-priority matching enabled experiment, or NULL.
    */
-  protected function loadExperimentByTarget(string $target, string $langcode): ?VariantExperimentInterface {
+  protected function loadExperimentByLookupHashes(array $candidate_hashes): ?VariantExperimentInterface {
+    if (!$candidate_hashes) {
+      return NULL;
+    }
     $storage = $this->entityTypeManager->getStorage($this->entityTypeId());
-    $matches = $storage->loadByProperties([
-      $this->targetProperty() => $target,
-      'langcode' => $langcode,
-      'enabled' => TRUE,
-    ]);
-    if (!$matches) {
+    $query = $storage->getQuery()
+      ->condition('lookup_hash', $candidate_hashes, 'IN')
+      ->condition('enabled', TRUE)
+      ->accessCheck(FALSE);
+    $ids = $query->execute();
+    if (!$ids) {
       return NULL;
     }
-    $entity = reset($matches);
+    $entities = $storage->loadMultiple(array_values($ids));
     $class = $this->entityClass();
-    if (!($entity instanceof VariantExperimentInterface) || !($entity instanceof $class)) {
-      return NULL;
+    // Walk candidates in priority order and return the first hash that
+    // resolves to a loaded entity. This preserves language-specific >
+    // all-languages ordering when both candidates matched.
+    foreach ($candidate_hashes as $hash) {
+      foreach ($entities as $entity) {
+        if (!($entity instanceof VariantExperimentInterface) || !($entity instanceof $class)) {
+          continue;
+        }
+        $entity_hash = (string) $entity->get('lookup_hash')->value;
+        if ($entity_hash === $hash) {
+          return $entity;
+        }
+      }
     }
-    return $entity;
+    return NULL;
   }
 
 }

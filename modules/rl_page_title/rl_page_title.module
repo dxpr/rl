@@ -285,13 +285,12 @@ function rl_page_title_form_alter(array &$form, FormStateInterface $form_state, 
   // Use the entity's current translation language for the experiment scope.
   $entity_langcode = $entity->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
 
+  // Indexed lookup against the UNIQUE lookup_hash column.
   $existing = NULL;
+  $lookup_hash = PageTitleExperiment::computeLookupHash($internal_path, $entity_langcode);
   $matches = \Drupal::entityTypeManager()
     ->getStorage('rl_page_title_experiment')
-    ->loadByProperties([
-      'path' => $internal_path,
-      'langcode' => $entity_langcode,
-    ]);
+    ->loadByProperties(['lookup_hash' => $lookup_hash]);
   if ($matches) {
     $candidate = reset($matches);
     if ($candidate instanceof PageTitleExperiment) {

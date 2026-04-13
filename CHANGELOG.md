@@ -31,6 +31,20 @@
   of config entities. Lookups are indexed; admin lists use Views; multilingual
   is first-class via the `langcode` entity key. Mirrors the Redirect module's
   storage approach.
+- Both variant entities carry a computed `lookup_hash` base field
+  (`sha256(normalized_target | langcode)`, stored via `Crypt::hashBase64()`)
+  backed by a custom `SqlContentEntityStorageSchema` subclass that declares
+  a UNIQUE index on the hash plus a secondary composite index on
+  `(target, langcode)`. This is modelled directly on the Redirect module's
+  `Redirect::hash` field and `RedirectStorageSchema` and gives:
+  - O(1) indexed runtime selector lookups (a single `IN` query resolves
+    both the language-specific and "all languages" fallback candidates),
+  - O(1) indexed duplicate detection at save time (forms, Drush CLI, inline
+    vertical-tab submit handlers all query by `lookup_hash`),
+  - DB-level uniqueness as a second line of defence against concurrent
+    saves racing past the form-level check.
+  Target-only queries (`hook_entity_predelete` cleanup, list filters) use
+  the secondary composite index.
 
 ### Changed
 

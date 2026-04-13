@@ -64,8 +64,8 @@ class MenuLinkVariantSelector extends VariantSelectorBase {
   /**
    * {@inheritdoc}
    */
-  protected function targetProperty(): string {
-    return 'menu_link_plugin_id';
+  protected function computeLookupHash(string $target, string $langcode): string {
+    return MenuLinkExperiment::computeLookupHash($target, $langcode);
   }
 
   /**

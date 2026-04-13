@@ -161,12 +161,11 @@ class PageTitleExperimentForm extends ContentEntityForm {
 
     $entity = $this->entity;
     assert($entity instanceof PageTitleExperiment);
+    // Indexed duplicate detection against the UNIQUE lookup_hash column.
+    $lookup_hash = PageTitleExperiment::computeLookupHash($internal_path, $langcode);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_page_title_experiment')
-      ->loadByProperties([
-        'path' => $internal_path,
-        'langcode' => $langcode,
-      ]);
+      ->loadByProperties(['lookup_hash' => $lookup_hash]);
     foreach ($duplicates as $duplicate) {
       if ((string) $duplicate->id() !== (string) $entity->id()) {
         $form_state->setErrorByName('path', $this->t('An experiment named "@label" already tests this page in the same language. <a href=":url">Edit it instead</a>.', [

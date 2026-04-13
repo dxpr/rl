@@ -131,12 +131,11 @@ class MenuLinkExperimentForm extends ContentEntityForm {
 
     $entity = $this->entity;
     assert($entity instanceof MenuLinkExperiment);
+    // Indexed duplicate detection against the UNIQUE lookup_hash column.
+    $lookup_hash = MenuLinkExperiment::computeLookupHash($plugin_id, $langcode);
     $duplicates = $this->entityTypeManager
       ->getStorage('rl_menu_link_experiment')
-      ->loadByProperties([
-        'menu_link_plugin_id' => $plugin_id,
-        'langcode' => $langcode,
-      ]);
+      ->loadByProperties(['lookup_hash' => $lookup_hash]);
     foreach ($duplicates as $duplicate) {
       if ((string) $duplicate->id() !== (string) $entity->id()) {
         $form_state->setErrorByName('menu_link_plugin_id', $this->t('An experiment named "@label" already tests this menu link in the same language. <a href=":url">Edit it instead</a>.', [

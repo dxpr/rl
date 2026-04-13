@@ -2,6 +2,7 @@
 
 namespace Drupal\rl_menu_link\Entity;
 
+use Drupal\Component\Utility\Crypt;
 use Drupal\Core\Entity\ContentEntityBase;
 use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityPublishedTrait;
@@ -16,9 +17,15 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  * Defines the Menu Link Experiment content entity.
  *
  * Content entity (not config) for the same scalability and multilingual
- * reasons as PageTitleExperiment: indexed lookups by (menu_link_plugin_id,
- * langcode), per-language Thompson Sampling scope, and Views-based admin
- * UI without the config-management cliff.
+ * reasons as PageTitleExperiment: per-language Thompson Sampling scope and
+ * Views-based admin UI without the config-management cliff.
+ *
+ * Scale story mirrors the Redirect module: a computed `lookup_hash` base
+ * field holds sha256(plugin_id | langcode) and is backed by a UNIQUE
+ * index, giving O(1) duplicate detection at save time and O(1) runtime
+ * selection regardless of how many experiments exist. A secondary index
+ * on (menu_link_plugin_id, langcode) keeps target-only queries indexed.
+ * See \Drupal\rl_menu_link\MenuLinkExperimentStorageSchema.
  *
  * @ContentEntityType(
  *   id = "rl_menu_link_experiment",
@@ -28,6 +35,7 @@ use Drupal\rl\Experiment\VariantExperimentInterface;
  *   label_plural = @Translation("menu link experiments"),
  *   admin_permission = "administer rl menu link experiments",
  *   handlers = {
+ *     "storage_schema" = "Drupal\rl_menu_link\MenuLinkExperimentStorageSchema",
  *     "form" = {
  *       "default" = "Drupal\rl_menu_link\Form\MenuLinkExperimentForm",
  *       "add" = "Drupal\rl_menu_link\Form\MenuLinkExperimentForm",
@@ -98,6 +106,17 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
       ->setDescription(t('JSON-encoded list of alternative menu link title strings.'))
       ->setRequired(TRUE);
 
+    // Computed hash of (plugin_id, langcode). Populated in preSave() and
+    // backed by a UNIQUE index via MenuLinkExperimentStorageSchema. This
+    // is the column the runtime selector and form-level duplicate
+    // detection query against, giving O(1) lookup regardless of row count.
+    $fields['lookup_hash'] = BaseFieldDefinition::create('string')
+      ->setLabel(t('Lookup hash'))
+      ->setDescription(t('Computed sha256(menu_link_plugin_id|langcode). Uniquely identifies an experiment for indexed runtime lookup.'))
+      ->setRequired(TRUE)
+      ->setSetting('max_length', 64)
+      ->setReadOnly(TRUE);
+
     // The 'enabled' field comes from publishedBaseFieldDefinitions(); we
     // narrow the type so the chained mutators are PHPStan-clean.
     $enabled = $fields['enabled'];
@@ -126,7 +145,13 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
    */
   public function preSave(EntityStorageInterface $storage) {
     parent::preSave($storage);
-    $this->set('menu_link_plugin_id', trim($this->getMenuLinkPluginId()));
+    $plugin_id = trim($this->getMenuLinkPluginId());
+    $this->set('menu_link_plugin_id', $plugin_id);
+    // Recompute the lookup hash from the normalized plugin ID and current
+    // langcode. This is what backs the UNIQUE index and the runtime
+    // selector's indexed lookup.
+    $langcode = $this->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
+    $this->set('lookup_hash', self::computeLookupHash($plugin_id, $langcode));
   }
 
   /**
@@ -184,6 +209,18 @@ class MenuLinkExperiment extends ContentEntityBase implements VariantExperimentI
   public static function buildRlExperimentId(string $plugin_id, string $langcode = LanguageInterface::LANGCODE_NOT_SPECIFIED): string {
     $key = trim($plugin_id) . '|' . $langcode;
     return self::buildVariantExperimentId('rl_menu_link', $key);
+  }
+
+  /**
+   * Compute the deterministic lookup hash for a (plugin_id, langcode) pair.
+   *
+   * This is the column backed by the UNIQUE index and is used for indexed
+   * duplicate detection (form validation, Drush create) and indexed runtime
+   * selection (MenuLinkVariantSelector). Mirrors the Redirect module's
+   * Redirect::generateHash() pattern.
+   */
+  public static function computeLookupHash(string $plugin_id, string $langcode = LanguageInterface::LANGCODE_NOT_SPECIFIED): string {
+    return Crypt::hashBase64(trim($plugin_id) . '|' . $langcode);
   }
 
 }
