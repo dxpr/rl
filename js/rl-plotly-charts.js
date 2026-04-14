@@ -21,17 +21,16 @@
     }
   };
 
-  /**
-   * Get the actual height of a chart container element.
-   */
   function getContainerHeight(elementId) {
     const el = document.getElementById(elementId);
     if (el) {
       const height = el.clientHeight || el.offsetHeight;
-      // Return at least a minimum height
-      return Math.max(height, 200);
+      if (height > 0) {
+        return height;
+      }
     }
-    return 400; // Fallback
+    // Hidden tab fallback matches the 70vh min-height in rl-charts.css.
+    return Math.max(Math.round(window.innerHeight * 0.7), 400);
   }
 
   /**
@@ -97,7 +96,6 @@
       margin: config.margin
     };
 
-    // Determine number of arms and which chart to show
     let numArms = 0;
     if (data.lineChartData && data.lineChartData.arms) {
       numArms = data.lineChartData.arms.length;
@@ -105,26 +103,16 @@
       numArms = data.surface3d.zMatrixScore.length;
     }
 
-    // Chart selection based on arm count (threshold from config or default 10):
-    // 1-threshold arms: 2D line chart
-    // threshold+1 arms: 3D Posterior Landscape
     const lineChartThreshold = data.chartLineThreshold || 9;
-    const showLineChart = numArms >= 1 && numArms <= lineChartThreshold;
-    const showLandscape = numArms > lineChartThreshold;
+    const defaultTab = numArms > lineChartThreshold ? '3d' : '2d';
 
-    // Hide unused chart containers
     const lineChartEl = document.getElementById('rl-plotly-2d-lines');
     const surface3dEl = document.getElementById('rl-plotly-3d-surface');
 
-    if (lineChartEl) {
-      lineChartEl.parentElement.parentElement.style.display = showLineChart ? 'block' : 'none';
-    }
-    if (surface3dEl) {
-      surface3dEl.parentElement.parentElement.style.display = showLandscape ? 'block' : 'none';
-    }
-
-    // 1. 2D Line Chart (up to threshold arms)
-    if (showLineChart && data.lineChartData && data.lineChartData.arms && data.lineChartData.arms.length > 0 && lineChartEl) {
+    function render2d() {
+      if (!(data.lineChartData && data.lineChartData.arms && data.lineChartData.arms.length > 0 && lineChartEl)) {
+        return;
+      }
       try {
         const traces2d = [];
         const lineChartNumArms = data.lineChartData.arms.length;
@@ -158,7 +146,7 @@
           });
         }
 
-        const lineChartHeight = config.height2d;
+        const lineChartHeight = getContainerHeight('rl-plotly-2d-lines');
 
         // Configure x-axis based on time axis type
         const xAxisConfig = {
@@ -213,9 +201,11 @@
       }
     }
 
-    // 2. 3D Posterior Landscape (loss-landscape style) - threshold+1 arms
-    const zMatrix = metric === 'score' ? data.surface3d.zMatrixScore : data.surface3d.zMatrixRate;
-    if (showLandscape && data.surface3d && zMatrix && zMatrix.length > 0 && surface3dEl) {
+    function render3d() {
+      const zMatrix = data.surface3d && (metric === 'score' ? data.surface3d.zMatrixScore : data.surface3d.zMatrixRate);
+      if (!(zMatrix && zMatrix.length > 0 && surface3dEl)) {
+        return;
+      }
       try {
         const landscapeNumArms = zMatrix.length;
         const numTimePoints = data.surface3d.xValues.length;
@@ -378,7 +368,7 @@
             },
             aspectratio: { x: 1.5, y: 1, z: 0.8 }
           },
-          height: config.height
+          height: getContainerHeight('rl-plotly-3d-surface')
         }), { responsive: true });
 
         // Update tip text if showing subset of variants
@@ -394,6 +384,63 @@
       }
     }
 
+    const rendered = { '2d': false, '3d': false };
+    const renderers = { '2d': render2d, '3d': render3d };
+
+    function renderTab(tab) {
+      if (rendered[tab]) {
+        return;
+      }
+      const fn = renderers[tab];
+      if (fn) {
+        fn();
+        rendered[tab] = true;
+      }
+    }
+
+    function activateTab(target) {
+      const tabs = document.querySelectorAll('.rl-chart-tab');
+      tabs.forEach(function(btn) {
+        const on = btn.dataset.rlTab === target;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      const panes = document.querySelectorAll('.rl-chart-pane');
+      panes.forEach(function(pane) {
+        pane.classList.toggle('is-active', pane.dataset.rlPane === target);
+      });
+
+      renderTab(target);
+
+      const chartId = target === '3d' ? 'rl-plotly-3d-surface' : 'rl-plotly-2d-lines';
+      const chartEl = document.getElementById(chartId);
+      if (chartEl && chartEl.data && chartEl.layout) {
+        Plotly.Plots.resize(chartEl);
+      }
+    }
+
+    const tabButtons = once('rl-chart-tabs', '.rl-chart-tab');
+    tabButtons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        activateTab(btn.dataset.rlTab);
+      });
+      btn.addEventListener('keydown', function(e) {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+          return;
+        }
+        e.preventDefault();
+        const all = Array.from(document.querySelectorAll('.rl-chart-tab'));
+        const idx = all.indexOf(btn);
+        if (idx === -1) return;
+        const next = e.key === 'ArrowRight'
+          ? all[(idx + 1) % all.length]
+          : all[(idx - 1 + all.length) % all.length];
+        next.focus();
+        activateTab(next.dataset.rlTab);
+      });
+    });
+
+    activateTab(defaultTab);
   }
 
   /**
