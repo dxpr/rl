@@ -1,0 +1,110 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall hooks for rl_page_title.
+ */
+
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Utility\UpdateException;
+use Drupal\rl_page_title\Entity\PageTitleExperiment;
+
+/**
+ * Add lookup_hash column, backfill existing rows, and add hash-based indexes.
+ *
+ * The hash-indexed lookup refactor introduced a computed `lookup_hash` base
+ * field, a UNIQUE index on that column, and a secondary (path, langcode)
+ * index. Fresh installs pick this up from the entity class's storage schema,
+ * but existing sites need this update to avoid a QueryException from the
+ * runtime selector, which now filters on `lookup_hash`.
+ */
+function rl_page_title_update_10001(): string {
+  $database = \Drupal::database();
+  $schema = $database->schema();
+  $table = 'rl_page_title_experiment';
+  $entity_type_id = 'rl_page_title_experiment';
+
+  // 1. Add the column if missing. NOT NULL with empty default so existing
+  //    rows get a placeholder which we immediately backfill below.
+  if (!$schema->fieldExists($table, 'lookup_hash')) {
+    $schema->addField($table, 'lookup_hash', [
+      'type' => 'varchar',
+      'length' => 64,
+      'not null' => TRUE,
+      'default' => '',
+      'description' => 'Computed hash of (normalized path | langcode) for indexed runtime lookup.',
+    ]);
+  }
+
+  // 2. Backfill hashes from each row's (path, langcode) using the same
+  //    algorithm preSave() uses so new code's lookups match the backfilled
+  //    values exactly.
+  $rows = $database->select($table, 't')
+    ->fields('t', ['id', 'path', 'langcode'])
+    ->execute()
+    ->fetchAll();
+  foreach ($rows as $row) {
+    $path = (string) ($row->path ?? '');
+    $langcode = (string) ($row->langcode ?: LanguageInterface::LANGCODE_NOT_SPECIFIED);
+    $hash = PageTitleExperiment::computeLookupHash($path, $langcode);
+    $database->update($table)
+      ->fields(['lookup_hash' => $hash])
+      ->condition('id', $row->id)
+      ->execute();
+  }
+
+  // 3. Refuse to add the UNIQUE index if any pre-existing duplicate
+  //    (path, langcode) rows exist. Prior releases did form-level duplicate
+  //    detection but pre-normalization rows may still collide.
+  $duplicates = $database->query(
+    "SELECT lookup_hash, COUNT(*) AS n FROM {" . $table . "} GROUP BY lookup_hash HAVING n > 1"
+  )->fetchAll();
+  if ($duplicates) {
+    $hashes = array_map(static fn ($row) => $row->lookup_hash, $duplicates);
+    throw new UpdateException('rl_page_title_experiment contains duplicate (path, langcode) rows. Delete duplicates before re-running this update. Offending lookup_hash values: ' . implode(', ', $hashes));
+  }
+
+  // 4. Apply the UNIQUE key and secondary composite index declared by
+  //    PageTitleExperimentStorageSchema. indexExists() is true for unique
+  //    keys on MySQL, so both branches are idempotent.
+  if (!$schema->indexExists($table, 'rl_page_title_lookup_hash')) {
+    $schema->addUniqueKey($table, 'rl_page_title_lookup_hash', ['lookup_hash']);
+  }
+  if (!$schema->indexExists($table, 'rl_page_title_path_langcode')) {
+    $schema->addIndex($table, 'rl_page_title_path_langcode', [['path', 191], 'langcode'], [
+      'fields' => [
+        'path' => [
+          'type' => 'varchar',
+          'length' => 2048,
+          'not null' => FALSE,
+        ],
+        'langcode' => [
+          'type' => 'varchar',
+          'length' => 12,
+          'not null' => TRUE,
+        ],
+      ],
+    ]);
+  }
+
+  // 5. Register the base field with Drupal's entity system. We bypass
+  //    EntityDefinitionUpdateManager::installFieldStorageDefinition() here
+  //    because it would try to re-apply the full storage schema (including
+  //    the UNIQUE key we already added) and blow up on "key already exists".
+  //    Writing directly to the last-installed schema repository records
+  //    the field so getChangeSummary() stops reporting drift, without
+  //    touching the SQL layer.
+  $lookup_hash_definition = BaseFieldDefinition::create('string')
+    ->setName('lookup_hash')
+    ->setTargetEntityTypeId($entity_type_id)
+    ->setLabel(t('Lookup hash'))
+    ->setDescription(t('Computed sha256(path|langcode). Uniquely identifies an experiment for indexed runtime lookup.'))
+    ->setRequired(TRUE)
+    ->setSetting('max_length', 64)
+    ->setReadOnly(TRUE);
+  \Drupal::service('entity.last_installed_schema.repository')
+    ->setLastInstalledFieldStorageDefinition($lookup_hash_definition);
+
+  return (string) t('Added lookup_hash column, backfilled @count existing rows, and applied hash-based indexes on rl_page_title_experiment.', ['@count' => count($rows)]);
+}
