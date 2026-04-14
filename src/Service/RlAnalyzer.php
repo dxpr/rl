@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\rl\Service;
 
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Database\Statement\FetchAs;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Exception\ExperimentNotFoundException;
 
@@ -404,7 +405,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
       ->fields('a')
       ->condition('experiment_id', $experimentId)
       ->execute()
-      ->fetchAll(\PDO::FETCH_ASSOC);
+      ->fetchAll(FetchAs::Associative);
   }
 
   /**
@@ -425,7 +426,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
       ->condition('arm_id', $armId)
       ->orderBy('created', 'ASC')
       ->execute()
-      ->fetchAll(\PDO::FETCH_ASSOC);
+      ->fetchAll(FetchAs::Associative);
 
     return array_map(function ($row) {
       return [
