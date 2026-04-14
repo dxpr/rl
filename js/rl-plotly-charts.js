@@ -21,17 +21,16 @@
     }
   };
 
-  /**
-   * Get the actual height of a chart container element.
-   */
   function getContainerHeight(elementId) {
     const el = document.getElementById(elementId);
     if (el) {
       const height = el.clientHeight || el.offsetHeight;
-      // Return at least a minimum height
-      return Math.max(height, 200);
+      if (height > 0) {
+        return height;
+      }
     }
-    return 400; // Fallback
+    // Hidden tab fallback matches the 70vh min-height in rl-charts.css.
+    return Math.max(Math.round(window.innerHeight * 0.7), 400);
   }
 
   /**
@@ -97,8 +96,6 @@
       margin: config.margin
     };
 
-    // Determine number of arms. Threshold only decides the default tab;
-    // both charts are always available for switching.
     let numArms = 0;
     if (data.lineChartData && data.lineChartData.arms) {
       numArms = data.lineChartData.arms.length;
@@ -112,9 +109,6 @@
     const lineChartEl = document.getElementById('rl-plotly-2d-lines');
     const surface3dEl = document.getElementById('rl-plotly-3d-surface');
 
-    // Chart renderers are split into closures so we can render lazily
-    // when the user first switches to that tab. Plotly needs its container
-    // to be visible during initial render to size correctly.
     function render2d() {
       if (!(data.lineChartData && data.lineChartData.arms && data.lineChartData.arms.length > 0 && lineChartEl)) {
         return;
@@ -152,7 +146,7 @@
           });
         }
 
-        const lineChartHeight = config.height2d;
+        const lineChartHeight = getContainerHeight('rl-plotly-2d-lines');
 
         // Configure x-axis based on time axis type
         const xAxisConfig = {
@@ -374,7 +368,7 @@
             },
             aspectratio: { x: 1.5, y: 1, z: 0.8 }
           },
-          height: config.height
+          height: getContainerHeight('rl-plotly-3d-surface')
         }), { responsive: true });
 
         // Update tip text if showing subset of variants
@@ -416,12 +410,8 @@
         pane.classList.toggle('is-active', pane.dataset.rlPane === target);
       });
 
-      // Render lazily on first activation so the container is visible for
-      // Plotly's initial dimension calculation.
       renderTab(target);
 
-      // Already-rendered charts may have mis-sized while their pane was
-      // hidden; ask Plotly to recompute against the now-visible container.
       const chartId = target === '3d' ? 'rl-plotly-3d-surface' : 'rl-plotly-2d-lines';
       const chartEl = document.getElementById(chartId);
       if (chartEl && chartEl.data && chartEl.layout) {
@@ -429,7 +419,6 @@
       }
     }
 
-    // Wire up tab buttons. Use once() so re-attaches don't double-bind.
     const tabButtons = once('rl-chart-tabs', '.rl-chart-tab');
     tabButtons.forEach(function(btn) {
       btn.addEventListener('click', function() {
