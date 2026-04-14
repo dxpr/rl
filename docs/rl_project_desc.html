@@ -166,14 +166,6 @@ rewardData.append('experiment_uuid', 'abc123');
 rewardData.append('arm_id', '1');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
 
-<h4>Drupal Routes - Alternative API</h4>
-<p><strong>Use only when server security policies prevent direct access to rl.php:</strong></p>
-<ul>
-<li><code>POST /rl/experiment/{uuid}/turns</code> - Record trials</li>
-<li><code>POST /rl/experiment/{uuid}/rewards</code> - Record successes</li>
-<li><code>GET /rl/experiment/{uuid}/scores</code> - Get scores</li>
-</ul>
-
 <h3>Cache Management</h3>
 
 <p>RL provides optional cache management for web components:</p>

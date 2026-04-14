@@ -1,0 +1,10 @@
+services:
+  rl_menu_link.drush.commands:
+    class: Drupal\rl_menu_link\Drush\Commands\RlMenuLinkCommands
+    arguments:
+      - '@entity_type.manager'
+      - '@rl.experiment_registry'
+      - '@rl.experiment_manager'
+      - '@plugin.manager.menu.link'
+    tags:
+      - { name: drush.command }

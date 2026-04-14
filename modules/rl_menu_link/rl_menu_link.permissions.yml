@@ -1,0 +1,4 @@
+administer rl menu link experiments:
+  title: 'Administer Reinforcement Learning menu link experiments'
+  description: 'Create, edit, and delete menu link A/B test experiments.'
+  restrict access: true

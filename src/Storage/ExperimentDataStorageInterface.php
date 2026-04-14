@@ -76,6 +76,31 @@ interface ExperimentDataStorageInterface {
   public function getTotalTurns($experiment_id);
 
   /**
+   * Gets total turns for a batch of experiments in a single query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, int>
+   *   Total turns keyed by experiment ID. Experiments with no recorded turns
+   *   are present in the result with value 0.
+   */
+  public function getTotalTurnsMultiple(array $experiment_ids): array;
+
+  /**
+   * Gets all-arms data for a batch of experiments in a single query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, array>
+   *   Outer array keyed by experiment ID; inner array is the arm data
+   *   objects keyed by arm_id (same shape as getAllArmsData()). Experiments
+   *   with no arms are present in the result with an empty inner array.
+   */
+  public function getAllArmsDataMultiple(array $experiment_ids): array;
+
+  /**
    * Gets all experiments with their statistics for the overview page.
    *
    * @return array

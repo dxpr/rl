@@ -234,12 +234,6 @@ rewardData.append('arm_id', '1');
 navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
 ```
 
-### Drupal Routes - Alternative API
-**Use only when server security policies prevent direct access to rl.php:**
-- `POST /rl/experiment/{experiment_id}/turns` - Record trials
-- `POST /rl/experiment/{experiment_id}/rewards` - Record successes  
-- `GET /rl/experiment/{experiment_id}/scores` - Get scores
-
 ## Cache Management
 
 RL provides optional cache management for web components:

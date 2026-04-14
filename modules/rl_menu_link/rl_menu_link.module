@@ -1,0 +1,480 @@
+<?php
+
+/**
+ * @file
+ * RL Menu Link: A/B test menu link titles.
+ */
+
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Entity\ContentEntityFormInterface;
+use Drupal\Core\Entity\EntityFormInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Render\Element;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Url;
+use Drupal\rl\Experiment\VariantParser;
+use Drupal\rl_menu_link\Entity\MenuLinkExperiment;
+
+/**
+ * Implements hook_help().
+ */
+function rl_menu_link_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name === 'help.page.rl_menu_link') {
+    return '<p>' . t('A/B test menu link titles using Thompson Sampling. Works for menu_link_content entities and YAML-defined links. Manage experiments at <a href=":url">Reinforcement Learning menu link experiments</a>.', [
+      ':url' => Url::fromRoute('view.rl_menu_link_experiment.page_1')->toString(),
+    ]) . '</p>';
+  }
+}
+
+/**
+ * Implements hook_preprocess_menu().
+ *
+ * Walks the menu tree and replaces link titles with the winning variant.
+ * Tracking is wired entirely through data attributes injected onto the
+ * rendered anchors; the JS reads them directly from the DOM.
+ */
+function rl_menu_link_preprocess_menu(array &$variables) {
+  if (empty($variables['items'])) {
+    return;
+  }
+
+  $touched_plugin_ids = [];
+  _rl_menu_link_process_items($variables['items'], $touched_plugin_ids);
+
+  // Always attach the rl_menu_link:all tag so any future experiment creation
+  // can invalidate cached menu output even for menus that did not have an
+  // experiment when they were first cached.
+  $variables['#cache']['tags'][] = 'rl_menu_link:all';
+
+  if (!empty($touched_plugin_ids)) {
+    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
+    $base_path = \Drupal::request()->getBasePath();
+    $variables['#attached']['library'][] = 'rl_menu_link/tracking';
+    $variables['#attached']['drupalSettings']['rlMenuLink'] = [
+      'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
+    ];
+    // Add per-plugin-id tags so each experiment can invalidate the menus
+    // that contain its specific link.
+    foreach ($touched_plugin_ids as $plugin_id) {
+      $variables['#cache']['tags'][] = 'rl_menu_link:' . $plugin_id;
+    }
+  }
+}
+
+/**
+ * Recursively process menu items, swapping titles for winning variants.
+ *
+ * @param array $items
+ *   The menu items render array (passed by reference).
+ * @param array $touched_plugin_ids
+ *   Plugin IDs that received a variant override during this walk, indexed
+ *   by themselves for fast deduplication. Passed by reference.
+ */
+function _rl_menu_link_process_items(array &$items, array &$touched_plugin_ids) {
+  /** @var \Drupal\rl_menu_link\Service\MenuLinkVariantSelector $selector */
+  $selector = \Drupal::service('rl_menu_link.variant_selector');
+
+  foreach ($items as &$item) {
+    $plugin_id = NULL;
+    if (isset($item['original_link']) && is_object($item['original_link']) && method_exists($item['original_link'], 'getPluginId')) {
+      $plugin_id = $item['original_link']->getPluginId();
+    }
+
+    if ($plugin_id) {
+      $result = $selector->selectForPluginId($plugin_id);
+      if ($result) {
+        if ($result['text'] !== NULL) {
+          $item['title'] = $result['text'];
+        }
+        // Attach data attributes to the rendered anchor so the tracking JS
+        // can find this link and report turns/rewards for the correct
+        // experiment.
+        if (isset($item['url']) && $item['url'] instanceof Url) {
+          $existing_attributes = $item['url']->getOption('attributes') ?: [];
+          $item['url']->setOption('attributes', $existing_attributes + [
+            'data-rl-ml-experiment-id' => $result['experiment_id'],
+            'data-rl-ml-arm-id' => $result['arm_id'],
+          ]);
+        }
+        $touched_plugin_ids[$plugin_id] = $plugin_id;
+      }
+    }
+
+    if (!empty($item['below'])) {
+      _rl_menu_link_process_items($item['below'], $touched_plugin_ids);
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Adds the title variants vertical tab to menu_link_content edit forms.
+ */
+function rl_menu_link_form_alter(array &$form, FormStateInterface $form_state, $form_id) {
+  $form_object = $form_state->getFormObject();
+  if (!$form_object instanceof ContentEntityFormInterface) {
+    return;
+  }
+  $operation = $form_object->getOperation();
+  if (!in_array($operation, ['default', 'edit'], TRUE)) {
+    return;
+  }
+  $entity = $form_object->getEntity();
+  if (!$entity || $entity->isNew()) {
+    return;
+  }
+  if ($entity->getEntityTypeId() !== 'menu_link_content') {
+    return;
+  }
+  if (!method_exists($entity, 'getPluginId')) {
+    return;
+  }
+  if (!\Drupal::currentUser()->hasPermission('administer rl menu link experiments')) {
+    return;
+  }
+
+  $plugin_id = $entity->getPluginId();
+  // Use the entity's current translation language for the experiment scope.
+  $entity_langcode = $entity->language()->getId() ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
+
+  // Indexed lookup against the UNIQUE lookup_hash column.
+  /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $existing */
+  $existing = NULL;
+  $lookup_hash = MenuLinkExperiment::computeLookupHash($plugin_id, $entity_langcode);
+  $matches = \Drupal::entityTypeManager()
+    ->getStorage('rl_menu_link_experiment')
+    ->loadByProperties(['lookup_hash' => $lookup_hash]);
+  if ($matches) {
+    $candidate = reset($matches);
+    if ($candidate instanceof MenuLinkExperiment) {
+      $existing = $candidate;
+    }
+  }
+
+  $is_multilingual = \Drupal::languageManager()->isMultilingual();
+  $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED
+    ? t('all languages')
+    : (\Drupal::languageManager()->getLanguage($entity_langcode)?->getName() ?? $entity_langcode);
+
+  $baseline_title = (string) ($entity->label() ?? '');
+
+  $form['rl_menu_link'] = [
+    '#type' => 'details',
+    '#title' => t('A/B test menu link title'),
+    '#group' => 'advanced',
+    '#open' => FALSE,
+    '#weight' => 50,
+    '#tree' => TRUE,
+  ];
+
+  $form['rl_menu_link']['baseline'] = [
+    '#type' => 'item',
+    '#title' => t('Current menu link title'),
+    '#markup' => '<p class="rl-menu-link-baseline"><em>' . Html::escape($baseline_title) . '</em></p>',
+  ];
+
+  if ($existing) {
+    $rl_experiment_id = $existing->getRlExperimentId();
+    $experiment_manager = \Drupal::service('rl.experiment_manager');
+    $total_turns = $experiment_manager->getTotalTurns($rl_experiment_id);
+    $arms = $experiment_manager->getAllArmsData($rl_experiment_id);
+    $total_rewards = 0;
+    $leading_arm = NULL;
+    $leading_rate = -1.0;
+    // Require at least this many turns per arm before the arm is eligible
+    // to be displayed as the current leader. Below this threshold the
+    // observed rate is dominated by sampling noise.
+    $min_per_arm_for_leader = 10;
+    foreach ($arms as $arm) {
+      $turns = (int) $arm->turns;
+      $rewards = (int) $arm->rewards;
+      $total_rewards += $rewards;
+      if ($turns >= $min_per_arm_for_leader) {
+        $rate = $rewards / $turns;
+        if ($rate > $leading_rate) {
+          $leading_rate = $rate;
+          $leading_arm = (string) $arm->arm_id;
+        }
+      }
+    }
+
+    $leading_text = NULL;
+    if ($leading_arm !== NULL) {
+      if ($leading_arm === 'v0') {
+        $leading_text = $baseline_title;
+      }
+      else {
+        $index = (int) substr($leading_arm, 1) - 1;
+        $variants = $existing->getVariants();
+        if (isset($variants[$index])) {
+          $leading_text = (string) $variants[$index];
+        }
+      }
+    }
+
+    $state_line = $existing->isPublished()
+      ? t('This test is running.')
+      : t('This test is paused. It will not show variants to visitors until you turn it back on.');
+
+    if ($is_multilingual) {
+      $state_line = $existing->isPublished()
+        ? t('This test is running in @lang.', ['@lang' => $language_name])
+        : t('This test is paused in @lang. It will not show variants to visitors until you turn it back on.', ['@lang' => $language_name]);
+    }
+
+    if ($total_turns === 0) {
+      $progress_line = t('No visitors have seen this test yet. Come back after some traffic arrives.');
+    }
+    elseif ($total_turns < 10 || $leading_text === NULL) {
+      $progress_line = t('Still collecting data. @turns visitors have seen a variant so far.', [
+        '@turns' => number_format($total_turns),
+      ]);
+    }
+    else {
+      if ($leading_arm === 'v0') {
+        $progress_line = t('Your original title is currently getting the most clicks. @turns impressions, @rewards clicks.', [
+          '@turns' => number_format($total_turns),
+          '@rewards' => number_format($total_rewards),
+        ]);
+      }
+      else {
+        $progress_line = t('"@alt" is currently out-clicking your original. @turns impressions, @rewards clicks.', [
+          '@alt' => $leading_text,
+          '@turns' => number_format($total_turns),
+          '@rewards' => number_format($total_rewards),
+        ]);
+      }
+    }
+
+    $form['rl_menu_link']['state'] = [
+      '#type' => 'item',
+      '#markup' => '<p><strong>' . $state_line . '</strong></p><p>' . $progress_line . '</p>',
+    ];
+
+    if ($total_turns > 0) {
+      $form['rl_menu_link']['report'] = [
+        '#type' => 'link',
+        '#title' => t('See the full report'),
+        '#url' => Url::fromRoute('rl.reports.experiment_detail', ['experiment_id' => $rl_experiment_id]),
+        '#attributes' => ['target' => '_blank'],
+      ];
+    }
+  }
+  else {
+    $intro = $is_multilingual
+      ? t('Not sure if this menu link title is pulling its weight? Add a few alternatives below and we will rotate them through for visitors in @lang, then tell you which one gets the most clicks.', [
+        '@lang' => $language_name,
+      ])
+      : t('Not sure if this menu link title is pulling its weight? Add a few alternatives below and we will rotate them through for visitors, then tell you which one gets the most clicks.');
+
+    $form['rl_menu_link']['intro'] = [
+      '#type' => 'item',
+      '#markup' => '<p>' . $intro . '</p>',
+    ];
+  }
+
+  $form['rl_menu_link']['variants'] = [
+    '#type' => 'textarea',
+    '#title' => $existing ? t('Alternatives you are testing') : t('Try these alternative titles'),
+    '#description' => t('Enter one alternative per line. Your current menu link title (shown above) always stays in the test.'),
+    '#default_value' => $existing ? implode("\n", $existing->getVariants()) : '',
+    '#rows' => 4,
+  ];
+
+  $form['rl_menu_link']['enabled'] = [
+    '#type' => 'checkbox',
+    '#title' => t('Run this test'),
+    '#description' => t('Turn off to pause. Your collected data is kept safe.'),
+    '#default_value' => $existing ? (bool) $existing->isPublished() : TRUE,
+  ];
+
+  if ($existing) {
+    $form['rl_menu_link']['remove_link'] = [
+      '#type' => 'link',
+      '#title' => t('Stop testing and delete collected data'),
+      '#url' => $existing->toUrl('delete-form'),
+      '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
+      '#prefix' => '<div class="rl-menu-link-remove">',
+      '#suffix' => '</div>',
+    ];
+  }
+
+  $form['rl_menu_link']['_plugin_id'] = [
+    '#type' => 'value',
+    '#value' => $plugin_id,
+  ];
+  $form['rl_menu_link']['_langcode'] = [
+    '#type' => 'value',
+    '#value' => $entity_langcode,
+  ];
+  if ($existing) {
+    $form['rl_menu_link']['_existing_id'] = [
+      '#type' => 'value',
+      '#value' => $existing->id(),
+    ];
+  }
+
+  // Attach our submit handler to all submit-style actions.
+  if (isset($form['actions']) && is_array($form['actions'])) {
+    foreach (Element::children($form['actions']) as $action_key) {
+      if (isset($form['actions'][$action_key]['#type']) && $form['actions'][$action_key]['#type'] === 'submit') {
+        $form['actions'][$action_key]['#submit'][] = '_rl_menu_link_form_submit';
+      }
+    }
+  }
+}
+
+/**
+ * Submit handler for the vertical tab on menu link content forms.
+ */
+function _rl_menu_link_form_submit(array &$form, FormStateInterface $form_state) {
+  $values = $form_state->getValue('rl_menu_link');
+  if (empty($values)) {
+    return;
+  }
+
+  $plugin_id = $values['_plugin_id'] ?? NULL;
+  $langcode = $values['_langcode'] ?? LanguageInterface::LANGCODE_NOT_SPECIFIED;
+  if (!$plugin_id) {
+    return;
+  }
+
+  $variants = VariantParser::parse((string) ($values['variants'] ?? ''));
+  $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
+  $existing_id = $values['_existing_id'] ?? NULL;
+  $experiment = NULL;
+  if ($existing_id) {
+    $loaded = $storage->load($existing_id);
+    if ($loaded instanceof MenuLinkExperiment) {
+      $experiment = $loaded;
+    }
+  }
+
+  try {
+    if (empty($variants)) {
+      // A blank textarea no longer deletes. Deletion is a deliberate
+      // action through the dedicated "Remove this experiment" link, so
+      // an accidentally cleared field can never destroy collected data.
+      if ($experiment !== NULL) {
+        \Drupal::messenger()->addWarning(t('Menu link title variants were left unchanged because no alternatives were provided. To stop this experiment, use "Stop testing and delete collected data".'));
+      }
+      return;
+    }
+
+    if ($experiment === NULL) {
+      $form_object = $form_state->getFormObject();
+      $label = $plugin_id;
+      if ($form_object instanceof EntityFormInterface) {
+        $parent = $form_object->getEntity();
+        $label = $parent->label() ?? $plugin_id;
+      }
+      $created = $storage->create([
+        'label' => $label,
+        'menu_link_plugin_id' => $plugin_id,
+        'langcode' => $langcode,
+      ]);
+      assert($created instanceof MenuLinkExperiment);
+      $experiment = $created;
+    }
+
+    $experiment->setVariants($variants);
+    if (!empty($values['enabled'])) {
+      $experiment->setPublished();
+    }
+    else {
+      $experiment->setUnpublished();
+    }
+    $experiment->save();
+
+    \Drupal::service('rl.experiment_registry')->register(
+      $experiment->getRlExperimentId(),
+      'rl_menu_link',
+      $experiment->label()
+    );
+
+    // Invalidate menu caches so the new variants take effect immediately.
+    Cache::invalidateTags(['rl_menu_link:all', 'rl_menu_link:' . $experiment->getMenuLinkPluginId()]);
+
+    \Drupal::messenger()->addStatus(t('Menu link title variants saved. @n alternatives will be rotated against your original title.', [
+      '@n' => count($variants),
+    ]));
+  }
+  catch (\Exception $e) {
+    \Drupal::logger('rl_menu_link')->error('Failed to save menu link title variants: @message', ['@message' => $e->getMessage()]);
+    \Drupal::messenger()->addError(t('Menu link title variants could not be saved: @message', ['@message' => $e->getMessage()]));
+  }
+}
+
+/**
+ * Implements hook_entity_predelete().
+ *
+ * Cleans up menu link experiments when the menu link content entity is
+ * deleted, and purges associated RL analytics.
+ */
+function rl_menu_link_entity_predelete(EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'menu_link_content') {
+    return;
+  }
+
+  $plugin_id = method_exists($entity, 'getPluginId') ? $entity->getPluginId() : NULL;
+  if (!$plugin_id) {
+    return;
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
+  $matches = $storage->loadByProperties(['menu_link_plugin_id' => $plugin_id]);
+  if (!$matches) {
+    return;
+  }
+  $manager = \Drupal::service('rl.experiment_manager');
+  $invalidate_tags = ['rl_menu_link:all' => TRUE];
+  foreach ($matches as $experiment) {
+    if (!$experiment instanceof MenuLinkExperiment) {
+      continue;
+    }
+    $rl_id = $experiment->getRlExperimentId();
+    $invalidate_tags['rl_menu_link:' . $experiment->getMenuLinkPluginId()] = TRUE;
+    // Purge analytics first; if it fails, the config entity is still around
+    // for a retry.
+    $manager->purgeExperiment($rl_id);
+    $experiment->delete();
+  }
+  // Close the cache-as-you-invalidate loop: cached menus that referenced
+  // the deleted plugin ID still carry the per-plugin tag plus the global
+  // `rl_menu_link:all` tag and would keep serving the cascade-deleted
+  // experiment's variant label until natural cache turnover.
+  Cache::invalidateTags(array_keys($invalidate_tags));
+}
+
+/**
+ * Implements hook_preprocess_views_view_field().
+ *
+ * Rewrites the Label cell in the menu link experiment admin Views table
+ * so it links to the experiment report instead of the entity edit form.
+ * The report is the more useful destination for someone scanning the
+ * list: it shows per-arm statistics. The Operations column still
+ * provides Edit/Delete for entity-level actions.
+ */
+function rl_menu_link_preprocess_views_view_field(array &$variables): void {
+  if ($variables['view']->id() !== 'rl_menu_link_experiment') {
+    return;
+  }
+  if ($variables['field']->field !== 'label') {
+    return;
+  }
+  $entity = $variables['row']->_entity ?? NULL;
+  if (!$entity instanceof MenuLinkExperiment) {
+    return;
+  }
+  $variables['output'] = [
+    '#type' => 'link',
+    '#title' => $entity->label(),
+    '#url' => Url::fromRoute('rl.reports.experiment_detail', [
+      'experiment_id' => $entity->getRlExperimentId(),
+    ]),
+  ];
+}

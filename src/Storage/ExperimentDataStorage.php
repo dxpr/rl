@@ -190,6 +190,44 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function getTotalTurnsMultiple(array $experiment_ids): array {
+    if (empty($experiment_ids)) {
+      return [];
+    }
+    $rows = $this->database->select('rl_experiment_totals', 'et')
+      ->fields('et', ['experiment_id', 'total_turns'])
+      ->condition('experiment_id', $experiment_ids, 'IN')
+      ->execute()
+      ->fetchAllKeyed();
+    $result = [];
+    foreach ($experiment_ids as $id) {
+      $result[$id] = isset($rows[$id]) ? (int) $rows[$id] : 0;
+    }
+    return $result;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAllArmsDataMultiple(array $experiment_ids): array {
+    $result = array_fill_keys($experiment_ids, []);
+    if (empty($experiment_ids)) {
+      return $result;
+    }
+    $rows = $this->database->select('rl_arm_data', 'ad')
+      ->fields('ad', ['experiment_id', 'arm_id', 'turns', 'rewards', 'created', 'updated'])
+      ->condition('experiment_id', $experiment_ids, 'IN')
+      ->execute()
+      ->fetchAll();
+    foreach ($rows as $row) {
+      $result[$row->experiment_id][$row->arm_id] = $row;
+    }
+    return $result;
+  }
+
+  /**
    * Record snapshots for arms if event logging is enabled.
    *
    * @param string $experiment_id
