@@ -13,31 +13,35 @@
 #}
 <h3>{{ title }}</h3>
 
-<div class="rl-chart-row">
-  <div class="rl-chart-box">
-    {% if date_filter %}
-      <div class="rl-chart-filters">
-        {{ date_filter }}
-      </div>
-    {% endif %}
-    <div class="rl-chart-area-2d" id="rl-plotly-2d-lines"></div>
-    <div class="form-item__description rl-chart-tip">
-      <strong>{{ 'Tip:'|t }}</strong> {{ tip_hover }}
+<div class="rl-chart-tabs-wrapper">
+  {% if date_filter %}
+    <div class="rl-chart-filters">
+      {{ date_filter }}
     </div>
-  </div>
-</div>
+  {% endif %}
 
-<div class="rl-chart-row">
-  <div class="rl-chart-box">
-    {% if date_filter %}
-      <div class="rl-chart-filters">
-        {{ date_filter }}
+  <div class="rl-chart-tabs" role="tablist" aria-label="{{ 'Chart view'|t }}">
+    <button type="button" class="rl-chart-tab is-active" id="rl-chart-tab-2d" role="tab" aria-selected="true" aria-controls="rl-chart-pane-2d" data-rl-tab="2d">
+      {{ '2D Line Chart'|t }}
+    </button>
+    <button type="button" class="rl-chart-tab" id="rl-chart-tab-3d" role="tab" aria-selected="false" aria-controls="rl-chart-pane-3d" data-rl-tab="3d">
+      {{ '3D Posterior Landscape'|t }}
+    </button>
+  </div>
+
+  <div class="rl-chart-pane-box">
+    <div class="rl-chart-pane is-active" id="rl-chart-pane-2d" role="tabpanel" aria-labelledby="rl-chart-tab-2d" data-rl-pane="2d">
+      <div class="rl-chart-area-2d" id="rl-plotly-2d-lines"></div>
+      <div class="form-item__description rl-chart-tip">
+        <strong>{{ 'Tip:'|t }}</strong> {{ tip_hover }}
       </div>
-    {% endif %}
-    <div class="form-item__description rl-chart-interaction-hint">{{ interaction_hint }}</div>
-    <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
-    <div class="form-item__description rl-chart-tip">
-      <strong>{{ 'Tip:'|t }}</strong> {{ tip_taller }}
+    </div>
+    <div class="rl-chart-pane" id="rl-chart-pane-3d" role="tabpanel" aria-labelledby="rl-chart-tab-3d" data-rl-pane="3d">
+      <div class="form-item__description rl-chart-interaction-hint">{{ interaction_hint }}</div>
+      <div class="rl-chart-area-3d" id="rl-plotly-3d-surface"></div>
+      <div class="form-item__description rl-chart-tip">
+        <strong>{{ 'Tip:'|t }}</strong> {{ tip_taller }}
+      </div>
     </div>
   </div>
 </div>
