@@ -590,13 +590,22 @@ function rl_page_title_entity_predelete(EntityInterface $entity) {
     return;
   }
   $manager = \Drupal::service('rl.experiment_manager');
+  $invalidate_tags = [];
   foreach ($matches as $experiment) {
     if (!$experiment instanceof PageTitleExperiment) {
       continue;
     }
     $rl_id = $experiment->getRlExperimentId();
+    $invalidate_tags['rl_page_title:' . $experiment->getPath()] = TRUE;
     $manager->purgeExperiment($rl_id);
     $experiment->delete();
+  }
+  // Close the cache-as-you-invalidate loop: any page that was rendered
+  // before the host entity delete still carries `rl_page_title:{path}`
+  // and would keep serving the cascade-deleted experiment's variant
+  // until natural cache turnover.
+  if ($invalidate_tags) {
+    Cache::invalidateTags(array_keys($invalidate_tags));
   }
 }
 

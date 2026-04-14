@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\rl_page_title\Drush\Commands;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Controller\TitleResolverInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -384,9 +385,18 @@ final class RlPageTitleCommands extends RlCommandsBase {
       ]);
     }
 
+    // Capture the path before delete so we can invalidate the render-cache
+    // tag afterward; mirrors the GUI delete form.
+    $path = $entity->getPath();
+
     // Purge analytics first; if it fails, the entity is left intact for retry.
     $this->experimentManager->purgeExperiment($rl_id);
     $entity->delete();
+
+    // Close the cache-as-you-invalidate loop: cached pages at this path
+    // still carry `rl_page_title:{path}` and would keep serving the now-
+    // deleted experiment's rendered variant until natural cache turnover.
+    Cache::invalidateTags(['rl_page_title:' . $path]);
 
     return $this->success(
       sprintf('Deleted page title experiment "%s" and purged %d turns.', $experimentId, $turns),

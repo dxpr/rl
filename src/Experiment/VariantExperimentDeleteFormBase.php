@@ -2,7 +2,9 @@
 
 namespace Drupal\rl\Experiment;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\ContentEntityDeleteForm;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\rl\Service\ExperimentManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -75,6 +77,13 @@ abstract class VariantExperimentDeleteFormBase extends ContentEntityDeleteForm {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $entity = $this->getEntity();
 
+    // Capture cache tags to invalidate BEFORE the entity is deleted; the
+    // concrete subclass needs the entity's current field values (path,
+    // plugin_id, etc.) to build the tag list.
+    $cache_tags = ($entity instanceof EntityInterface)
+      ? $this->getCacheTagsToInvalidate($entity)
+      : [];
+
     // Purge analytics first. If purging fails, the config entity is left
     // intact as a recovery anchor and the deletion is aborted.
     if ($entity instanceof VariantExperimentInterface) {
@@ -82,6 +91,39 @@ abstract class VariantExperimentDeleteFormBase extends ContentEntityDeleteForm {
     }
 
     parent::submitForm($form, $form_state);
+
+    // Invalidate render-cache tags last, after the entity is gone. This
+    // closes the cache-as-you-invalidate loop for the delete path: the
+    // save path already invalidates the same tags when an experiment is
+    // created or updated; without this call, cached menus and pages keep
+    // serving rendered variants from a now-deleted experiment until some
+    // unrelated cache clear happens.
+    if ($cache_tags) {
+      Cache::invalidateTags($cache_tags);
+    }
+  }
+
+  /**
+   * Returns the render-cache tags to invalidate when this entity is deleted.
+   *
+   * Subclasses supply the tags that the module's preprocess / view-alter
+   * hooks attach at render time. Invalidating them on delete prevents
+   * cached menus or pages from continuing to serve a variant that belongs
+   * to a now-deleted experiment.
+   *
+   * Called before the entity is deleted, so the entity is still loaded
+   * and its field values are readable. Default implementation returns an
+   * empty array so downstream modules that have not opted in are
+   * unaffected.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The entity about to be deleted.
+   *
+   * @return string[]
+   *   List of cache tag strings to invalidate after successful deletion.
+   */
+  protected function getCacheTagsToInvalidate(EntityInterface $entity): array {
+    return [];
   }
 
 }

@@ -431,16 +431,23 @@ function rl_menu_link_entity_predelete(EntityInterface $entity) {
     return;
   }
   $manager = \Drupal::service('rl.experiment_manager');
+  $invalidate_tags = ['rl_menu_link:all' => TRUE];
   foreach ($matches as $experiment) {
     if (!$experiment instanceof MenuLinkExperiment) {
       continue;
     }
     $rl_id = $experiment->getRlExperimentId();
+    $invalidate_tags['rl_menu_link:' . $experiment->getMenuLinkPluginId()] = TRUE;
     // Purge analytics first; if it fails, the config entity is still around
     // for a retry.
     $manager->purgeExperiment($rl_id);
     $experiment->delete();
   }
+  // Close the cache-as-you-invalidate loop: cached menus that referenced
+  // the deleted plugin ID still carry the per-plugin tag plus the global
+  // `rl_menu_link:all` tag and would keep serving the cascade-deleted
+  // experiment's variant label until natural cache turnover.
+  Cache::invalidateTags(array_keys($invalidate_tags));
 }
 
 /**

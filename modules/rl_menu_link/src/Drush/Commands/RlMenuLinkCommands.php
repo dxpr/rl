@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\rl_menu_link\Drush\Commands;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Menu\MenuLinkManagerInterface;
@@ -366,8 +367,21 @@ final class RlMenuLinkCommands extends RlCommandsBase {
       ]);
     }
 
+    // Capture the plugin ID before delete so we can invalidate the
+    // render-cache tags afterward; mirrors the GUI delete form.
+    $plugin_id = $entity->getMenuLinkPluginId();
+
     $this->experimentManager->purgeExperiment($rl_id);
     $entity->delete();
+
+    // Close the cache-as-you-invalidate loop: cached menus still carry
+    // `rl_menu_link:{plugin_id}` and `rl_menu_link:all` and would keep
+    // serving the now-deleted experiment's rendered variant label until
+    // natural cache turnover.
+    Cache::invalidateTags([
+      'rl_menu_link:all',
+      'rl_menu_link:' . $plugin_id,
+    ]);
 
     return $this->success(
       sprintf('Deleted menu link experiment "%s" and purged %d turns.', $experimentId, $turns),

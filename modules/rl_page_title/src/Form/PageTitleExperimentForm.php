@@ -64,6 +64,18 @@ class PageTitleExperimentForm extends ContentEntityForm {
   protected ?string $pendingPurgeRlExperimentId = NULL;
 
   /**
+   * Old target path captured in submitForm() for post-save cache invalidation.
+   *
+   * Populated only when the target path changes (a retarget). `save()` uses
+   * it to invalidate `rl_page_title:{old_path}` in addition to the new
+   * path's tag, so cached pages at the previous URL stop serving a variant
+   * that no longer applies.
+   *
+   * @var string|null
+   */
+  protected ?string $pendingInvalidateOldPath = NULL;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -191,8 +203,10 @@ class PageTitleExperimentForm extends ContentEntityForm {
     assert($entity instanceof PageTitleExperiment);
 
     // Detect retarget: capture the old RL experiment ID for save() to purge
-    // AFTER the entity is successfully written.
+    // AFTER the entity is successfully written, plus the old path so save()
+    // can invalidate its render-cache tag.
     $this->pendingPurgeRlExperimentId = NULL;
+    $this->pendingInvalidateOldPath = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_page_title_experiment')
@@ -205,6 +219,7 @@ class PageTitleExperimentForm extends ContentEntityForm {
         );
         if ($original_id !== $new_id) {
           $this->pendingPurgeRlExperimentId = $original_id;
+          $this->pendingInvalidateOldPath = $original->getPath();
         }
       }
     }
@@ -245,8 +260,16 @@ class PageTitleExperimentForm extends ContentEntityForm {
     }
 
     // Invalidate page cache for the target path so the new variants take
-    // effect immediately.
-    Cache::invalidateTags(['rl_page_title:' . $entity->getPath()]);
+    // effect immediately. On a retarget we also invalidate the OLD path
+    // so visitors to the previous URL stop seeing a variant that no
+    // longer applies there.
+    $invalidate_tags = ['rl_page_title:' . $entity->getPath()];
+    if ($this->pendingInvalidateOldPath !== NULL
+        && $this->pendingInvalidateOldPath !== $entity->getPath()) {
+      $invalidate_tags[] = 'rl_page_title:' . $this->pendingInvalidateOldPath;
+    }
+    Cache::invalidateTags($invalidate_tags);
+    $this->pendingInvalidateOldPath = NULL;
 
     if ($status === SAVED_NEW) {
       $this->messenger()->addStatus($this->t('Created experiment %label.', ['%label' => $entity->label()]));

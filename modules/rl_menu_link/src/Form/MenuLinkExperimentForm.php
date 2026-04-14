@@ -54,6 +54,18 @@ class MenuLinkExperimentForm extends ContentEntityForm {
   protected ?string $pendingPurgeRlExperimentId = NULL;
 
   /**
+   * Old plugin ID captured in submitForm() for post-save cache invalidation.
+   *
+   * Populated only when the target plugin ID changes (a retarget). `save()`
+   * uses it to invalidate `rl_menu_link:{old_plugin_id}` in addition to
+   * the new plugin ID's tag, so cached menus that used to render the
+   * previous target stop serving a variant that no longer applies.
+   *
+   * @var string|null
+   */
+  protected ?string $pendingInvalidateOldPluginId = NULL;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -162,6 +174,7 @@ class MenuLinkExperimentForm extends ContentEntityForm {
     $new_plugin_id = trim((string) $form_state->getValue(['menu_link_plugin_id', 0, 'value']));
 
     $this->pendingPurgeRlExperimentId = NULL;
+    $this->pendingInvalidateOldPluginId = NULL;
     if (!$entity->isNew()) {
       $original = $this->entityTypeManager
         ->getStorage('rl_menu_link_experiment')
@@ -174,6 +187,7 @@ class MenuLinkExperimentForm extends ContentEntityForm {
         );
         if ($original_id !== $new_id) {
           $this->pendingPurgeRlExperimentId = $original_id;
+          $this->pendingInvalidateOldPluginId = $original->getMenuLinkPluginId();
         }
       }
     }
@@ -209,7 +223,20 @@ class MenuLinkExperimentForm extends ContentEntityForm {
       $this->pendingPurgeRlExperimentId = NULL;
     }
 
-    Cache::invalidateTags(['rl_menu_link:all', 'rl_menu_link:' . $entity->getMenuLinkPluginId()]);
+    // Invalidate menu caches so the new variants take effect immediately.
+    // On a retarget we also invalidate the OLD plugin ID's tag so cached
+    // menus that were rendering the previous target stop serving its
+    // variant label.
+    $invalidate_tags = [
+      'rl_menu_link:all',
+      'rl_menu_link:' . $entity->getMenuLinkPluginId(),
+    ];
+    if ($this->pendingInvalidateOldPluginId !== NULL
+        && $this->pendingInvalidateOldPluginId !== $entity->getMenuLinkPluginId()) {
+      $invalidate_tags[] = 'rl_menu_link:' . $this->pendingInvalidateOldPluginId;
+    }
+    Cache::invalidateTags($invalidate_tags);
+    $this->pendingInvalidateOldPluginId = NULL;
 
     if ($status === SAVED_NEW) {
       $this->messenger()->addStatus($this->t('Created experiment %label.', ['%label' => $entity->label()]));
