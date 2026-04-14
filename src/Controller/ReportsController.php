@@ -11,6 +11,7 @@ use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
+use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ArmDataValidator;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
 use Drupal\rl\Storage\SnapshotStorageInterface;
@@ -79,26 +80,26 @@ class ReportsController extends ControllerBase {
   protected LibrariesDirectoryFileFinder $libraryFinder;
 
   /**
-   * Constructs a ReportsController object.
+   * The experiment registry.
    *
-   * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $experiment_storage
-   *   The experiment data storage.
-   * @param \Drupal\Core\Datetime\DateFormatterInterface $date_formatter
-   *   The date formatter service.
-   * @param \Drupal\rl\Decorator\ExperimentDecoratorManager $decorator_manager
-   *   The experiment decorator manager.
-   * @param \Drupal\Core\Render\RendererInterface $renderer
-   *   The renderer service.
-   * @param \Drupal\rl\Service\ArmDataValidator $arm_data_validator
-   *   The arm data validator.
-   * @param \Drupal\rl\Storage\SnapshotStorageInterface $snapshot_storage
-   *   The snapshot storage.
-   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
-   *   The request stack.
-   * @param \Drupal\Core\Asset\LibrariesDirectoryFileFinder $library_finder
-   *   The libraries directory file finder.
+   * @var \Drupal\rl\Registry\ExperimentRegistryInterface
    */
-  public function __construct(ExperimentDataStorageInterface $experiment_storage, DateFormatterInterface $date_formatter, ExperimentDecoratorManager $decorator_manager, RendererInterface $renderer, ArmDataValidator $arm_data_validator, SnapshotStorageInterface $snapshot_storage, RequestStack $request_stack, LibrariesDirectoryFileFinder $library_finder) {
+  protected ExperimentRegistryInterface $experimentRegistry;
+
+  /**
+   * Constructs a ReportsController object.
+   */
+  public function __construct(
+    ExperimentDataStorageInterface $experiment_storage,
+    DateFormatterInterface $date_formatter,
+    ExperimentDecoratorManager $decorator_manager,
+    RendererInterface $renderer,
+    ArmDataValidator $arm_data_validator,
+    SnapshotStorageInterface $snapshot_storage,
+    RequestStack $request_stack,
+    LibrariesDirectoryFileFinder $library_finder,
+    ExperimentRegistryInterface $experiment_registry,
+  ) {
     $this->experimentStorage = $experiment_storage;
     $this->dateFormatter = $date_formatter;
     $this->decoratorManager = $decorator_manager;
@@ -107,6 +108,7 @@ class ReportsController extends ControllerBase {
     $this->snapshotStorage = $snapshot_storage;
     $this->requestStack = $request_stack;
     $this->libraryFinder = $library_finder;
+    $this->experimentRegistry = $experiment_registry;
   }
 
   /**
@@ -126,7 +128,8 @@ class ReportsController extends ControllerBase {
       $container->get('rl.arm_data_validator'),
       $container->get('rl.snapshot_storage'),
       $container->get('request_stack'),
-      $container->get('library.libraries_directory_file_finder')
+      $container->get('library.libraries_directory_file_finder'),
+      $container->get('rl.experiment_registry')
     );
   }
 
@@ -240,8 +243,13 @@ class ReportsController extends ControllerBase {
    *   The page title.
    */
   public function experimentDetailTitle($experiment_id) {
+    // Prefer the totals row (which carries the latest cached name), but fall
+    // back to the registry for experiments that have been registered but
+    // have not yet received any traffic. Finally, fall back to the raw ID.
     $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
-    $experiment_name = $experiment_totals->experiment_name ?? $experiment_id;
+    $experiment_name = $experiment_totals->experiment_name
+      ?? $this->experimentRegistry->getExperimentName($experiment_id)
+      ?? $experiment_id;
     return $this->t('Experiment: @name', ['@name' => $experiment_name]);
   }
 
@@ -263,10 +271,13 @@ class ReportsController extends ControllerBase {
       ]));
     }
 
-    // Get experiment totals from storage.
+    // Get experiment totals from storage. A missing totals row is expected
+    // for a newly-registered experiment that has not yet received any
+    // traffic; we still want to render the report (with an empty state)
+    // instead of 404'ing. A truly unknown experiment ID is rejected below.
     $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
 
-    if (!$experiment_totals) {
+    if (!$experiment_totals && !$this->experimentRegistry->isRegistered($experiment_id)) {
       throw new NotFoundHttpException();
     }
 

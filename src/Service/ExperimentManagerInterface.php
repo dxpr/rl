@@ -73,6 +73,29 @@ interface ExperimentManagerInterface {
   public function getTotalTurns($experiment_id);
 
   /**
+   * Gets total turns for a batch of experiments in one query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, int>
+   *   Total turns keyed by experiment ID; missing experiments have value 0.
+   */
+  public function getTotalTurnsMultiple(array $experiment_ids): array;
+
+  /**
+   * Gets arms data for a batch of experiments in one query.
+   *
+   * @param string[] $experiment_ids
+   *   The experiment IDs to look up.
+   *
+   * @return array<string, array>
+   *   Outer array keyed by experiment ID; inner array is arm data objects
+   *   keyed by arm_id (same shape as getAllArmsData()).
+   */
+  public function getAllArmsDataMultiple(array $experiment_ids): array;
+
+  /**
    * Gets Thompson Sampling scores for all arms in an experiment.
    *
    * @param string $experiment_id
@@ -89,5 +112,17 @@ interface ExperimentManagerInterface {
    *   only if no arms exist AND no requested_arms were provided.
    */
   public function getThompsonScores($experiment_id, $time_window_seconds = NULL, array $requested_arms = []);
+
+  /**
+   * Purges all data for an experiment.
+   *
+   * Removes turns, rewards, totals, snapshots, and the registry entry for the
+   * given experiment ID. Used when a consumer module deletes or retargets an
+   * experiment and needs to clean up the analytics tables transactionally.
+   *
+   * @param string $experiment_id
+   *   The experiment ID to purge.
+   */
+  public function purgeExperiment($experiment_id);
 
 }

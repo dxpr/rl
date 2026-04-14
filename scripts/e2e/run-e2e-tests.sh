@@ -46,9 +46,9 @@ composer require drush/drush --quiet
   --yes \
   --quiet
 
-# Enable the RL module.
+# Enable the RL ecosystem modules (parent + submodules).
 DRUSH="$SITE_DIR/vendor/bin/drush"
-$DRUSH en rl --yes --quiet
+$DRUSH en rl rl_page_title rl_menu_link --yes --quiet
 
 # Rebuild cache after enabling module.
 $DRUSH cr --quiet

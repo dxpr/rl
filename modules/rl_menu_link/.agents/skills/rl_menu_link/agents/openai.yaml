@@ -1,0 +1,4 @@
+display_name: "RL Menu Link"
+description: "A/B test Drupal menu link labels (menu_link_content + YAML-defined) using Thompson Sampling. Per-language scoped, manage via Drush CLI."
+default_prompt: "List all menu link experiments and their current status."
+allow_implicit_invocation: true
