@@ -21,13 +21,53 @@ if ($action === 'ping') {
   exit('pong');
 }
 
-if (!$action || !$experiment_id || !in_array($action, ['turn', 'turns', 'reward'])) {
+// Decide action: a batch Thompson Sampling lookup that resolves
+// experiment_ids to winning arms. Generic (module-agnostic) — the
+// caller passes experiment_ids it already knows about and the shape
+// of each experiment. Used by rl integrations that want to avoid the
+// per-request overhead of a full Drupal route boot for decision
+// fetches. Schema:
+//   experiment_ids  comma-separated list of pre-registered IDs
+//   arm_counts      comma-separated parallel list of integers
+// Response:
+//   {"decisions":{"<id>":{"armId":"vN"}, ...}}
+// Unknown / unregistered / zero-arm experiments are returned as NULL
+// so the caller can fall back to the first arm.
+if ($action === 'decide') {
+  $ids_raw = filter_input(INPUT_POST, 'experiment_ids', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+  $counts_raw = filter_input(INPUT_POST, 'arm_counts', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+  if (!$ids_raw || !$counts_raw) {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    exit('{"decisions":{}}');
+  }
+  $ids = array_map('trim', explode(',', $ids_raw));
+  $counts = array_map('intval', explode(',', $counts_raw));
+  if (count($ids) !== count($counts)) {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    exit('{"decisions":{}}');
+  }
+  $pairs = [];
+  foreach ($ids as $i => $eid) {
+    if ($eid === '' || !preg_match('/^[a-zA-Z0-9_-]+$/', $eid)) {
+      continue;
+    }
+    $count = $counts[$i] ?? 0;
+    if ($count < 2) {
+      continue;
+    }
+    $pairs[$eid] = $count;
+  }
+  // Fall through to Drupal kernel bootstrap below, then branch on
+  // $action === 'decide' after the container is available.
+}
+elseif (!$action || !$experiment_id || !in_array($action, ['turn', 'turns', 'reward'])) {
   http_response_code(400);
   exit('Invalid request parameters');
 }
-
-// Validate experiment ID format (alphanumeric, hyphens, underscores).
-if (!preg_match('/^[a-zA-Z0-9_-]+$/', $experiment_id)) {
+elseif (!preg_match('/^[a-zA-Z0-9_-]+$/', $experiment_id)) {
+  // Validate experiment ID format (alphanumeric, hyphens, underscores).
   http_response_code(400);
   exit('Invalid experiment_id format');
 }
@@ -63,6 +103,49 @@ try {
   $container = $kernel->getContainer();
 
   $registry = $container->get('rl.experiment_registry');
+
+  // Decide action: batch Thompson Sampling lookup, returns JSON.
+  // Skips the single-experiment registration check above since this
+  // action accepts a list and per-id registration is verified inline.
+  if ($action === 'decide') {
+    $manager = $container->has('rl.experiment_manager')
+      ? $container->get('rl.experiment_manager')
+      : NULL;
+    if ($manager === NULL) {
+      http_response_code(503);
+      header('Content-Type: application/json');
+      exit('{"decisions":{},"error":"rl.experiment_manager not available"}');
+    }
+    $decisions = new stdClass();
+    foreach ($pairs as $eid => $arm_count) {
+      if (!$registry->isRegistered($eid)) {
+        // Unknown experiment — caller will fall back to arm 0.
+        continue;
+      }
+      $arm_ids = [];
+      for ($i = 0; $i < $arm_count; $i++) {
+        $arm_ids[] = 'v' . $i;
+      }
+      try {
+        $scores = $manager->getThompsonScores($eid, NULL, $arm_ids);
+      }
+      catch (\Throwable $e) {
+        continue;
+      }
+      if (!is_array($scores) || !$scores) {
+        continue;
+      }
+      arsort($scores);
+      $winner = (string) key($scores);
+      $decisions->$eid = ['armId' => $winner];
+    }
+    http_response_code(200);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, private, max-age=0');
+    echo json_encode(['decisions' => $decisions]);
+    exit();
+  }
+
   if (!$registry->isRegistered($experiment_id)) {
     exit();
   }
