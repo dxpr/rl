@@ -147,87 +147,83 @@ $cache_manager = \Drupal::service('rl.cache_manager');
 $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 </code></pre>
 
-<h3>JavaScript API</h3>
+<h3>Deciding which variant to show</h3>
 
-<p>Attach the <code>rl/api</code> library to make <code>Drupal.rl</code> available on the page. It exposes a thin transport layer that coalesces every RL call on the page into a single batched POST to <code>rl.php</code>:</p>
+<p>Pick the winning variant in PHP at render time. Your consumer already has the full arm set in hand (entity fields, view filters, plugin config), so it can call the RL service directly:</p>
 
-<pre><code>// Ask for a Thompson Sampling decision - resolves to the winning arm id.
-Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
-  renderVariant(armId);
-});
+<pre><code>$scores = $experiment_manager->getThompsonScores(
+  'my_experiment',
+  NULL,
+  ['v0', 'v1', 'v2']  // arm ids owned by your domain
+);
+arsort($scores);
+$best_arm = key($scores);</code></pre>
 
-// Record an impression.
+<p>Deciding server-side keeps the arm list where it belongs (with the experiment owner) and avoids shipping it to the browser. See <code>ai_sorting</code>'s Views sort plugin for the canonical pattern and <code>VariantSelectorBase</code> in this module for a reusable base class. There is deliberately no client-side decide API.</p>
+
+<h3>JavaScript API (<code>Drupal.rl</code>)</h3>
+
+<p>Attach the <code>rl/api</code> library to make <code>Drupal.rl</code> available. It is a thin transport proxy that coalesces every impression and conversion fired on the page into one batched POST to <code>rl.php</code>:</p>
+
+<pre><code>// Record an impression when the variant becomes visible.
 Drupal.rl.turn('hero_cta', 'v0');
 
-// Record a conversion.
-Drupal.rl.reward('hero_cta', 'v0');</code></pre>
+// Record a conversion when the user clicks / submits / converts.
+Drupal.rl.reward('hero_cta', 'v0');
 
-<p>Decides flush on the next tick so all modules that register during <code>Drupal.behaviors.attach</code> share one request. Turns and rewards flush in a 500 ms window and on <code>pagehide</code> via <code>navigator.sendBeacon</code>.</p>
+// Optional: force an immediate flush.
+Drupal.rl.flush();</code></pre>
+
+<p>Events accumulate for 500 ms and then flush in a single POST. Buffered events are also flushed via <code>navigator.sendBeacon</code> on <code>visibilitychange</code> and <code>pagehide</code> so they survive navigation.</p>
+
+<p><code>Drupal.rl</code> is one transport among several. Modules that already ship their own tracking JS (like <code>ai_sorting</code>, which batches turns on its own 100 ms window and posts form data) keep working untouched.</p>
 
 <h3>HTTP API (<code>rl.php</code>)</h3>
 
-<p><code>rl.php</code> is the low-level HTTP endpoint reachable directly from any client that can make an HTTP POST, not only in-browser Drupal pages. Native mobile apps, server-side workers, other CMSes, and edge functions can record turns and rewards or request Thompson Sampling decisions against the same experiments used by in-browser code. The JavaScript <code>Drupal.rl</code> is simply a thin batching proxy that speaks this protocol.</p>
+<p><code>rl.php</code> is the low-level endpoint. It is reachable directly from any client that can make an HTTP POST - browser pages, native mobile apps, server-side workers, other CMSes, edge functions. Deciding is <em>not</em> exposed here: it happens in PHP at render time as shown above.</p>
 
-<p>Two actions are supported:</p>
-<ul>
-<li><code>action=ping</code> - liveness probe used by <code>hook_requirements()</code>. Returns <code>pong</code> with HTTP 200. No database touch, no Drupal bootstrap.</li>
-<li><code>action=batch</code> - zero or more decide, turn, and reward events in a single JSON body. All three sections are optional.</li>
-</ul>
+<p>Four actions are supported. All are additive - adding <code>batch</code> did not deprecate the legacy form actions, and production consumers like <code>ai_sorting</code> keep using them unchanged.</p>
 
-<p>The endpoint requires no authentication. Experiment IDs must already be registered in the <code>rl_experiment_registry</code> table (normally via a module's <code>__construct()</code>) - unknown IDs are silently dropped so garbage writes cannot create arbitrary registry entries.</p>
+<table>
+  <thead><tr><th>Action</th><th>Encoding</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>ping</code></td><td>form POST</td><td>Liveness check. Returns <code>pong</code>.</td></tr>
+    <tr><td><code>turn</code></td><td>form POST</td><td>Record one impression.</td></tr>
+    <tr><td><code>turns</code></td><td>form POST</td><td>Record impressions for many arms in one experiment.</td></tr>
+    <tr><td><code>reward</code></td><td>form POST</td><td>Record one conversion.</td></tr>
+    <tr><td><code>batch</code></td><td>JSON POST</td><td>Record turns and rewards across many experiments in one request. Used by <code>Drupal.rl</code>.</td></tr>
+  </tbody>
+</table>
 
-<h4>Request</h4>
+<p>Experiment IDs and arm IDs must match <code>^[a-zA-Z0-9_-]+$</code>. Experiments must already be registered via <code>ExperimentRegistryInterface::register()</code>; unknown IDs are silently dropped so garbage writes cannot create registry entries.</p>
+
+<h4>Legacy form actions</h4>
+
+<pre><code>curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=turn&amp;experiment_id=hero_cta&amp;arm_id=v0'
+
+curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=turns&amp;experiment_id=hero_cta&amp;arm_ids=v0,v1'
+
+curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=reward&amp;experiment_id=hero_cta&amp;arm_id=v0'</code></pre>
+
+<h4><code>action=batch</code></h4>
 
 <pre><code>POST /modules/contrib/rl/rl.php?action=batch
 Content-Type: application/json
 
 {
-  "decides": [
-    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
-    {"id": "page_title_123", "arms": ["v0", "v1"]}
-  ],
   "turns": [
-    {"id": "menu_main_5", "arm": "v1"},
-    {"id": "hero_cta", "arm": "v0"}
+    {"id": "hero_cta", "arm": "v0"},
+    {"id": "menu_main_5", "arm": "v1"}
   ],
   "rewards": [
     {"id": "hero_cta", "arm": "v0"}
   ]
 }</code></pre>
 
-<p>Experiment IDs and arm IDs must match <code>^[a-zA-Z0-9_-]+$</code>. Decides require at least 2 arms. Invalid or unregistered entries are dropped silently so one bad event does not poison the rest of the batch.</p>
-
-<h4>Response</h4>
-
-<pre><code>HTTP/1.1 200 OK
-Content-Type: application/json
-Cache-Control: no-store, private, max-age=0
-
-{
-  "decisions": {
-    "hero_cta": {"armId": "v1"},
-    "page_title_123": {"armId": "v0"}
-  }
-}</code></pre>
-
-<p>Only successful decide lookups appear in the map. Callers should always hold a local fallback for missing keys. Turns and rewards produce no response payload beyond HTTP 200 - they are fire-and-forget writes.</p>
-
-<h4>Curl examples</h4>
-
-<p>Impression from a server-side job:</p>
-<pre><code>curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
-  -H 'Content-Type: application/json' \
-  -d '{"turns":[{"id":"hero_cta","arm":"v1"}]}'</code></pre>
-
-<p>Decision lookup from a native mobile client:</p>
-<pre><code>curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
-  -H 'Content-Type: application/json' \
-  -d '{"decides":[{"id":"hero_cta","arms":["v0","v1","v2"]}]}'
-# => {"decisions":{"hero_cta":{"armId":"v1"}}}</code></pre>
-
-<p>Liveness probe:</p>
-<pre><code>curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=ping'
-# => pong</code></pre>
+<p>Both sections are optional. Invalid or unregistered entries are dropped silently. The response is <code>{"ok":true}</code> with HTTP 200; writes are fire-and-forget.</p>
 
 <p><strong>Performance note:</strong> <code>rl.php</code> bootstraps a minimal Drupal kernel per request (same pattern as core's <code>statistics.php</code>). One boot processes the whole batch, so non-browser callers should coalesce events into a single request whenever they can.</p>
 

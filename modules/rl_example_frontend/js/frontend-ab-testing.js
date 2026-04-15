@@ -1,64 +1,44 @@
 /**
  * @file
- * Frontend A/B testing for newsletter signup button.
+ * Tracking for the rl_example_frontend newsletter block.
  *
- * Uses Drupal.rl as the transport layer: one decide call resolves the
- * winning variant, one turn call fires when the form enters the viewport,
- * one reward call fires when the submit button is clicked. Drupal.rl
- * coalesces all of these with any other RL calls on the page into a
- * single POST.
+ * The winning variant is picked server-side in NewsletterBlock::build()
+ * and the button is rendered with the winning text already in place. This
+ * file only needs to report the impression when the form enters the
+ * viewport and the conversion when the user clicks the submit button.
+ * Both events go through Drupal.rl, which batches them with any other RL
+ * calls on the page.
  */
 
 (function (Drupal, drupalSettings, once) {
 
   'use strict';
 
-  Drupal.behaviors.rlExampleFrontendABTesting = {
+  Drupal.behaviors.rlExampleFrontendTracking = {
     attach: function (context) {
       var config = drupalSettings.rlExampleFrontend;
-      if (!config) {
+      if (!config || !config.experimentId || !config.armId) {
         return;
       }
 
       once('rl-frontend-ab', '.rl-example-frontend-newsletter-form', context).forEach(function (form) {
-        Drupal.rl.decide(config.experimentId, Object.keys(config.buttonTexts))
-          .then(function (armId) {
-            if (!config.buttonTexts[armId]) {
-              return;
-            }
-            var submitButton = form.querySelector('input[type="submit"]');
-            if (submitButton) {
-              submitButton.value = config.buttonTexts[armId];
-            }
-            observeTurn(form, config.experimentId, armId);
-            bindReward(form, config.experimentId, armId);
-          })
-          .catch(function () {
-            // Leave the default button text in place on decide failure.
-          });
-      });
-
-      function observeTurn(form, experimentId, armId) {
         var observer = new IntersectionObserver(function (entries) {
           entries.forEach(function (entry) {
             if (entry.isIntersecting) {
-              Drupal.rl.turn(experimentId, armId);
+              Drupal.rl.turn(config.experimentId, config.armId);
               observer.disconnect();
             }
           });
         }, { threshold: 0.5 });
         observer.observe(form);
-      }
 
-      function bindReward(form, experimentId, armId) {
         var submitButton = form.querySelector('input[type="submit"]');
-        if (!submitButton) {
-          return;
+        if (submitButton) {
+          submitButton.addEventListener('click', function () {
+            Drupal.rl.reward(config.experimentId, config.armId);
+          });
         }
-        submitButton.addEventListener('click', function () {
-          Drupal.rl.reward(experimentId, armId);
-        });
-      }
+      });
     },
   };
 

@@ -2,18 +2,20 @@
  * @file
  * Thin RL transport proxy with request batching.
  *
- * Exposes Drupal.rl.decide(), Drupal.rl.turn(), Drupal.rl.reward(), and
- * Drupal.rl.flush(). Batches calls into a single POST to rl.php so that
- * multiple RL-powered features on the same page share one request instead
- * of each making its own.
+ * Exposes Drupal.rl.turn(), Drupal.rl.reward(), and Drupal.rl.flush().
+ * Batches calls into a single POST to rl.php so that multiple RL-powered
+ * features on the same page share one request instead of each making its
+ * own.
  *
- * Batching strategy:
- *   - decide() flushes on the next tick (setTimeout 0), catching every
- *     module that registers synchronously during Drupal.behaviors.attach.
- *   - turn() / reward() flush in a 500 ms window to coalesce events that
- *     arrive as the user interacts with the page.
- *   - visibilitychange / pagehide flush immediately via navigator.sendBeacon
- *     so buffered events survive navigation.
+ * Batching strategy: events accumulate for 500 ms and then flush in one
+ * POST. visibilitychange / pagehide flush immediately via
+ * navigator.sendBeacon so buffered events survive navigation.
+ *
+ * Deciding which variant to show is a server-side concern - see
+ * ai_sorting's Views sort plugin or VariantSelectorBase in this module.
+ * Drupal.rl deliberately does not provide a decide API: client-side
+ * decides would require the caller to know the current arm set, which
+ * belongs in the experiment owner's domain model, not in runtime JS.
  *
  * Modelled on Drupal.history in Drupal core, which batches node-view
  * tracking the same way.
@@ -27,14 +29,9 @@
 
   var queue = emptyQueue();
   var timer = null;
-  var timerDelay = null;
 
   function emptyQueue() {
-    return {
-      decides: Object.create(null),
-      turns: [],
-      rewards: [],
-    };
+    return { turns: [], rewards: [] };
   }
 
   function endpoint() {
@@ -45,80 +42,23 @@
   }
 
   function hasPending() {
-    for (var id in queue.decides) {
-      if (Object.prototype.hasOwnProperty.call(queue.decides, id)) {
-        return true;
-      }
-    }
     return queue.turns.length > 0 || queue.rewards.length > 0;
   }
 
-  function schedule(delay) {
-    if (timer !== null && timerDelay <= delay) {
+  function schedule() {
+    if (timer !== null) {
       return;
     }
-    if (timer !== null) {
-      clearTimeout(timer);
-    }
-    timerDelay = delay;
     timer = setTimeout(function () {
       timer = null;
-      timerDelay = null;
       flush();
-    }, delay);
+    }, 500);
   }
 
   function takeQueue() {
     var snapshot = queue;
     queue = emptyQueue();
     return snapshot;
-  }
-
-  function buildPayload(snapshot) {
-    var decides = [];
-    for (var id in snapshot.decides) {
-      if (Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        decides.push({ id: id, arms: snapshot.decides[id].arms });
-      }
-    }
-    return {
-      decides: decides,
-      turns: snapshot.turns,
-      rewards: snapshot.rewards,
-    };
-  }
-
-  function resolveDecides(snapshot, decisions) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        continue;
-      }
-      var entry = snapshot.decides[id];
-      var armId = null;
-      if (decisions && decisions[id] && decisions[id].armId) {
-        armId = decisions[id].armId;
-      }
-      // Fallback to the first arm when the server returns no decision
-      // (unregistered experiment, missing data, etc.) so callers always
-      // get a usable variant.
-      if (!armId) {
-        armId = entry.arms[0];
-      }
-      entry.resolvers.forEach(function (resolver) {
-        resolver.resolve(armId);
-      });
-    }
-  }
-
-  function rejectDecides(snapshot, reason) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        continue;
-      }
-      snapshot.decides[id].resolvers.forEach(function (resolver) {
-        resolver.reject(reason);
-      });
-    }
   }
 
   function batchUrl(url) {
@@ -131,12 +71,12 @@
     }
     var url = endpoint();
     if (!url) {
-      var dropped = takeQueue();
-      rejectDecides(dropped, new Error('Drupal.rl: endpointUrl not set'));
+      // No endpoint configured - drop the queue rather than dangling.
+      takeQueue();
       return;
     }
     var snapshot = takeQueue();
-    var body = JSON.stringify(buildPayload(snapshot));
+    var body = JSON.stringify(snapshot);
 
     fetch(batchUrl(url), {
       method: 'POST',
@@ -144,22 +84,9 @@
       body: body,
       credentials: 'same-origin',
       keepalive: true,
-    })
-      .then(function (response) {
-        if (!response.ok) {
-          rejectDecides(snapshot, new Error('Drupal.rl: HTTP ' + response.status));
-          return null;
-        }
-        return response.json();
-      })
-      .then(function (json) {
-        if (json) {
-          resolveDecides(snapshot, json.decisions || {});
-        }
-      })
-      .catch(function (err) {
-        rejectDecides(snapshot, err);
-      });
+    }).catch(function () {
+      // Swallow network errors. Tracking is best-effort.
+    });
   }
 
   function flushBeacon() {
@@ -171,46 +98,15 @@
       return;
     }
     var snapshot = takeQueue();
-    var body = JSON.stringify(buildPayload(snapshot));
+    var body = JSON.stringify(snapshot);
 
     if ('sendBeacon' in navigator) {
       var blob = new Blob([body], { type: 'application/json' });
       navigator.sendBeacon(batchUrl(url), blob);
     }
-    // Decide promises cannot be fulfilled once the page is unloading, so
-    // reject any that happen to still be buffered. Callers on a page that
-    // is going away do not need the answer.
-    rejectDecides(snapshot, new Error('Drupal.rl: page unloading'));
   }
 
   Drupal.rl = {
-
-    /**
-     * Request a Thompson Sampling decision for an experiment.
-     *
-     * @param {string} experimentId
-     *   The pre-registered experiment id.
-     * @param {Array<string>} armIds
-     *   The arm ids the caller is offering. The winning arm id is returned
-     *   unchanged so the caller can map it back to its own variant table.
-     *
-     * @return {Promise<string>}
-     *   Resolves to the winning arm id. Falls back to armIds[0] when the
-     *   server cannot provide a decision.
-     */
-    decide: function (experimentId, armIds) {
-      return new Promise(function (resolve, reject) {
-        var entry = queue.decides[experimentId];
-        if (!entry) {
-          entry = queue.decides[experimentId] = {
-            arms: armIds.slice(),
-            resolvers: [],
-          };
-        }
-        entry.resolvers.push({ resolve: resolve, reject: reject });
-        schedule(0);
-      });
-    },
 
     /**
      * Record an impression for a variant.
@@ -220,7 +116,7 @@
      */
     turn: function (experimentId, armId) {
       queue.turns.push({ id: experimentId, arm: armId });
-      schedule(500);
+      schedule();
     },
 
     /**
@@ -231,7 +127,7 @@
      */
     reward: function (experimentId, armId) {
       queue.rewards.push({ id: experimentId, arm: armId });
-      schedule(500);
+      schedule();
     },
 
     /**
@@ -241,7 +137,6 @@
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
-        timerDelay = null;
       }
       flush();
     },

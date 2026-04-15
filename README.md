@@ -213,58 +213,108 @@ $cache_manager = \Drupal::service('rl.cache_manager');
 $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 ```
 
-## JavaScript API
+## Deciding which variant to show
 
-Attach the `rl/api` library to make `Drupal.rl` available. It is a thin transport proxy that coalesces every RL call on the page into a single batched POST to `rl.php`, so N experiments on the same page produce ~2 requests regardless of how many modules are tracking.
+Pick the winning variant in PHP at render time. Your consumer already
+has the full arm set in hand (entity fields, view filters, plugin
+config, etc.), so it can call the RL service directly:
 
-```javascript
-// Ask for a Thompson Sampling decision - resolves to the winning arm id.
-Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
-  renderVariant(armId);
-});
-
-// Record an impression.
-Drupal.rl.turn('hero_cta', 'v0');
-
-// Record a conversion.
-Drupal.rl.reward('hero_cta', 'v0');
+```php
+$scores = $experiment_manager->getThompsonScores(
+  'my_experiment',
+  NULL,
+  ['v0', 'v1', 'v2']  // arm ids owned by your domain
+);
+arsort($scores);
+$best_arm = key($scores);
 ```
 
-Decides flush on the next tick so every module that registers during `Drupal.behaviors.attach` shares one request. Turns and rewards flush in a 500 ms window, and buffered events are flushed via `navigator.sendBeacon` on `visibilitychange` / `pagehide` so they survive navigation.
+Deciding server-side keeps the arm list where it belongs (with the
+experiment owner) and avoids shipping it to the browser. See
+`ai_sorting`'s Views sort plugin for the canonical pattern and
+`VariantSelectorBase` in this module for a reusable base class.
+
+There is deliberately no client-side decide API. Client-side decides
+would force runtime JS to know the current arm set, which drifts out of
+sync as experiment managers add or remove variants.
+
+## JavaScript API (`Drupal.rl`)
+
+Attach the `rl/api` library to make `Drupal.rl` available. It is a thin
+transport proxy that coalesces every impression and conversion fired on
+the page into one batched POST to `rl.php`, so N experiments on the same
+page produce just one or two tracking requests instead of one pair per
+experiment.
+
+```javascript
+// Record an impression when the variant becomes visible.
+Drupal.rl.turn('hero_cta', 'v0');
+
+// Record a conversion when the user clicks / submits / converts.
+Drupal.rl.reward('hero_cta', 'v0');
+
+// Optional: force an immediate flush.
+Drupal.rl.flush();
+```
+
+Events accumulate for 500 ms and then flush in a single POST. Buffered
+events are also flushed via `navigator.sendBeacon` on `visibilitychange`
+and `pagehide` so they survive navigation.
+
+`Drupal.rl` is one transport among several. Modules that already ship
+their own tracking JS (like `ai_sorting`, which batches turns on its own
+100 ms window and posts them as form data) keep working untouched.
 
 ## HTTP API (`rl.php`)
 
-`rl.php` is the low-level HTTP endpoint. It is reachable directly from any client that can make an HTTP POST, not only in-browser Drupal pages. Native mobile apps, server-side workers, other CMSes, and edge functions can record turns and rewards or request Thompson Sampling decisions against the same experiments used by in-browser code.
+`rl.php` is the low-level endpoint. It is reachable directly from any
+client that can make an HTTP POST - browser pages, native mobile apps,
+server-side workers, other CMSes, edge functions. Deciding is *not*
+exposed here: it happens in PHP at render time as shown above.
 
-The JavaScript `Drupal.rl` described above is a thin batching proxy that speaks this exact protocol, so the two paths converge on the same data.
+Four actions are supported. All are additive - adding `batch` did not
+deprecate the legacy form actions, and `ai_sorting` and other production
+consumers keep using them unchanged.
 
-### Endpoint
+| Action | Encoding | Purpose |
+| --- | --- | --- |
+| `ping` | form POST | Liveness check. Returns `pong`. |
+| `turn` | form POST | Record one impression. |
+| `turns` | form POST | Record impressions for many arms in one experiment. |
+| `reward` | form POST | Record one conversion. |
+| `batch` | JSON POST | Record turns and rewards across many experiments in one request. Used by `Drupal.rl`. |
 
+Experiment IDs and arm IDs must match `^[a-zA-Z0-9_-]+$`. Experiments
+must already be registered via `ExperimentRegistryInterface::register()`;
+unknown IDs are silently dropped so garbage writes cannot create
+registry entries.
+
+### Legacy form actions
+
+```bash
+# Turn
+curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=turn&experiment_id=hero_cta&arm_id=v0'
+
+# Multiple arms in one experiment
+curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=turns&experiment_id=hero_cta&arm_ids=v0,v1'
+
+# Reward
+curl -X POST https://example.com/modules/contrib/rl/rl.php \
+  -d 'action=reward&experiment_id=hero_cta&arm_id=v0'
 ```
-POST {base_url}/modules/contrib/rl/{rl_module_path}/rl.php?action={action}
-```
 
-Two actions are supported:
-
-- `action=ping` - liveness check. Returns `pong` with HTTP 200. No body, no database touch, no Drupal bootstrap. Used by the built-in `hook_requirements()` probe.
-- `action=batch` - the real work: zero or more decide / turn / reward events in a single JSON body.
-
-The endpoint requires no authentication. All experiment IDs and arm IDs must already be registered in the `rl_experiment_registry` table (normally via a module's `__construct()` calling `ExperimentRegistryInterface::register()`) - unknown IDs are silently ignored so garbage writes cannot create arbitrary registry entries.
-
-### `action=batch` request
+### `action=batch`
 
 ```
 POST /modules/contrib/rl/rl.php?action=batch
 Content-Type: application/json
 
 {
-  "decides": [
-    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
-    {"id": "page_title_123", "arms": ["v0", "v1"]}
-  ],
   "turns": [
-    {"id": "menu_main_5", "arm": "v1"},
-    {"id": "hero_cta", "arm": "v0"}
+    {"id": "hero_cta", "arm": "v0"},
+    {"id": "menu_main_5", "arm": "v1"}
   ],
   "rewards": [
     {"id": "hero_cta", "arm": "v0"}
@@ -272,79 +322,38 @@ Content-Type: application/json
 }
 ```
 
-All three sections are optional. A request with just `turns` is the fastest way to log an impression from outside the browser.
+Both sections are optional. Invalid or unregistered entries are dropped
+silently so one bad event does not poison the rest of the batch. The
+response is `{"ok":true}` with HTTP 200; writes are fire-and-forget.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `decides[].id` | string | Registered experiment id. `^[a-zA-Z0-9_-]+$`. |
-| `decides[].arms` | string[] | Arm ids in play. Minimum 2. Each must match `^[a-zA-Z0-9_-]+$`. |
-| `turns[].id` | string | Registered experiment id. |
-| `turns[].arm` | string | Arm id of the variant that was shown. |
-| `rewards[].id` | string | Registered experiment id. |
-| `rewards[].arm` | string | Arm id of the variant that converted. |
+### Curl examples
 
-Invalid or unregistered entries are dropped silently so one bad event does not poison the rest of the batch. Callers should always supply a local fallback for missing decisions.
+```bash
+# Batch tracking from a server-side job.
+curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
+  -H 'Content-Type: application/json' \
+  -d '{"turns":[{"id":"hero_cta","arm":"v1"}],"rewards":[{"id":"hero_cta","arm":"v1"}]}'
 
-### `action=batch` response
-
+# Liveness probe.
+curl -X POST 'https://example.com/modules/contrib/rl/rl.php' -d 'action=ping'
+# => pong
 ```
-HTTP/1.1 200 OK
-Content-Type: application/json
-Cache-Control: no-store, private, max-age=0
-
-{
-  "decisions": {
-    "hero_cta": {"armId": "v1"},
-    "page_title_123": {"armId": "v0"}
-  }
-}
-```
-
-The `decisions` map only contains entries that had a successful Thompson Sampling lookup. If the client requested a decide for an experiment that is not registered, or has fewer than two arms, or has no data yet, the key is simply absent - treat that as "use the default variant". The map is keyed by experiment id and the value is `{"armId": "<winning arm>"}`.
-
-Turns and rewards produce no response payload beyond the HTTP 200 - they are fire-and-forget writes.
 
 ### Error responses
 
 | Status | When |
 | --- | --- |
-| `400` | Missing/invalid `action`, malformed JSON, or empty body. Response body is either `Invalid action` or `{"decisions":{}}`. |
+| `400` | Missing/invalid `action`, malformed JSON, or missing `experiment_id` on a legacy action. |
 | `500` | Drupal kernel failed to boot. Error logged to the PHP error log. |
-
-### Curl examples
-
-Impression from a server-side job:
-
-```bash
-curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
-  -H 'Content-Type: application/json' \
-  -d '{"turns":[{"id":"hero_cta","arm":"v1"}]}'
-```
-
-Decision lookup from a native mobile client:
-
-```bash
-curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
-  -H 'Content-Type: application/json' \
-  -d '{"decides":[{"id":"hero_cta","arms":["v0","v1","v2"]}]}'
-```
-
-Response:
-
-```json
-{"decisions":{"hero_cta":{"armId":"v1"}}}
-```
-
-Liveness probe:
-
-```bash
-curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=ping'
-# => pong
-```
 
 ### Performance notes
 
-`rl.php` bootstraps a minimal Drupal kernel per request (same pattern as core's `statistics.php`), not the full stack that would run behind a normal route. One kernel boot processes the whole batch, so the cheapest way to use this endpoint is to send as many events as possible in one request. `Drupal.rl` already does this on the browser side; non-browser callers should coalesce events similarly when they can.
+`rl.php` bootstraps a minimal Drupal kernel per request (same pattern as
+core's `statistics.php`), not the full stack that would run behind a
+normal route. One kernel boot processes the whole batch, so the cheapest
+way to use this endpoint is to send as many events as possible in one
+request. `Drupal.rl` already does this on the browser side; non-browser
+callers should coalesce events similarly when they can.
 
 ## Cache Management
 
