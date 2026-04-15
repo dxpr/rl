@@ -184,6 +184,14 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 
 <p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>
 
+<h3>FAQ</h3>
+
+<h4>Why isn't the RL module the single source of truth for arms?</h4>
+
+<p>Because arm lists live in consumer-owned domain objects: the result set of a View, the variants stored on an entity, the slots in a builder component, the keys of a button-text array in a block plugin. Duplicating those into an RL-side registry would either force every consumer onto a lowest-common-denominator shape or create drift every time a manager adds or removes a variant.</p>
+
+<p>RL is deliberately arm-agnostic instead. Each consumer hands its current arm list to <code>getThompsonScores()</code> (in PHP) or <code>Drupal.rl.decide()</code> (in JS) at call time, and RL seeds zero-stat priors on the fly for arms it has not seen yet. Add a variant anywhere in the consumer's own config and it is automatically in play on the next render, with no RL-side migration.</p>
+
 <h3>Resources</h3>
 <ul>
   <li><a href="https://everyday-data-science.tigyog.app/a-b-testing" target="_blank" rel="noopener">Free Micro-Course on Thompson Sampling</a></li>
