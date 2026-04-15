@@ -200,14 +200,12 @@ function rl_page_title_page_attachments(array &$attachments) {
     return;
   }
 
-  $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
-  $base_path = \Drupal::request()->getBasePath();
-
+  // The rl.php endpoint URL comes from drupalSettings.rl.endpointUrl,
+  // published by rl_page_attachments() whenever the rl/api library is loaded.
   $attachments['#attached']['library'][] = 'rl_page_title/tracking';
   $attachments['#attached']['drupalSettings']['rlPageTitle'] = [
     'experimentId' => $result['experiment_id'],
     'armId' => $result['arm_id'],
-    'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
   ];
 }
 

@@ -2,18 +2,27 @@
 
 namespace Drupal\rl_example_frontend\Plugin\Block;
 
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Block\BlockBase;
-use Drupal\Core\Extension\ModuleExtensionList;
 use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
+use Drupal\rl\Service\CacheManager;
+use Drupal\rl\Service\ExperimentManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\MessageCommand;
 
 /**
- * Provides a newsletter signup block with frontend A/B tested button text.
+ * Provides a newsletter signup block with A/B tested button text.
+ *
+ * Companion to the rl_example block. Both decide the winning variant
+ * server-side and track turns / rewards through the Drupal.rl JS API.
+ * The distinction is how conversions are recorded:
+ *   - rl_example records the reward in a Drupal AJAX submit callback,
+ *     which round-trips through a full Drupal request.
+ *   - rl_example_frontend records the reward with Drupal.rl.reward() from
+ *     a click handler, which goes through the thin rl.php endpoint and
+ *     does not block the submit flow.
  *
  * @Block(
  *   id = "rl_example_frontend_newsletter",
@@ -21,6 +30,13 @@ use Drupal\Core\Ajax\MessageCommand;
  * )
  */
 class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterface {
+
+  /**
+   * The RL experiment manager.
+   *
+   * @var \Drupal\rl\Service\ExperimentManagerInterface
+   */
+  protected $experimentManager;
 
   /**
    * The RL experiment registry.
@@ -37,18 +53,11 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
   protected $messenger;
 
   /**
-   * The module extension list service.
+   * The RL cache manager.
    *
-   * @var \Drupal\Core\Extension\ModuleExtensionList
+   * @var \Drupal\rl\Service\CacheManager
    */
-  protected $moduleExtensionList;
-
-  /**
-   * The request stack service.
-   *
-   * @var \Symfony\Component\HttpFoundation\RequestStack
-   */
-  protected $requestStack;
+  protected $cacheManager;
 
   /**
    * The experiment ID.
@@ -70,36 +79,21 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
 
   /**
    * Constructs a NewsletterBlock object.
-   *
-   * @param array $configuration
-   *   A configuration array containing information about the plugin instance.
-   * @param string $plugin_id
-   *   The plugin ID for the plugin instance.
-   * @param mixed $plugin_definition
-   *   The plugin implementation definition.
-   * @param \Drupal\rl\Registry\ExperimentRegistryInterface $experiment_registry
-   *   The RL experiment registry.
-   * @param \Drupal\Core\Messenger\MessengerInterface $messenger
-   *   The messenger service.
-   * @param \Drupal\Core\Extension\ModuleExtensionList $module_extension_list
-   *   The module extension list service.
-   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
-   *   The request stack service.
    */
   public function __construct(
     array $configuration,
     $plugin_id,
     $plugin_definition,
+    ExperimentManagerInterface $experiment_manager,
     ExperimentRegistryInterface $experiment_registry,
     MessengerInterface $messenger,
-    ModuleExtensionList $module_extension_list,
-    RequestStack $request_stack,
+    CacheManager $cache_manager,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
+    $this->experimentManager = $experiment_manager;
     $this->experimentRegistry = $experiment_registry;
     $this->messenger = $messenger;
-    $this->moduleExtensionList = $module_extension_list;
-    $this->requestStack = $request_stack;
+    $this->cacheManager = $cache_manager;
 
     // Use deterministic ID for this specific experiment.
     $this->experimentId = 'rl_example_frontend-newsletter_button';
@@ -121,10 +115,10 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
       $configuration,
       $plugin_id,
       $plugin_definition,
+      $container->get('rl.experiment_manager'),
       $container->get('rl.experiment_registry'),
       $container->get('messenger'),
-      $container->get('extension.list.module'),
-      $container->get('request_stack')
+      $container->get('rl.cache_manager'),
     );
   }
 
@@ -132,7 +126,17 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
    * {@inheritdoc}
    */
   public function build() {
-    // Build minimal form with fixed button text - JavaScript will override it.
+    // Decide which variant to render in PHP. The arm list is owned right
+    // here in the block config so the rl core never needs to know it.
+    $scores = $this->experimentManager->getThompsonScores(
+      $this->experimentId,
+      NULL,
+      array_keys($this->buttonTexts)
+    );
+    arsort($scores);
+    $best_id = key($scores);
+    $button_text = $this->buttonTexts[$best_id];
+
     $form = [
       '#type' => 'form',
       '#attributes' => ['class' => ['rl-example-frontend-newsletter-form']],
@@ -144,27 +148,24 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
       '#required' => TRUE,
     ];
 
-    // Fixed button text that JavaScript will replace.
     $form['submit'] = [
       '#type' => 'submit',
-    // Default fallback text.
-      '#value' => 'Subscribe',
+      '#value' => $button_text,
       '#ajax' => [
         'callback' => [$this, 'submitCallback'],
       ],
     ];
 
-    // Build correct endpoint URL for rl.php.
-    $rl_path = $this->moduleExtensionList->getPath('rl');
-    $base_path = $this->requestStack->getCurrentRequest()->getBasePath();
-
-    // Attach JavaScript library and settings for frontend A/B testing.
+    // Tell the tracking JS which arm was picked. The rl.php endpoint URL
+    // comes from drupalSettings.rl.endpointUrl, published by
+    // rl_page_attachments() whenever the rl/api library is loaded.
     $form['#attached']['library'][] = 'rl_example_frontend/frontend_ab_testing';
     $form['#attached']['drupalSettings']['rlExampleFrontend'] = [
       'experimentId' => $this->experimentId,
-      'buttonTexts' => $this->buttonTexts,
-      'rlEndpointUrl' => "{$base_path}/{$rl_path}/rl.php",
+      'armId' => $best_id,
     ];
+
+    $this->cacheManager->overridePageCacheIfShorter($this->getCacheMaxAge());
 
     return $form;
   }
@@ -173,13 +174,22 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
    * AJAX callback for form submission.
    */
   public function submitCallback(array &$form, $form_state) {
-    // Note: Reward tracking is handled by JavaScript in this frontend example.
-    // The JavaScript sends the reward signal directly to rl.php.
-    // Create AJAX response with success message.
+    // Reward tracking is handled by Drupal.rl.reward() from the JS click
+    // handler, not here.
     $response = new AjaxResponse();
     $response->addCommand(new MessageCommand($this->t('Thanks for subscribing!')));
 
     return $response;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    // Short cache lifetime so the server-rendered button text can change
+    // as Thompson Sampling scores evolve. 60 seconds trades off learning
+    // speed against server load.
+    return 60;
   }
 
 }

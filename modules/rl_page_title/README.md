@@ -64,8 +64,9 @@ analytics. This matches how Redirect handles multilingual.
 4. `js/title-tracking.js` records a turn (impression) on page load and a
    reward 10 seconds later (a bounce-rate proxy: if the user is still on the
    page after 10 seconds, the variant kept them).
-5. Both events are POSTed via `navigator.sendBeacon()` to `rl.php`, the
-   parent RL module's tracking endpoint.
+5. Both events are dispatched through `Drupal.rl` (the shared transport
+   proxy in `rl/api`), which batches them with any other RL calls on the
+   page before POSTing to `rl.php`.
 
 ### UX flows
 

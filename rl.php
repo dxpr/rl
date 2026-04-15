@@ -2,34 +2,72 @@
 
 /**
  * @file
- * Handles RL experiment tracking via AJAX with minimal bootstrap.
+ * Handles RL experiment tracking via a minimal Drupal bootstrap.
  *
  * Following the statistics.php architecture for optimal performance.
- * Updated for Drupal 10/11 compatibility.
+ *
+ * Four actions are supported:
+ *   - ping: liveness check, no experiment touched.
+ *   - turn / turns / reward: legacy form-POST tracking used by
+ *     production consumers (ai_sorting, and any third-party JS that was
+ *     written before Drupal.rl shipped). These remain fully supported.
+ *   - batch: JSON POST body used by Drupal.rl on the client side. Carries
+ *     multiple turn and reward events for potentially several experiments
+ *     in a single request. See the docblock on handle_batch_request()
+ *     below for the payload shape.
+ *
+ * Deciding which variant to show is an application concern that belongs in
+ * PHP at render time (see ai_sorting's Views sort plugin, or
+ * VariantSelectorBase in this module). rl.php intentionally does not
+ * expose a client-side decide endpoint.
  */
 
 use Drupal\Core\DrupalKernel;
 use Symfony\Component\HttpFoundation\Request;
 
-$action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-$experiment_id = filter_input(INPUT_POST, 'experiment_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-$arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+// The action can arrive in the query string (Drupal.rl batch requests) or
+// as a form field (legacy consumers + ping).
+$action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS)
+  ?: filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-// Ping action is read-only and doesn't require experiment_id.
+// Ping is a cheap liveness check used by hook_requirements() to verify
+// the web server serves rl.php directly. No Drupal bootstrap needed.
 if ($action === 'ping') {
   http_response_code(200);
   exit('pong');
 }
 
-if (!$action || !$experiment_id || !in_array($action, ['turn', 'turns', 'reward'])) {
-  http_response_code(400);
-  exit('Invalid request parameters');
-}
+$experiment_id = NULL;
+$arm_id = NULL;
+$payload = NULL;
 
-// Validate experiment ID format (alphanumeric, hyphens, underscores).
-if (!preg_match('/^[a-zA-Z0-9_-]+$/', $experiment_id)) {
+if ($action === 'batch') {
+  // Read and decode the JSON body before bootstrapping Drupal so malformed
+  // requests cost nothing.
+  $raw_body = file_get_contents('php://input');
+  if ($raw_body === FALSE || $raw_body === '') {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    exit('{"error":"empty body"}');
+  }
+  $payload = json_decode($raw_body, TRUE);
+  if (!is_array($payload)) {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    exit('{"error":"invalid json"}');
+  }
+}
+elseif (in_array($action, ['turn', 'turns', 'reward'], TRUE)) {
+  $experiment_id = filter_input(INPUT_POST, 'experiment_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+  $arm_id = filter_input(INPUT_POST, 'arm_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+  if (!$experiment_id || !preg_match('/^[a-zA-Z0-9_-]+$/', $experiment_id)) {
+    http_response_code(400);
+    exit('Invalid experiment_id');
+  }
+}
+else {
   http_response_code(400);
-  exit('Invalid experiment_id format');
+  exit('Invalid action');
 }
 
 try {
@@ -63,12 +101,21 @@ try {
   $container = $kernel->getContainer();
 
   $registry = $container->get('rl.experiment_registry');
+  $storage = $container->get('rl.experiment_data_storage');
+  $manager = $container->has('rl.experiment_manager') ? $container->get('rl.experiment_manager') : NULL;
+
+  if ($action === 'batch') {
+    $decisions = handle_batch_request($payload, $registry, $storage, $manager);
+    http_response_code(200);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, private, max-age=0');
+    echo json_encode(['ok' => TRUE, 'decisions' => $decisions]);
+    exit;
+  }
+
   if (!$registry->isRegistered($experiment_id)) {
     exit();
   }
-
-  $storage = $container->get('rl.experiment_data_storage');
-
 
   switch ($action) {
     case 'turn':
@@ -80,8 +127,7 @@ try {
     case 'turns':
       $arm_ids = filter_input(INPUT_POST, 'arm_ids', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
       if ($arm_ids) {
-        $arm_ids_array = explode(',', $arm_ids);
-        $arm_ids_array = array_map('trim', $arm_ids_array);
+        $arm_ids_array = array_map('trim', explode(',', $arm_ids));
 
         $valid_arm_ids = [];
         foreach ($arm_ids_array as $aid) {
@@ -110,4 +156,136 @@ catch (\Exception $e) {
   error_log('RL endpoint error: ' . $e->getMessage());
   http_response_code(500);
   exit('Server error');
+}
+
+/**
+ * Process a Drupal.rl batch payload.
+ *
+ * Expected JSON shape (all three sections are optional):
+ * @code
+ * {
+ *   "decides": [
+ *     {"id": "<experiment_id>", "arms": ["<arm>", "<arm>", ...]},
+ *     ...
+ *   ],
+ *   "turns":   [{"id": "<experiment_id>", "arm": "<arm>"}, ...],
+ *   "rewards": [{"id": "<experiment_id>", "arm": "<arm>"}, ...]
+ * }
+ * @endcode
+ *
+ * Decides resolve to Thompson Sampling winners and are returned keyed
+ * by experiment id:
+ * @code
+ * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
+ * @endcode
+ *
+ * Unknown or malformed entries are silently skipped so one bad event
+ * does not poison the rest of the batch. Callers that receive no
+ * decision for a given experiment should fall back to the first arm
+ * they passed in.
+ *
+ * @param array $payload
+ *   The decoded JSON body.
+ * @param \Drupal\rl\Registry\ExperimentRegistryInterface $registry
+ *   The experiment registry used to validate experiment ids.
+ * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
+ *   The experiment data storage used to persist turns and rewards.
+ * @param \Drupal\rl\Service\ExperimentManagerInterface|null $manager
+ *   The experiment manager used to compute Thompson Sampling scores.
+ *   May be NULL if the service is unavailable, in which case no
+ *   decisions are produced.
+ *
+ * @return object
+ *   A stdClass keyed by experiment id. Empty object if no decides were
+ *   requested or resolved. Uses stdClass so json_encode emits `{}`
+ *   instead of `[]` when the map is empty.
+ */
+function handle_batch_request(array $payload, $registry, $storage, $manager = NULL): \stdClass {
+  $id_pattern = '/^[a-zA-Z0-9_-]+$/';
+  $decisions = new \stdClass();
+
+  if ($manager !== NULL && isset($payload['decides']) && is_array($payload['decides'])) {
+    foreach ($payload['decides'] as $decide) {
+      if (!is_array($decide)) {
+        continue;
+      }
+      $eid = isset($decide['id']) ? (string) $decide['id'] : '';
+      if ($eid === '' || !preg_match($id_pattern, $eid)) {
+        continue;
+      }
+      if (!$registry->isRegistered($eid)) {
+        continue;
+      }
+      $arms = $decide['arms'] ?? [];
+      if (!is_array($arms) || count($arms) < 2) {
+        continue;
+      }
+      $arm_ids = [];
+      $valid = TRUE;
+      foreach ($arms as $arm) {
+        $arm_id = (string) $arm;
+        if ($arm_id === '' || !preg_match($id_pattern, $arm_id)) {
+          $valid = FALSE;
+          break;
+        }
+        $arm_ids[] = $arm_id;
+      }
+      if (!$valid) {
+        continue;
+      }
+      try {
+        $scores = $manager->getThompsonScores($eid, NULL, $arm_ids);
+      }
+      catch (\Throwable $e) {
+        continue;
+      }
+      if (!is_array($scores) || !$scores) {
+        continue;
+      }
+      arsort($scores);
+      $decisions->{$eid} = ['armId' => (string) key($scores)];
+    }
+  }
+
+  if (isset($payload['turns']) && is_array($payload['turns'])) {
+    foreach ($payload['turns'] as $turn) {
+      if (!is_array($turn)) {
+        continue;
+      }
+      $eid = isset($turn['id']) ? (string) $turn['id'] : '';
+      $aid = isset($turn['arm']) ? (string) $turn['arm'] : '';
+      if ($eid === '' || $aid === '') {
+        continue;
+      }
+      if (!preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
+        continue;
+      }
+      if (!$registry->isRegistered($eid)) {
+        continue;
+      }
+      $storage->recordTurn($eid, $aid);
+    }
+  }
+
+  if (isset($payload['rewards']) && is_array($payload['rewards'])) {
+    foreach ($payload['rewards'] as $reward) {
+      if (!is_array($reward)) {
+        continue;
+      }
+      $eid = isset($reward['id']) ? (string) $reward['id'] : '';
+      $aid = isset($reward['arm']) ? (string) $reward['arm'] : '';
+      if ($eid === '' || $aid === '') {
+        continue;
+      }
+      if (!preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
+        continue;
+      }
+      if (!$registry->isRegistered($eid)) {
+        continue;
+      }
+      $storage->recordReward($eid, $aid);
+    }
+  }
+
+  return $decisions;
 }

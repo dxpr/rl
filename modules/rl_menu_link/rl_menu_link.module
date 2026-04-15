@@ -50,12 +50,10 @@ function rl_menu_link_preprocess_menu(array &$variables) {
   $variables['#cache']['tags'][] = 'rl_menu_link:all';
 
   if (!empty($touched_plugin_ids)) {
-    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
-    $base_path = \Drupal::request()->getBasePath();
+    // The rl.php endpoint URL comes from drupalSettings.rl.endpointUrl,
+    // published by rl_page_attachments() whenever the rl/api library is
+    // loaded.
     $variables['#attached']['library'][] = 'rl_menu_link/tracking';
-    $variables['#attached']['drupalSettings']['rlMenuLink'] = [
-      'rlEndpointUrl' => $base_path . '/' . $rl_path . '/rl.php',
-    ];
     // Add per-plugin-id tags so each experiment can invalidate the menus
     // that contain its specific link.
     foreach ($touched_plugin_ids as $plugin_id) {

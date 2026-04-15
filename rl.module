@@ -48,6 +48,13 @@ function rl_page_attachments(array &$attachments) {
   if (\Drupal::currentUser()->hasPermission('view rl reports')) {
     $attachments['#attached']['library'][] = 'rl/experiment-highlight';
   }
+
+  // Publish the rl.php endpoint URL to drupalSettings so any page that
+  // attaches the rl/api library can use Drupal.rl without each consumer
+  // module recomputing the URL.
+  $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
+  $base_path = \Drupal::request()->getBasePath();
+  $attachments['#attached']['drupalSettings']['rl']['endpointUrl'] = $base_path . '/' . $rl_path . '/rl.php';
 }
 
 /**
