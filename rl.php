@@ -27,7 +27,8 @@ use Symfony\Component\HttpFoundation\Request;
 
 // The action can arrive in the query string (Drupal.rl batch requests) or
 // as a form field (legacy consumers + ping).
-$action = $_GET['action'] ?? filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS)
+  ?: filter_input(INPUT_POST, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
 // Ping is a cheap liveness check used by hook_requirements() to verify
 // the web server serves rl.php directly. No Drupal bootstrap needed.
@@ -173,7 +174,9 @@ catch (\Exception $e) {
  * @param array $payload
  *   The decoded JSON body.
  * @param \Drupal\rl\Registry\ExperimentRegistryInterface $registry
+ *   The experiment registry used to validate experiment ids.
  * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
+ *   The experiment data storage used to persist turns and rewards.
  */
 function handle_batch_request(array $payload, $registry, $storage): void {
   $id_pattern = '/^[a-zA-Z0-9_-]+$/';
