@@ -232,14 +232,119 @@ Drupal.rl.reward('hero_cta', 'v0');
 
 Decides flush on the next tick so every module that registers during `Drupal.behaviors.attach` shares one request. Turns and rewards flush in a 500 ms window, and buffered events are flushed via `navigator.sendBeacon` on `visibilitychange` / `pagehide` so they survive navigation.
 
-### rl.php endpoint
+## HTTP API (`rl.php`)
 
-`rl.php` is the low-level HTTP endpoint `Drupal.rl` talks to. It accepts two actions:
+`rl.php` is the low-level HTTP endpoint. It is reachable directly from any client that can make an HTTP POST, not only in-browser Drupal pages. Native mobile apps, server-side workers, other CMSes, and edge functions can record turns and rewards or request Thompson Sampling decisions against the same experiments used by in-browser code.
 
-- `action=ping` - liveness check used by `hook_requirements()`.
-- `action=batch` - JSON body used by `Drupal.rl`. See `js/rl.js` for the payload shape.
+The JavaScript `Drupal.rl` described above is a thin batching proxy that speaks this exact protocol, so the two paths converge on the same data.
 
-Direct consumption of `action=batch` without going through `Drupal.rl` is not recommended.
+### Endpoint
+
+```
+POST {base_url}/modules/contrib/rl/{rl_module_path}/rl.php?action={action}
+```
+
+Two actions are supported:
+
+- `action=ping` - liveness check. Returns `pong` with HTTP 200. No body, no database touch, no Drupal bootstrap. Used by the built-in `hook_requirements()` probe.
+- `action=batch` - the real work: zero or more decide / turn / reward events in a single JSON body.
+
+The endpoint requires no authentication. All experiment IDs and arm IDs must already be registered in the `rl_experiment_registry` table (normally via a module's `__construct()` calling `ExperimentRegistryInterface::register()`) - unknown IDs are silently ignored so garbage writes cannot create arbitrary registry entries.
+
+### `action=batch` request
+
+```
+POST /modules/contrib/rl/rl.php?action=batch
+Content-Type: application/json
+
+{
+  "decides": [
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
+    {"id": "page_title_123", "arms": ["v0", "v1"]}
+  ],
+  "turns": [
+    {"id": "menu_main_5", "arm": "v1"},
+    {"id": "hero_cta", "arm": "v0"}
+  ],
+  "rewards": [
+    {"id": "hero_cta", "arm": "v0"}
+  ]
+}
+```
+
+All three sections are optional. A request with just `turns` is the fastest way to log an impression from outside the browser.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `decides[].id` | string | Registered experiment id. `^[a-zA-Z0-9_-]+$`. |
+| `decides[].arms` | string[] | Arm ids in play. Minimum 2. Each must match `^[a-zA-Z0-9_-]+$`. |
+| `turns[].id` | string | Registered experiment id. |
+| `turns[].arm` | string | Arm id of the variant that was shown. |
+| `rewards[].id` | string | Registered experiment id. |
+| `rewards[].arm` | string | Arm id of the variant that converted. |
+
+Invalid or unregistered entries are dropped silently so one bad event does not poison the rest of the batch. Callers should always supply a local fallback for missing decisions.
+
+### `action=batch` response
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+Cache-Control: no-store, private, max-age=0
+
+{
+  "decisions": {
+    "hero_cta": {"armId": "v1"},
+    "page_title_123": {"armId": "v0"}
+  }
+}
+```
+
+The `decisions` map only contains entries that had a successful Thompson Sampling lookup. If the client requested a decide for an experiment that is not registered, or has fewer than two arms, or has no data yet, the key is simply absent - treat that as "use the default variant". The map is keyed by experiment id and the value is `{"armId": "<winning arm>"}`.
+
+Turns and rewards produce no response payload beyond the HTTP 200 - they are fire-and-forget writes.
+
+### Error responses
+
+| Status | When |
+| --- | --- |
+| `400` | Missing/invalid `action`, malformed JSON, or empty body. Response body is either `Invalid action` or `{"decisions":{}}`. |
+| `500` | Drupal kernel failed to boot. Error logged to the PHP error log. |
+
+### Curl examples
+
+Impression from a server-side job:
+
+```bash
+curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
+  -H 'Content-Type: application/json' \
+  -d '{"turns":[{"id":"hero_cta","arm":"v1"}]}'
+```
+
+Decision lookup from a native mobile client:
+
+```bash
+curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=batch' \
+  -H 'Content-Type: application/json' \
+  -d '{"decides":[{"id":"hero_cta","arms":["v0","v1","v2"]}]}'
+```
+
+Response:
+
+```json
+{"decisions":{"hero_cta":{"armId":"v1"}}}
+```
+
+Liveness probe:
+
+```bash
+curl -X POST 'https://example.com/modules/contrib/rl/rl.php?action=ping'
+# => pong
+```
+
+### Performance notes
+
+`rl.php` bootstraps a minimal Drupal kernel per request (same pattern as core's `statistics.php`), not the full stack that would run behind a normal route. One kernel boot processes the whole batch, so the cheapest way to use this endpoint is to send as many events as possible in one request. `Drupal.rl` already does this on the browser side; non-browser callers should coalesce events similarly when they can.
 
 ## Cache Management
 
