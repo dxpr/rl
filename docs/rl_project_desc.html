@@ -186,11 +186,11 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 
 <h3>FAQ</h3>
 
-<h4>Why doesn't RL store my experiment's variants?</h4>
+<h4>Does RL store my experiment's variants?</h4>
 
-<p><strong>Your module already does.</strong> RL asks for the current variant list on every decision, so it can never drift out of sync with your module's own UI.</p>
+<p><strong>It stores their performance data, not the authoritative list.</strong> Every variant that has received traffic has its own row in <code>rl_arm_data</code> with turn and reward counts. But "which variants are currently in play for experiment X" is owned by your module, not RL.</p>
 
-<p>Different modules keep variants in different places:</p>
+<p>Different modules keep the live variant list in different places:</p>
 
 <ul>
   <li><strong>ai_sorting</strong> — the content returned by a View</li>
@@ -199,7 +199,7 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
   <li><strong>DXPR Builder</strong> — slots inside a block component</li>
 </ul>
 
-<p>If RL stored them too, every variant edit would need a second save to stay in sync. Instead, your module passes its current list on each call — <code>getThompsonScores($id, NULL, $arms)</code> in PHP, or <code>Drupal.rl.decide(id, arms)</code> in JS. Add a variant in the module's UI and it is live on the next page render.</p>
+<p>On each call, your module passes its current list — <code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS — and RL matches it against the stored stats to pick a winner. A newly added variant is automatically in play on the next render, and a removed one stops appearing. No second save step can fall out of sync with your module's UI.</p>
 
 <h3>Resources</h3>
 <ul>
