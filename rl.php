@@ -102,13 +102,14 @@ try {
 
   $registry = $container->get('rl.experiment_registry');
   $storage = $container->get('rl.experiment_data_storage');
+  $manager = $container->has('rl.experiment_manager') ? $container->get('rl.experiment_manager') : NULL;
 
   if ($action === 'batch') {
-    handle_batch_request($payload, $registry, $storage);
+    $decisions = handle_batch_request($payload, $registry, $storage, $manager);
     http_response_code(200);
     header('Content-Type: application/json');
     header('Cache-Control: no-store, private, max-age=0');
-    echo '{"ok":true}';
+    echo json_encode(['ok' => TRUE, 'decisions' => $decisions]);
     exit;
   }
 
@@ -160,16 +161,28 @@ catch (\Exception $e) {
 /**
  * Process a Drupal.rl batch payload.
  *
- * Expected JSON shape (both sections are optional):
+ * Expected JSON shape (all three sections are optional):
  * @code
  * {
- *   "turns":   [{"id": "<experiment_id>", "arm": "v0"}, ...],
- *   "rewards": [{"id": "<experiment_id>", "arm": "v1"}, ...]
+ *   "decides": [
+ *     {"id": "<experiment_id>", "arms": ["<arm>", "<arm>", ...]},
+ *     ...
+ *   ],
+ *   "turns":   [{"id": "<experiment_id>", "arm": "<arm>"}, ...],
+ *   "rewards": [{"id": "<experiment_id>", "arm": "<arm>"}, ...]
  * }
  * @endcode
  *
- * Unknown or malformed entries are silently skipped so one bad event does
- * not poison the rest of the batch.
+ * Decides resolve to Thompson Sampling winners and are returned keyed
+ * by experiment id:
+ * @code
+ * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
+ * @endcode
+ *
+ * Unknown or malformed entries are silently skipped so one bad event
+ * does not poison the rest of the batch. Callers that receive no
+ * decision for a given experiment should fall back to the first arm
+ * they passed in.
  *
  * @param array $payload
  *   The decoded JSON body.
@@ -177,9 +190,62 @@ catch (\Exception $e) {
  *   The experiment registry used to validate experiment ids.
  * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
  *   The experiment data storage used to persist turns and rewards.
+ * @param \Drupal\rl\Service\ExperimentManagerInterface|null $manager
+ *   The experiment manager used to compute Thompson Sampling scores.
+ *   May be NULL if the service is unavailable, in which case no
+ *   decisions are produced.
+ *
+ * @return object
+ *   A stdClass keyed by experiment id. Empty object if no decides were
+ *   requested or resolved. Uses stdClass so json_encode emits `{}`
+ *   instead of `[]` when the map is empty.
  */
-function handle_batch_request(array $payload, $registry, $storage): void {
+function handle_batch_request(array $payload, $registry, $storage, $manager = NULL): \stdClass {
   $id_pattern = '/^[a-zA-Z0-9_-]+$/';
+  $decisions = new \stdClass();
+
+  if ($manager !== NULL && isset($payload['decides']) && is_array($payload['decides'])) {
+    foreach ($payload['decides'] as $decide) {
+      if (!is_array($decide)) {
+        continue;
+      }
+      $eid = isset($decide['id']) ? (string) $decide['id'] : '';
+      if ($eid === '' || !preg_match($id_pattern, $eid)) {
+        continue;
+      }
+      if (!$registry->isRegistered($eid)) {
+        continue;
+      }
+      $arms = $decide['arms'] ?? [];
+      if (!is_array($arms) || count($arms) < 2) {
+        continue;
+      }
+      $arm_ids = [];
+      $valid = TRUE;
+      foreach ($arms as $arm) {
+        $arm_id = (string) $arm;
+        if ($arm_id === '' || !preg_match($id_pattern, $arm_id)) {
+          $valid = FALSE;
+          break;
+        }
+        $arm_ids[] = $arm_id;
+      }
+      if (!$valid) {
+        continue;
+      }
+      try {
+        $scores = $manager->getThompsonScores($eid, NULL, $arm_ids);
+      }
+      catch (\Throwable $e) {
+        continue;
+      }
+      if (!is_array($scores) || !$scores) {
+        continue;
+      }
+      arsort($scores);
+      $decisions->{$eid} = ['armId' => (string) key($scores)];
+    }
+  }
 
   if (isset($payload['turns']) && is_array($payload['turns'])) {
     foreach ($payload['turns'] as $turn) {
@@ -220,4 +286,6 @@ function handle_batch_request(array $payload, $registry, $storage): void {
       $storage->recordReward($eid, $aid);
     }
   }
+
+  return $decisions;
 }

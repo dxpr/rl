@@ -149,7 +149,9 @@ $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 
 <h3>Deciding which variant to show</h3>
 
-<p>Pick the winning variant in PHP at render time. Your consumer already has the full arm set in hand (entity fields, view filters, plugin config), so it can call the RL service directly:</p>
+<h4>Server-side (preferred)</h4>
+
+<p>Pick the winning variant in PHP at render time whenever you can. Your consumer already has the full arm set in hand (entity fields, view filters, plugin config), so it can call the RL service directly:</p>
 
 <pre><code>$scores = $experiment_manager->getThompsonScores(
   'my_experiment',
@@ -159,11 +161,15 @@ $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 arsort($scores);
 $best_arm = key($scores);</code></pre>
 
-<p>Deciding server-side keeps the arm list where it belongs (with the experiment owner) and avoids shipping it to the browser. See <code>ai_sorting</code>'s Views sort plugin for the canonical pattern and <code>VariantSelectorBase</code> in this module for a reusable base class. There is deliberately no client-side decide API.</p>
+<p>Deciding server-side keeps the arm list where it belongs (with the experiment owner) and avoids a network round trip on every page load. See <code>ai_sorting</code>'s Views sort plugin for the canonical pattern and <code>VariantSelectorBase</code> in this module for a reusable base class.</p>
+
+<h4>Client-side (cache-friendly path)</h4>
+
+<p>Some consumers have to decide in JS: full-page-cached builders that render all variants into the HTML and swap them on the client so they can keep Varnish / Fastly caching. For that case there is <code>Drupal.rl.decide()</code>, documented below.</p>
 
 <h3>JavaScript API (<code>Drupal.rl</code>)</h3>
 
-<p>Attach the <code>rl/api</code> library to make <code>Drupal.rl</code> available. It is a thin transport proxy that coalesces every impression and conversion fired on the page into one batched POST to <code>rl.php</code>:</p>
+<p>Attach the <code>rl/api</code> library to make <code>Drupal.rl</code> available. It is a thin transport proxy that coalesces every decide, impression, and conversion fired on the page into a single batched POST to <code>rl.php</code>:</p>
 
 <pre><code>// Record an impression when the variant becomes visible.
 Drupal.rl.turn('hero_cta', 'v0');
@@ -171,10 +177,28 @@ Drupal.rl.turn('hero_cta', 'v0');
 // Record a conversion when the user clicks / submits / converts.
 Drupal.rl.reward('hero_cta', 'v0');
 
+// Ask for a decision when the variant needs to be chosen client-side.
+// The arm list MUST be read from the DOM - see discipline below.
+var container = document.querySelector('[data-rl-experiment="hero_cta"]');
+var armIds = container.dataset.rlArms.split(',');
+Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
+  showVariant(armId);
+});
+
 // Optional: force an immediate flush.
 Drupal.rl.flush();</code></pre>
 
-<p>Events accumulate for 500 ms and then flush in a single POST. Buffered events are also flushed via <code>navigator.sendBeacon</code> on <code>visibilitychange</code> and <code>pagehide</code> so they survive navigation.</p>
+<p>Events accumulate for 500 ms and then flush in one POST. Decide, turn, and reward events share the same queue and the same request, so a page with a DXPR Builder variant block plus tracking on other elements ends up making a single round trip. Buffered tracking events are also flushed via <code>navigator.sendBeacon</code> on <code>visibilitychange</code> and <code>pagehide</code> so they survive navigation.</p>
+
+<h4>Discipline for <code>decide()</code></h4>
+
+<blockquote><strong>Never hardcode arm ids in JS. Always read them from a DOM attribute that the server-side renderer emitted.</strong></blockquote>
+
+<p>Rationale: the DOM is downstream of the same server-render pipeline that produced the decide's context. When the experiment manager adds or removes a variant, the consumer's page cache is invalidated, the next render emits the new attribute, and JS picks it up. JS never asserts what the arm set is - it just echoes whatever the current cached HTML says, mirroring ai_sorting's PHP pattern of recomputing <code>$arm_ids</code> from a fresh view query on every render. This keeps <code>Drupal.rl.decide()</code> drift-free without requiring the rl core to store arm lists.</p>
+
+<p>The convention your builder uses internally (numeric <code>v0..vN</code>, UUIDs, node ids, anything matching <code>^[a-zA-Z0-9_-]+$</code>) is whatever you emit into the attribute. The rl core is arm-agnostic.</p>
+
+<p>If the server returns no decision for an experiment (not registered, no data, network error), the returned promise resolves to <code>armIds[0]</code> so callers never need a <code>.catch()</code> for the common path.</p>
 
 <p><code>Drupal.rl</code> is one transport among several. Modules that already ship their own tracking JS (like <code>ai_sorting</code>, which batches turns on its own 100 ms window and posts form data) keep working untouched.</p>
 
@@ -214,6 +238,9 @@ curl -X POST https://example.com/modules/contrib/rl/rl.php \
 Content-Type: application/json
 
 {
+  "decides": [
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]}
+  ],
   "turns": [
     {"id": "hero_cta", "arm": "v0"},
     {"id": "menu_main_5", "arm": "v1"}
@@ -223,7 +250,11 @@ Content-Type: application/json
   ]
 }</code></pre>
 
-<p>Both sections are optional. Invalid or unregistered entries are dropped silently. The response is <code>{"ok":true}</code> with HTTP 200; writes are fire-and-forget.</p>
+<p>All three sections are optional. Invalid or unregistered entries are dropped silently. The response is</p>
+
+<pre><code>{"ok":true,"decisions":{"hero_cta":{"armId":"v1"}}}</code></pre>
+
+<p><code>decisions</code> contains only entries that had a successful Thompson Sampling lookup. Missing keys mean "use the default variant". Turns and rewards are fire-and-forget writes with no per-event response.</p>
 
 <p><strong>Performance note:</strong> <code>rl.php</code> bootstraps a minimal Drupal kernel per request (same pattern as core's <code>statistics.php</code>). One boot processes the whole batch, so non-browser callers should coalesce events into a single request whenever they can.</p>
 

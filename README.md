@@ -215,9 +215,11 @@ $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 
 ## Deciding which variant to show
 
-Pick the winning variant in PHP at render time. Your consumer already
-has the full arm set in hand (entity fields, view filters, plugin
-config, etc.), so it can call the RL service directly:
+### Server-side (preferred)
+
+Pick the winning variant in PHP at render time whenever you can. Your
+consumer already has the full arm set in hand (entity fields, view
+filters, plugin config), so it can call the RL service directly:
 
 ```php
 $scores = $experiment_manager->getThompsonScores(
@@ -230,21 +232,24 @@ $best_arm = key($scores);
 ```
 
 Deciding server-side keeps the arm list where it belongs (with the
-experiment owner) and avoids shipping it to the browser. See
-`ai_sorting`'s Views sort plugin for the canonical pattern and
+experiment owner) and avoids a network round trip on every page load.
+See `ai_sorting`'s Views sort plugin for the canonical pattern and
 `VariantSelectorBase` in this module for a reusable base class.
 
-There is deliberately no client-side decide API. Client-side decides
-would force runtime JS to know the current arm set, which drifts out of
-sync as experiment managers add or remove variants.
+### Client-side (cache-friendly path)
+
+Some consumers have to decide in JS: full-page-cached builders that
+render all variants into the HTML and swap them on the client so they
+can keep Varnish/Fastly caching. For that case there is
+`Drupal.rl.decide()`, documented below.
 
 ## JavaScript API (`Drupal.rl`)
 
 Attach the `rl/api` library to make `Drupal.rl` available. It is a thin
-transport proxy that coalesces every impression and conversion fired on
-the page into one batched POST to `rl.php`, so N experiments on the same
-page produce just one or two tracking requests instead of one pair per
-experiment.
+transport proxy that coalesces every decide, impression, and conversion
+fired on the page into a single batched POST to `rl.php`, so N
+experiments on the same page produce one or two requests instead of one
+set per experiment.
 
 ```javascript
 // Record an impression when the variant becomes visible.
@@ -253,17 +258,51 @@ Drupal.rl.turn('hero_cta', 'v0');
 // Record a conversion when the user clicks / submits / converts.
 Drupal.rl.reward('hero_cta', 'v0');
 
+// Ask for a decision when the variant needs to be chosen client-side.
+// The arm list MUST be read from the DOM - see discipline below.
+var container = document.querySelector('[data-rl-experiment="hero_cta"]');
+var armIds = container.dataset.rlArms.split(',');
+Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
+  showVariant(armId);
+});
+
 // Optional: force an immediate flush.
 Drupal.rl.flush();
 ```
 
-Events accumulate for 500 ms and then flush in a single POST. Buffered
-events are also flushed via `navigator.sendBeacon` on `visibilitychange`
-and `pagehide` so they survive navigation.
+Events accumulate for 500 ms and then flush in one POST. Decide,
+turn, and reward events share the same queue and the same request, so
+a page with a DXPR Builder variant block plus tracking on other
+elements ends up making a single round trip. Buffered tracking events
+are also flushed via `navigator.sendBeacon` on `visibilitychange` and
+`pagehide` so they survive navigation.
+
+### Discipline for `decide()`
+
+> **Never hardcode arm ids in JS. Always read them from a DOM
+> attribute that the server-side renderer emitted.**
+
+Rationale: the DOM is downstream of the same server-render pipeline
+that produced the decide's context. When the experiment manager adds
+or removes a variant, the consumer's page cache is invalidated, the
+next render emits the new attribute, and JS picks it up. JS never
+asserts what the arm set is - it just echoes whatever the current
+cached HTML says, mirroring ai_sorting's PHP pattern of recomputing
+`$arm_ids` from a fresh view query on every render. This keeps
+`Drupal.rl.decide()` drift-free without requiring the rl core to
+store arm lists.
+
+The convention your builder uses internally (numeric `v0..vN`, UUIDs,
+node ids, anything matching `^[a-zA-Z0-9_-]+$`) is whatever you emit
+into the attribute. The rl core is arm-agnostic.
+
+If the server returns no decision for an experiment (not registered,
+no data, network error), the returned promise resolves to `armIds[0]`
+so callers never need a `.catch()` for the common path.
 
 `Drupal.rl` is one transport among several. Modules that already ship
-their own tracking JS (like `ai_sorting`, which batches turns on its own
-100 ms window and posts them as form data) keep working untouched.
+their own tracking JS (like `ai_sorting`, which batches turns on its
+own 100 ms window and posts them as form data) keep working untouched.
 
 ## HTTP API (`rl.php`)
 
@@ -312,6 +351,9 @@ POST /modules/contrib/rl/rl.php?action=batch
 Content-Type: application/json
 
 {
+  "decides": [
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]}
+  ],
   "turns": [
     {"id": "hero_cta", "arm": "v0"},
     {"id": "menu_main_5", "arm": "v1"}
@@ -322,9 +364,17 @@ Content-Type: application/json
 }
 ```
 
-Both sections are optional. Invalid or unregistered entries are dropped
-silently so one bad event does not poison the rest of the batch. The
-response is `{"ok":true}` with HTTP 200; writes are fire-and-forget.
+All three sections are optional. Invalid or unregistered entries are
+dropped silently so one bad event does not poison the rest of the
+batch. The response is
+
+```json
+{"ok":true,"decisions":{"hero_cta":{"armId":"v1"}}}
+```
+
+`decisions` contains only entries that had a successful Thompson
+Sampling lookup. Missing keys mean "use the default variant". Turns
+and rewards are fire-and-forget writes with no per-event response.
 
 ### Curl examples
 
