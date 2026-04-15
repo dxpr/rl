@@ -2,15 +2,13 @@
 
 namespace Drupal\rl_example_frontend\Plugin\Block;
 
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Block\BlockBase;
-use Drupal\Core\Extension\ModuleExtensionList;
 use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\MessageCommand;
 
 /**
  * Provides a newsletter signup block with frontend A/B tested button text.
@@ -37,20 +35,6 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
   protected $messenger;
 
   /**
-   * The module extension list service.
-   *
-   * @var \Drupal\Core\Extension\ModuleExtensionList
-   */
-  protected $moduleExtensionList;
-
-  /**
-   * The request stack service.
-   *
-   * @var \Symfony\Component\HttpFoundation\RequestStack
-   */
-  protected $requestStack;
-
-  /**
    * The experiment ID.
    *
    * @var string
@@ -70,21 +54,6 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
 
   /**
    * Constructs a NewsletterBlock object.
-   *
-   * @param array $configuration
-   *   A configuration array containing information about the plugin instance.
-   * @param string $plugin_id
-   *   The plugin ID for the plugin instance.
-   * @param mixed $plugin_definition
-   *   The plugin implementation definition.
-   * @param \Drupal\rl\Registry\ExperimentRegistryInterface $experiment_registry
-   *   The RL experiment registry.
-   * @param \Drupal\Core\Messenger\MessengerInterface $messenger
-   *   The messenger service.
-   * @param \Drupal\Core\Extension\ModuleExtensionList $module_extension_list
-   *   The module extension list service.
-   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
-   *   The request stack service.
    */
   public function __construct(
     array $configuration,
@@ -92,14 +61,10 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
     $plugin_definition,
     ExperimentRegistryInterface $experiment_registry,
     MessengerInterface $messenger,
-    ModuleExtensionList $module_extension_list,
-    RequestStack $request_stack,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->experimentRegistry = $experiment_registry;
     $this->messenger = $messenger;
-    $this->moduleExtensionList = $module_extension_list;
-    $this->requestStack = $request_stack;
 
     // Use deterministic ID for this specific experiment.
     $this->experimentId = 'rl_example_frontend-newsletter_button';
@@ -123,8 +88,6 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
       $plugin_definition,
       $container->get('rl.experiment_registry'),
       $container->get('messenger'),
-      $container->get('extension.list.module'),
-      $container->get('request_stack')
     );
   }
 
@@ -154,16 +117,13 @@ class NewsletterBlock extends BlockBase implements ContainerFactoryPluginInterfa
       ],
     ];
 
-    // Build correct endpoint URL for rl.php.
-    $rl_path = $this->moduleExtensionList->getPath('rl');
-    $base_path = $this->requestStack->getCurrentRequest()->getBasePath();
-
-    // Attach JavaScript library and settings for frontend A/B testing.
+    // Attach JavaScript library and settings for frontend A/B testing. The
+    // rl.php endpoint URL comes from drupalSettings.rl.endpointUrl, which
+    // rl_page_attachments() publishes when the rl/api library is loaded.
     $form['#attached']['library'][] = 'rl_example_frontend/frontend_ab_testing';
     $form['#attached']['drupalSettings']['rlExampleFrontend'] = [
       'experimentId' => $this->experimentId,
       'buttonTexts' => $this->buttonTexts,
-      'rlEndpointUrl' => "{$base_path}/{$rl_path}/rl.php",
     ];
 
     return $form;

@@ -62,7 +62,7 @@ drush en rl</code></pre>
 <h4>Verify rl.php Access</h4>
 <p>The RL module includes a <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:</p>
 
-<pre><code>curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" http://example.com/modules/contrib/rl/rl.php</code></pre>
+<pre><code>curl -X POST -d "action=ping" http://example.com/modules/contrib/rl/rl.php</code></pre>
 
 <p><strong>If the test fails:</strong></p>
 <ul>
@@ -147,24 +147,22 @@ $cache_manager = \Drupal::service('rl.cache_manager');
 $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 </code></pre>
 
-<h3>HTTP Endpoints</h3>
+<h3>JavaScript API</h3>
 
-<h4>rl.php - Direct Endpoint (Recommended)</h4>
-<p><strong>Use the direct rl.php endpoint for optimal performance:</strong></p>
+<p>Attach the <code>rl/api</code> library to make <code>Drupal.rl</code> available on the page. It exposes a thin transport layer that coalesces every RL call on the page into a single batched POST to <code>rl.php</code>:</p>
 
-<pre><code>// Record turns (trials) - when content is viewed
-const formData = new FormData();
-formData.append('action', 'turns');
-formData.append('experiment_uuid', 'abc123');
-formData.append('arm_ids', '1,2,3');
-navigator.sendBeacon('/modules/contrib/rl/rl.php', formData);
+<pre><code>// Ask for a Thompson Sampling decision - resolves to the winning arm id.
+Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
+  renderVariant(armId);
+});
 
-// Record reward (success) - when user clicks/converts  
-const rewardData = new FormData();
-rewardData.append('action', 'rewards');
-rewardData.append('experiment_uuid', 'abc123');
-rewardData.append('arm_id', '1');
-navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);</code></pre>
+// Record an impression.
+Drupal.rl.turn('hero_cta', 'v0');
+
+// Record a conversion.
+Drupal.rl.reward('hero_cta', 'v0');</code></pre>
+
+<p>Decides flush on the next tick so all modules that register during <code>Drupal.behaviors.attach</code> share one request. Turns and rewards flush in a 500 ms window and on <code>pagehide</code> via <code>navigator.sendBeacon</code>.</p>
 
 <h3>Cache Management</h3>
 

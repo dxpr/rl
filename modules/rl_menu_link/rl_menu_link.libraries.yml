@@ -5,3 +5,4 @@ tracking:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - rl/api

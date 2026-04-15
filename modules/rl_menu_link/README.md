@@ -58,7 +58,9 @@ Same model as the Redirect module.
    listener to record a reward when the user clicks. Each visit and each
    click is its own event - there is no per-session cap, so repeat
    visitors do not depress the conversion signal.
-4. Both events are POSTed via `navigator.sendBeacon()` to `rl.php`.
+4. Both events are dispatched through `Drupal.rl` (the shared transport
+   proxy in `rl/api`), which batches them with any other RL calls on the
+   page before POSTing to `rl.php`.
 
 ### UX flows
 

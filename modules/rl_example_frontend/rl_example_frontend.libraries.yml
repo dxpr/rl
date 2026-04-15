@@ -3,4 +3,6 @@ frontend_ab_testing:
     js/frontend-ab-testing.js: {}
   dependencies:
     - core/drupal
+    - core/drupalSettings
     - core/once
+    - rl/api

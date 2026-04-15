@@ -213,26 +213,33 @@ $cache_manager = \Drupal::service('rl.cache_manager');
 $cache_manager->overridePageCacheIfShorter(60); // 60 seconds
 ```
 
-## HTTP Endpoints
+## JavaScript API
 
-### rl.php - Direct Endpoint (Recommended)
-**Use the direct rl.php endpoint for optimal performance:**
+Attach the `rl/api` library to make `Drupal.rl` available. It is a thin transport proxy that coalesces every RL call on the page into a single batched POST to `rl.php`, so N experiments on the same page produce ~2 requests regardless of how many modules are tracking.
 
 ```javascript
-// Record turns (trials) - when content is viewed
-const formData = new FormData();
-formData.append('action', 'turns');
-formData.append('experiment_id', 'abc123');
-formData.append('arm_ids', '1,2,3');
-navigator.sendBeacon('/modules/contrib/rl/rl.php', formData);
+// Ask for a Thompson Sampling decision - resolves to the winning arm id.
+Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
+  renderVariant(armId);
+});
 
-// Record reward (success) - when user clicks/converts  
-const rewardData = new FormData();
-rewardData.append('action', 'rewards');
-rewardData.append('experiment_id', 'abc123');
-rewardData.append('arm_id', '1');
-navigator.sendBeacon('/modules/contrib/rl/rl.php', rewardData);
+// Record an impression.
+Drupal.rl.turn('hero_cta', 'v0');
+
+// Record a conversion.
+Drupal.rl.reward('hero_cta', 'v0');
 ```
+
+Decides flush on the next tick so every module that registers during `Drupal.behaviors.attach` shares one request. Turns and rewards flush in a 500 ms window, and buffered events are flushed via `navigator.sendBeacon` on `visibilitychange` / `pagehide` so they survive navigation.
+
+### rl.php endpoint
+
+`rl.php` is the low-level HTTP endpoint `Drupal.rl` talks to. It accepts two actions:
+
+- `action=ping` - liveness check used by `hook_requirements()`.
+- `action=batch` - JSON body used by `Drupal.rl`. See `js/rl.js` for the payload shape.
+
+Direct consumption of `action=batch` without going through `Drupal.rl` is not recommended.
 
 ## Cache Management
 
