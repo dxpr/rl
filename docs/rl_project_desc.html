@@ -186,11 +186,20 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 
 <h3>FAQ</h3>
 
-<h4>Why isn't the RL module the single source of truth for arms?</h4>
+<h4>Why doesn't RL store my experiment's variants?</h4>
 
-<p>Because arm lists live in consumer-owned domain objects: the result set of a View, the variants stored on an entity, the slots in a builder component, the keys of a button-text array in a block plugin. Duplicating those into an RL-side registry would either force every consumer onto a lowest-common-denominator shape or create drift every time a manager adds or removes a variant.</p>
+<p><strong>Your module already does.</strong> RL asks for the current variant list on every decision, so it can never drift out of sync with your module's own UI.</p>
 
-<p>RL is deliberately arm-agnostic instead. Each consumer hands its current arm list to <code>getThompsonScores()</code> (in PHP) or <code>Drupal.rl.decide()</code> (in JS) at call time, and RL seeds zero-stat priors on the fly for arms it has not seen yet. Add a variant anywhere in the consumer's own config and it is automatically in play on the next render, with no RL-side migration.</p>
+<p>Different modules keep variants in different places:</p>
+
+<ul>
+  <li><strong>ai_sorting</strong> — the content returned by a View</li>
+  <li><strong>rl_page_title</strong> — fields on a content entity</li>
+  <li><strong>rl_menu_link</strong> — labels in a menu link</li>
+  <li><strong>DXPR Builder</strong> — slots inside a block component</li>
+</ul>
+
+<p>If RL stored them too, every variant edit would need a second save to stay in sync. Instead, your module passes its current list on each call — <code>getThompsonScores($id, NULL, $arms)</code> in PHP, or <code>Drupal.rl.decide(id, arms)</code> in JS. Add a variant in the module's UI and it is live on the next page render.</p>
 
 <h3>Resources</h3>
 <ul>
