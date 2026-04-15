@@ -201,6 +201,19 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 
 <p>On each call, your module passes its current list — <code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS — and RL matches it against the stored stats to pick a winner. A newly added variant is automatically in play on the next render, and a removed one stops appearing. No second save step can fall out of sync with your module's UI.</p>
 
+<h4>When do I pick a winner and end an experiment?</h4>
+
+<p><strong>Only when you want to.</strong> Thompson Sampling has no fixed horizon and no significance gate to wait out. It just shifts traffic to whatever variant is winning right now, and keeps adapting as evidence changes.</p>
+
+<p>Two patterns, depending on what you are testing:</p>
+
+<ul>
+  <li><strong>Converging tests</strong> — a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on to the next test.</li>
+  <li><strong>Evergreen experiments</strong> — blog post lists where reader interest drifts week to week, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. Thompson Sampling will follow the winner as it shifts.</li>
+</ul>
+
+<p>In both cases the loser of a pair just stops receiving traffic on its own, so there is no urgency to declare a winner by hand. If you are used to fixed-horizon A/B tools, this is the biggest mental shift: there is no "test complete" flag to chase.</p>
+
 <h3>Resources</h3>
 <ul>
   <li><a href="https://everyday-data-science.tigyog.app/a-b-testing" target="_blank" rel="noopener">Free Micro-Course on Thompson Sampling</a></li>
