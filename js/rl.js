@@ -155,18 +155,49 @@
       credentials: 'same-origin',
       keepalive: true,
     }).then(function (response) {
-      if (!response.ok) {
+      // rl.php returns 422 when every entry in a non-empty batch was
+      // rejected (unknown experiment, invalid ids, manager
+      // unavailable). Read the JSON body anyway so the errors array
+      // reaches the console — without this, a site-wide mistake like
+      // "registry cache missed the new hook so no experiment rows
+      // exist" looks identical to a healthy empty batch and the
+      // operator has nothing to grep for in devtools. Other non-2xx
+      // statuses (4xx malformed, 5xx bootstrap failure) have no
+      // useful body, so fall back.
+      if (!response.ok && response.status !== 422) {
         fallbackDecides(snapshot);
         return null;
       }
       return response.json();
     }).then(function (json) {
       if (json) {
+        reportErrors(json.errors);
         resolveDecides(snapshot, json.decisions || {});
       }
     }).catch(function () {
       fallbackDecides(snapshot);
     });
+  }
+
+  // Surface rl.php's per-entry errors on the console so mis-registered
+  // experiments become visible in devtools instead of silently falling
+  // back to armIds[0]. Runtimes that need richer handling can stub
+  // window.Drupal.rl.onErrors; by default we only warn.
+  function reportErrors(errors) {
+    if (!Array.isArray(errors) || !errors.length) {
+      return;
+    }
+    if (typeof Drupal.rl.onErrors === 'function') {
+      try { Drupal.rl.onErrors(errors); } catch (e) { /* never let a listener poison the next flush */ }
+    }
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      errors.forEach(function (err) {
+        if (!err || typeof err !== 'object') { return; }
+        console.warn(
+          '[rl] ' + (err.kind || 'entry') + ' for ' + (err.id || '(no id)') + ' rejected: ' + (err.reason || 'unknown')
+        );
+      });
+    }
   }
 
   function flushBeacon() {
