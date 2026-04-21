@@ -147,6 +147,7 @@ class ReportsController extends ControllerBase {
       $this->t('Impressions'),
       $this->t('Conversions'),
       $this->t('Variants'),
+      $this->t('Created'),
       $this->t('Last Activity'),
     ];
 
@@ -184,6 +185,10 @@ class ReportsController extends ControllerBase {
             ? $this->dateFormatter->format($last_activity_timestamp, 'short')
             : $this->t('Never');
 
+      $created = $experiment->registered_at > 0
+            ? $this->dateFormatter->format($experiment->registered_at, 'short')
+            : $this->t('Never');
+
       // Use experiment name from registry or fallback to experiment ID.
       $experiment_name = $experiment->experiment_name ?: $experiment->experiment_id;
 
@@ -194,6 +199,7 @@ class ReportsController extends ControllerBase {
         $experiment->total_turns ?: 0,
         $total_rewards,
         $arms_count,
+        $created,
         $last_activity,
       ];
     }
