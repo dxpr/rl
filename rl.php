@@ -106,13 +106,8 @@ try {
 
   if ($action === 'batch') {
     $result = handle_batch_request($payload, $registry, $storage, $manager);
-    // Status code reflects whether the batch produced any real work.
-    // A non-empty batch whose every entry was rejected (all unknown
-    // experiments, all invalid arm ids, etc.) comes back as 422
-    // Unprocessable Entity so the client can log + alert. Empty or
-    // partially successful batches stay 200 — partial success is the
-    // normal case when one container is stale mid-deploy and other
-    // containers on the page are fine.
+    // 422 only when every entry was rejected, so a stale container
+    // mid-deploy (partial success) still gets a 200 with errors[].
     $status = ($result['requested'] > 0 && $result['succeeded'] === 0) ? 422 : 200;
     http_response_code($status);
     header('Content-Type: application/json');
@@ -194,36 +189,29 @@ catch (\Exception $e) {
  * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
  * @endcode
  *
- * Rejected entries are reported in the returned `errors` list with a
- * machine-readable reason ("unknown_experiment", "invalid_arm_id",
- * "missing_arms", "invalid_id", "scoring_failed", "malformed_entry").
- * The caller decides the HTTP status: a batch where every entry was
- * rejected is 422; partial failures stay 200 with an `errors` array
- * so a stale container on one page does not poison decides for
- * healthy containers sharing the same request.
+ * Rejected entries are recorded in `errors` with a machine-readable
+ * `reason` (unknown_experiment, invalid_arm_id, missing_arms,
+ * invalid_id, scoring_failed, manager_unavailable, malformed_entry).
+ * The caller compares `requested` vs `succeeded` to pick the HTTP
+ * status.
  *
  * @param array $payload
  *   The decoded JSON body.
  * @param \Drupal\rl\Registry\ExperimentRegistryInterface $registry
- *   The experiment registry used to validate experiment ids.
+ *   Used to validate experiment ids.
  * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
- *   The experiment data storage used to persist turns and rewards.
+ *   Used to persist turns and rewards.
  * @param \Drupal\rl\Service\ExperimentManagerInterface|null $manager
- *   The experiment manager used to compute Thompson Sampling scores.
- *   May be NULL if the service is unavailable, in which case every
- *   decide entry is reported as a "manager_unavailable" error.
+ *   Computes Thompson Sampling scores. NULL marks every decide as
+ *   "manager_unavailable".
  *
  * @return array{
  *   decisions: \stdClass,
  *   errors: array<int, array{kind: string, id: string, reason: string}>,
  *   requested: int,
  *   succeeded: int,
- * }
- *   `decisions` is a stdClass keyed by experiment id so json_encode
- *   emits `{}` for an empty map. `requested` counts every non-empty
- *   entry seen across decides/turns/rewards; `succeeded` counts the
- *   ones that actually did useful work. The caller uses the two
- *   counters to pick a status code.
+ *   }
+ *   `decisions` is a stdClass so json_encode emits `{}` when empty.
  */
 function handle_batch_request(array $payload, $registry, $storage, $manager = NULL): array {
   $id_pattern = '/^[a-zA-Z0-9_-]+$/';
