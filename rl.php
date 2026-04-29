@@ -105,11 +105,21 @@ try {
   $manager = $container->has('rl.experiment_manager') ? $container->get('rl.experiment_manager') : NULL;
 
   if ($action === 'batch') {
-    $decisions = handle_batch_request($payload, $registry, $storage, $manager);
-    http_response_code(200);
+    $result = handle_batch_request($payload, $registry, $storage, $manager);
+    // 422 only when every entry was rejected, so a stale container
+    // mid-deploy (partial success) still gets a 200 with errors[].
+    $status = ($result['requested'] > 0 && $result['succeeded'] === 0) ? 422 : 200;
+    http_response_code($status);
     header('Content-Type: application/json');
     header('Cache-Control: no-store, private, max-age=0');
-    echo json_encode(['ok' => TRUE, 'decisions' => $decisions]);
+    $body = [
+      'ok' => $status === 200,
+      'decisions' => $result['decisions'],
+    ];
+    if (!empty($result['errors'])) {
+      $body['errors'] = $result['errors'];
+    }
+    echo json_encode($body);
     exit;
   }
 
@@ -179,45 +189,62 @@ catch (\Exception $e) {
  * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
  * @endcode
  *
- * Unknown or malformed entries are silently skipped so one bad event
- * does not poison the rest of the batch. Callers that receive no
- * decision for a given experiment should fall back to the first arm
- * they passed in.
+ * Rejected entries are recorded in `errors` with a machine-readable
+ * `reason` (unknown_experiment, invalid_arm_id, missing_arms,
+ * invalid_id, scoring_failed, manager_unavailable, malformed_entry).
+ * The caller compares `requested` vs `succeeded` to pick the HTTP
+ * status.
  *
  * @param array $payload
  *   The decoded JSON body.
  * @param \Drupal\rl\Registry\ExperimentRegistryInterface $registry
- *   The experiment registry used to validate experiment ids.
+ *   Used to validate experiment ids.
  * @param \Drupal\rl\Storage\ExperimentDataStorageInterface $storage
- *   The experiment data storage used to persist turns and rewards.
+ *   Used to persist turns and rewards.
  * @param \Drupal\rl\Service\ExperimentManagerInterface|null $manager
- *   The experiment manager used to compute Thompson Sampling scores.
- *   May be NULL if the service is unavailable, in which case no
- *   decisions are produced.
+ *   Computes Thompson Sampling scores. NULL marks every decide as
+ *   "manager_unavailable".
  *
- * @return object
- *   A stdClass keyed by experiment id. Empty object if no decides were
- *   requested or resolved. Uses stdClass so json_encode emits `{}`
- *   instead of `[]` when the map is empty.
+ * @return array{
+ *   decisions: \stdClass,
+ *   errors: array<int, array{kind: string, id: string, reason: string}>,
+ *   requested: int,
+ *   succeeded: int,
+ *   }
+ *   `decisions` is a stdClass so json_encode emits `{}` when empty.
  */
-function handle_batch_request(array $payload, $registry, $storage, $manager = NULL): \stdClass {
+function handle_batch_request(array $payload, $registry, $storage, $manager = NULL): array {
   $id_pattern = '/^[a-zA-Z0-9_-]+$/';
   $decisions = new \stdClass();
+  $errors = [];
+  $requested = 0;
+  $succeeded = 0;
 
-  if ($manager !== NULL && isset($payload['decides']) && is_array($payload['decides'])) {
+  if (isset($payload['decides']) && is_array($payload['decides'])) {
     foreach ($payload['decides'] as $decide) {
       if (!is_array($decide)) {
+        $requested++;
+        $errors[] = ['kind' => 'decide', 'id' => '', 'reason' => 'malformed_entry'];
         continue;
       }
       $eid = isset($decide['id']) ? (string) $decide['id'] : '';
       if ($eid === '' || !preg_match($id_pattern, $eid)) {
+        $requested++;
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'invalid_id'];
+        continue;
+      }
+      $requested++;
+      if ($manager === NULL) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'manager_unavailable'];
         continue;
       }
       if (!$registry->isRegistered($eid)) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'unknown_experiment'];
         continue;
       }
       $arms = $decide['arms'] ?? [];
       if (!is_array($arms) || count($arms) < 2) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'missing_arms'];
         continue;
       }
       $arm_ids = [];
@@ -231,61 +258,78 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
         $arm_ids[] = $arm_id;
       }
       if (!$valid) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'invalid_arm_id'];
         continue;
       }
       try {
         $scores = $manager->getThompsonScores($eid, NULL, $arm_ids);
       }
       catch (\Throwable $e) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'scoring_failed'];
         continue;
       }
       if (!is_array($scores) || !$scores) {
+        $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'scoring_failed'];
         continue;
       }
       arsort($scores);
       $decisions->{$eid} = ['armId' => (string) key($scores)];
+      $succeeded++;
     }
   }
 
   if (isset($payload['turns']) && is_array($payload['turns'])) {
     foreach ($payload['turns'] as $turn) {
       if (!is_array($turn)) {
+        $requested++;
+        $errors[] = ['kind' => 'turn', 'id' => '', 'reason' => 'malformed_entry'];
         continue;
       }
       $eid = isset($turn['id']) ? (string) $turn['id'] : '';
       $aid = isset($turn['arm']) ? (string) $turn['arm'] : '';
-      if ($eid === '' || $aid === '') {
+      if ($eid === '' || $aid === '' || !preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
+        $requested++;
+        $errors[] = ['kind' => 'turn', 'id' => $eid, 'reason' => 'invalid_id'];
         continue;
       }
-      if (!preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
-        continue;
-      }
+      $requested++;
       if (!$registry->isRegistered($eid)) {
+        $errors[] = ['kind' => 'turn', 'id' => $eid, 'reason' => 'unknown_experiment'];
         continue;
       }
       $storage->recordTurn($eid, $aid);
+      $succeeded++;
     }
   }
 
   if (isset($payload['rewards']) && is_array($payload['rewards'])) {
     foreach ($payload['rewards'] as $reward) {
       if (!is_array($reward)) {
+        $requested++;
+        $errors[] = ['kind' => 'reward', 'id' => '', 'reason' => 'malformed_entry'];
         continue;
       }
       $eid = isset($reward['id']) ? (string) $reward['id'] : '';
       $aid = isset($reward['arm']) ? (string) $reward['arm'] : '';
-      if ($eid === '' || $aid === '') {
+      if ($eid === '' || $aid === '' || !preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
+        $requested++;
+        $errors[] = ['kind' => 'reward', 'id' => $eid, 'reason' => 'invalid_id'];
         continue;
       }
-      if (!preg_match($id_pattern, $eid) || !preg_match($id_pattern, $aid)) {
-        continue;
-      }
+      $requested++;
       if (!$registry->isRegistered($eid)) {
+        $errors[] = ['kind' => 'reward', 'id' => $eid, 'reason' => 'unknown_experiment'];
         continue;
       }
       $storage->recordReward($eid, $aid);
+      $succeeded++;
     }
   }
 
-  return $decisions;
+  return [
+    'decisions' => $decisions,
+    'errors' => $errors,
+    'requested' => $requested,
+    'succeeded' => $succeeded,
+  ];
 }
