@@ -1,4 +1,10 @@
-# Reinforcement Learning (RL)
+> **Reinforcement Learning (RL)** brings Thompson Sampling multi-armed bandit A/B testing to Drupal, automatically optimizing content variants based on real user engagement without third-party services. Built by [DXPR](https://dxpr.com).
+>
+> [Getting Started](https://dxpr.com/c/getting-started) |
+> [Pricing](https://dxpr.com/pricing) |
+> [Try Free Demo](https://dxpr.com/try)
+
+# Reinforcement Learning (RL) - Adaptive A/B Testing for Drupal with Thompson Sampling
 
 Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
 efficient A/B testing that minimizes lost conversions.
@@ -424,11 +430,6 @@ RL provides optional cache management for web components:
 - Blocks displaying A/B tested content
 - Components needing frequent RL score updates
 
-## Related Modules
-
-- [AI Sorting](https://www.drupal.org/project/ai_sorting) - Intelligent content
-  ordering for Drupal Views
-
 ## Technical Implementation
 
 Full algorithm details available in source code:
@@ -539,3 +540,13 @@ docker compose --profile lint run --rm drupal-check
 - [Thompson Sampling Paper](https://www.jstor.org/stable/2332286) - Original research
 - [Finite-time Analysis](https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf) -
   Mathematical foundations
+
+---
+
+## Related Modules
+
+- [RL Sorting](https://www.drupal.org/project/rl_sorting) - Views sort plugin that uses RL Thompson Sampling to order content by real engagement
+- **RL Page Title** (bundled submodule) - A/B test page titles on any path, including nodes, Views displays, and custom controllers
+- **RL Menu Link** (bundled submodule) - A/B test menu link labels for menu_link_content entities and YAML-defined links
+- [Analyze](https://www.drupal.org/project/analyze) - Content analysis and quality scoring for Drupal
+- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy) - AI-driven content strategy recommendations for Drupal
