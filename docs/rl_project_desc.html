@@ -1,3 +1,5 @@
+<p><strong>Part of the <a href="https://dxpr.com">DXPR</a> ecosystem</strong>: the AI-powered no-code platform for Drupal. <a href="https://dxpr.com/try">Try free</a> | <a href="https://dxpr.com/docs">Documentation</a></p>
+
 <p>This module is included in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
 
 <blockquote>The <strong>Reinforcement Learning (RL)</strong> module implements A/B testing in the most efficient and effective way possible, minizing lost conversions using machine learning.</blockquote>
@@ -5,7 +7,7 @@
 
 <p><strong>Thompson Sampling</strong> is a learning-while-doing method. Each time a visitor lands on your site the algorithm "rolls the dice" based on what it has learned so far. Variants that have performed well roll larger numbers, so they are shown more often, while weak copies still get a small chance to prove themselves. This simple trick means the system can discover winners very quickly without stopping normal traffic.</p>
 
-<p>Traditional A/B tests run for a fixed horizon—say two weeks—during which half your visitors keep seeing the weaker version. Thompson Sampling avoids this waste. As soon as the algorithm has even a little evidence it quietly shifts most traffic to the better variant, saving conversions and shortening the wait for useful insights.</p>
+<p>Traditional A/B tests run for a fixed horizon (say two weeks) during which half your visitors keep seeing the weaker version. Thompson Sampling avoids this waste. As soon as the algorithm has even a little evidence it quietly shifts most traffic to the better variant, saving conversions and shortening the wait for useful insights.</p>
 
 <p>For full details of what goes on behind the curtains check the source code: 
 <a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.
@@ -50,7 +52,7 @@
 
 <div class="note-tip">
   <h4>Prefer a turnkey demo site?</h4>
-  <p>Spin up <strong>DXPR CMS</strong>—Drupal pre-configured with DXPR Builder, DXPR Theme, RL (Reinforcement Learning) module, and security best practices.</p>
+  <p>Spin up <strong>DXPR CMS</strong>, Drupal pre-configured with DXPR Builder, DXPR Theme, RL (Reinforcement Learning) module, and security best practices.</p>
   <p><a href="https://www.drupal.org/project/dxpr_cms" title="DXPR CMS platform">Get DXPR CMS »</a></p>
 </div>
 
@@ -193,13 +195,13 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 <p>Different modules keep the live variant list in different places:</p>
 
 <ul>
-  <li><strong>ai_sorting</strong> — the content returned by a View</li>
-  <li><strong>rl_page_title</strong> — fields on a content entity</li>
-  <li><strong>rl_menu_link</strong> — labels in a menu link</li>
-  <li><strong>DXPR Builder</strong> — slots inside a block component</li>
+  <li><strong>ai_sorting</strong>: the content returned by a View</li>
+  <li><strong>rl_page_title</strong>: fields on a content entity</li>
+  <li><strong>rl_menu_link</strong>: labels in a menu link</li>
+  <li><strong>DXPR Builder</strong>: slots inside a block component</li>
 </ul>
 
-<p>On each call, your module passes its current list — <code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS — and RL matches it against the stored stats to pick a winner. A newly added variant is automatically in play on the next render, and a removed one stops appearing. No second save step can fall out of sync with your module's UI.</p>
+<p>On each call, your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner. A newly added variant is automatically in play on the next render, and a removed one stops appearing. No second save step can fall out of sync with your module's UI.</p>
 
 <h4>When do I pick a winner and end an experiment?</h4>
 
@@ -208,11 +210,18 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
 <p>Two patterns, depending on what you are testing:</p>
 
 <ul>
-  <li><strong>Converging tests</strong> — a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on to the next test.</li>
-  <li><strong>Evergreen experiments</strong> — blog post lists where reader interest drifts week to week, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. Thompson Sampling will follow the winner as it shifts.</li>
+  <li><strong>Converging tests</strong>: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on to the next test.</li>
+  <li><strong>Evergreen experiments</strong>: blog post lists where reader interest drifts week to week, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. Thompson Sampling will follow the winner as it shifts.</li>
 </ul>
 
 <p>In both cases the loser of a pair just stops receiving traffic on its own, so there is no urgency to declare a winner by hand. If you are used to fixed-horizon A/B tools, this is the biggest mental shift: there is no "test complete" flag to chase.</p>
+
+<h3>Related DXPR Modules</h3>
+<ul>
+<li><a href="https://www.drupal.org/project/rl_sorting">RL Sorting</a>: Intelligent content ordering for Drupal Views using reinforcement learning</li>
+<li><a href="https://www.drupal.org/project/analyze">Analyze</a>: Content analysis and quality scoring for Drupal</li>
+<li><a href="https://www.drupal.org/project/ai_content_strategy">AI Content Strategy</a>: AI-driven content strategy recommendations for Drupal</li>
+</ul>
 
 <h3>Resources</h3>
 <ul>

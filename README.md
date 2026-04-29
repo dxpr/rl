@@ -1,4 +1,8 @@
-# Reinforcement Learning (RL)
+> Part of [DXPR CMS](https://dxpr.com/c/marketing-cms): The AI-Powered Drupal CMS
+>
+> [Documentation](https://dxpr.com/docs) | [Try Free](https://dxpr.com/try) | [dxpr.com](https://dxpr.com)
+
+# Reinforcement Learning (RL): Adaptive A/B Testing for Drupal with Thompson Sampling
 
 Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
 efficient A/B testing that minimizes lost conversions.
@@ -539,3 +543,11 @@ docker compose --profile lint run --rm drupal-check
 - [Thompson Sampling Paper](https://www.jstor.org/stable/2332286) - Original research
 - [Finite-time Analysis](https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf) -
   Mathematical foundations
+
+---
+
+## Related DXPR Modules
+
+- [RL Sorting](https://www.drupal.org/project/rl_sorting): Intelligent content ordering for Drupal Views using reinforcement learning
+- [Analyze](https://www.drupal.org/project/analyze): Content analysis and quality scoring for Drupal
+- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy): AI-driven content strategy recommendations for Drupal
