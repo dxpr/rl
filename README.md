@@ -430,11 +430,6 @@ RL provides optional cache management for web components:
 - Blocks displaying A/B tested content
 - Components needing frequent RL score updates
 
-## Related Modules
-
-- [AI Sorting](https://www.drupal.org/project/ai_sorting) - Intelligent content
-  ordering for Drupal Views
-
 ## Technical Implementation
 
 Full algorithm details available in source code:
@@ -550,8 +545,8 @@ docker compose --profile lint run --rm drupal-check
 
 ## Related Modules
 
-- [RL Sorting](https://www.drupal.org/project/rl_sorting) - Intelligent content ordering for Drupal Views using reinforcement learning
+- [RL Sorting](https://www.drupal.org/project/rl_sorting) - Views sort plugin that uses RL Thompson Sampling to order content by real engagement
+- **RL Page Title** (bundled submodule) - A/B test page titles on any path, including nodes, Views displays, and custom controllers
+- **RL Menu Link** (bundled submodule) - A/B test menu link labels for menu_link_content entities and YAML-defined links
 - [Analyze](https://www.drupal.org/project/analyze) - Content analysis and quality scoring for Drupal
 - [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy) - AI-driven content strategy recommendations for Drupal
-- [Google Tag](https://www.drupal.org/project/google_tag) - Google Tag Manager integration for Drupal
-- [ECA](https://www.drupal.org/project/eca) - Event-Condition-Action framework for Drupal automation
