@@ -1,8 +1,10 @@
-> Part of [DXPR CMS](https://dxpr.com/c/marketing-cms): The AI-Powered Drupal CMS
+> **Reinforcement Learning (RL)** brings Thompson Sampling multi-armed bandit A/B testing to Drupal, automatically optimizing content variants based on real user engagement without third-party services. Built by [DXPR](https://dxpr.com).
 >
-> [Documentation](https://dxpr.com/docs) | [Try Free](https://dxpr.com/try) | [dxpr.com](https://dxpr.com)
+> [Getting Started](https://dxpr.com/c/getting-started) |
+> [Pricing](https://dxpr.com/pricing) |
+> [Try Free Demo](https://dxpr.com/try)
 
-# Reinforcement Learning (RL): Adaptive A/B Testing for Drupal with Thompson Sampling
+# Reinforcement Learning (RL) - Adaptive A/B Testing for Drupal with Thompson Sampling
 
 Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
 efficient A/B testing that minimizes lost conversions.
@@ -546,8 +548,10 @@ docker compose --profile lint run --rm drupal-check
 
 ---
 
-## Related DXPR Modules
+## Related Modules
 
-- [RL Sorting](https://www.drupal.org/project/rl_sorting): Intelligent content ordering for Drupal Views using reinforcement learning
-- [Analyze](https://www.drupal.org/project/analyze): Content analysis and quality scoring for Drupal
-- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy): AI-driven content strategy recommendations for Drupal
+- [RL Sorting](https://www.drupal.org/project/rl_sorting) - Intelligent content ordering for Drupal Views using reinforcement learning
+- [Analyze](https://www.drupal.org/project/analyze) - Content analysis and quality scoring for Drupal
+- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy) - AI-driven content strategy recommendations for Drupal
+- [Google Tag](https://www.drupal.org/project/google_tag) - Google Tag Manager integration for Drupal
+- [ECA](https://www.drupal.org/project/eca) - Event-Condition-Action framework for Drupal automation
