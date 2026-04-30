@@ -1,4 +1,4 @@
-name: 'Reinforcement Learning Menu Link'
+name: 'RL: A/B Test Menu Links'
 type: module
 description: 'A/B test menu link labels for any menu link using Thompson Sampling. Works for menu_link_content entities and YAML-defined links.'
 core_version_requirement: ^10.3 | ^11

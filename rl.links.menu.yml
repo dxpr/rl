@@ -1,12 +1,12 @@
 rl.reports.experiments:
-  title: 'Reinforcement Learning'
-  description: 'View reinforcement learning experiments and their statistics.'
+  title: 'RL: A/B Testing'
+  description: 'View A/B and multivariate test reports (Thompson Sampling).'
   route_name: rl.reports.experiments
   parent: system.admin_reports
 
 rl.settings:
-  title: 'Reinforcement Learning'
-  description: 'Configure reinforcement learning module settings.'
+  title: 'RL: A/B Testing'
+  description: 'Configure A/B and multivariate testing settings.'
   route_name: rl.settings
   parent: system.admin_config_services
   weight: 10

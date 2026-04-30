@@ -5,7 +5,7 @@ dependencies:
     - rl_menu_link
     - user
 id: rl_menu_link_experiment
-label: 'Reinforcement Learning menu link experiments'
+label: 'RL: A/B Test Menu Links'
 module: views
 description: 'Admin list of menu link experiments.'
 tag: ''
@@ -526,7 +526,7 @@ display:
           expose:
             label: ''
             field_identifier: label
-      title: 'Reinforcement Learning menu link experiments'
+      title: 'RL: A/B Test Menu Links'
       empty:
         area_text_custom:
           id: area_text_custom
@@ -549,7 +549,7 @@ display:
       path: admin/config/services/rl-menu-link
       menu:
         type: 'normal'
-        title: 'Reinforcement Learning menu link experiments'
+        title: 'RL: A/B Test Menu Links'
         description: 'A/B test menu link labels using Thompson Sampling.'
         weight: 0
         expanded: false

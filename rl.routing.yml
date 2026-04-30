@@ -2,7 +2,7 @@ rl.reports.experiments:
   path: '/admin/reports/rl'
   defaults:
     _controller: '\Drupal\rl\Controller\ReportsController::experimentsOverview'
-    _title: 'Reinforcement Learning'
+    _title: 'RL: A/B Testing'
   requirements:
     _permission: 'view rl reports'
 
@@ -45,7 +45,7 @@ rl.settings:
   path: '/admin/config/services/reinforcement-learning'
   defaults:
     _form: '\Drupal\rl\Form\RlSettingsForm'
-    _title: 'Reinforcement Learning'
+    _title: 'RL: A/B Testing'
   requirements:
     _permission: 'administer site configuration'
 

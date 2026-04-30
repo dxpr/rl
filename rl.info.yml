@@ -1,6 +1,6 @@
-name: 'Reinforcement Learning'
+name: 'RL: A/B & Multivariate Testing'
 type: module
-description: 'Core API module for tracking multi-armed bandit experiments using turns and rewards.'
+description: 'A/B and multivariate testing for Drupal using reinforcement learning. Thompson Sampling multi-armed bandit core API.'
 core_version_requirement: ^10.3 | ^11
 package: Custom
 configure: rl.settings

@@ -5,7 +5,7 @@ dependencies:
     - rl_page_title
     - user
 id: rl_page_title_experiment
-label: 'Reinforcement Learning page title experiments'
+label: 'RL: A/B Test Page Titles'
 module: views
 description: 'Admin list of page title experiments.'
 tag: ''
@@ -526,7 +526,7 @@ display:
           expose:
             label: ''
             field_identifier: label
-      title: 'Reinforcement Learning page title experiments'
+      title: 'RL: A/B Test Page Titles'
       empty:
         area_text_custom:
           id: area_text_custom
@@ -549,7 +549,7 @@ display:
       path: admin/config/services/rl-page-title
       menu:
         type: 'normal'
-        title: 'Reinforcement Learning page title experiments'
+        title: 'RL: A/B Test Page Titles'
         description: 'A/B test page titles using Thompson Sampling.'
         weight: 0
         expanded: false
