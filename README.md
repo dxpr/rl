@@ -1,8 +1,8 @@
 > **Reinforcement Learning (RL)** brings Thompson Sampling multi-armed bandit A/B testing to Drupal, automatically optimizing content variants based on real user engagement without third-party services. Built by [DXPR](https://dxpr.com).
 >
-> [Getting Started](https://dxpr.com/c/getting-started) |
+> [Getting Started](https://dxpr.com/c/marketing-cms) |
 > [Pricing](https://dxpr.com/pricing) |
-> [Try Free Demo](https://dxpr.com/try)
+> [Try Free Demo](https://try.dxpr.com)
 
 # Reinforcement Learning (RL) - Adaptive A/B Testing for Drupal with Thompson Sampling
 
