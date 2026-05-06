@@ -44,3 +44,7 @@ services:
   rl.analyzer:
     class: Drupal\rl\Service\RlAnalyzer
     arguments: ['@database', '@entity_type.manager']
+
+  rl.endpoint_checker:
+    class: Drupal\rl\Service\EndpointChecker
+    arguments: ['@state', '@datetime.time', '@extension.list.module', '@http_client', '@request_stack']

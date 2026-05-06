@@ -447,60 +447,18 @@ function rl_requirements($phase) {
       ];
     }
 
-    // Check if rl.php is accessible via HTTP.
-    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
-    $base_url = \Drupal::request()->getSchemeAndHttpHost();
-    $base_path = \Drupal::request()->getBasePath();
-    $rl_endpoint_url = $base_url . $base_path . '/' . $rl_path . '/rl.php';
-
-    try {
-      $client = \Drupal::httpClient();
-      // Use read-only 'ping' action to verify endpoint accessibility
-      // without creating any database entries.
-      $response = $client->post($rl_endpoint_url, [
-        'form_params' => [
-          'action' => 'ping',
-        ],
-        'timeout' => 5,
-        'http_errors' => FALSE,
+    /** @var \Drupal\rl\Service\EndpointChecker $checker */
+    $checker = \Drupal::service('rl.endpoint_checker');
+    $accessible = $checker->isAccessible();
+    $requirements['rl_php_accessibility'] = [
+      'title' => t('RL: rl.php accessibility'),
+      'severity' => $accessible ? REQUIREMENT_OK : REQUIREMENT_ERROR,
+      'value' => $accessible ? t('rl.php is accessible') : t('rl.php is not accessible'),
+    ];
+    if (!$accessible) {
+      $requirements['rl_php_accessibility']['description'] = t('The web server is not serving rl.php. Ensure .htaccess files are being processed (Apache) or rewrite rules are configured (Nginx). See the <a href="@readme" target="_blank">README</a> for configuration instructions.', [
+        '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
       ]);
-
-      $status_code = $response->getStatusCode();
-
-      if ($status_code === 200) {
-        $requirements['rl_php_accessibility'] = [
-          'title' => t('RL: rl.php accessibility'),
-          'severity' => REQUIREMENT_OK,
-          'value' => t('rl.php is accessible (HTTP @code)', ['@code' => $status_code]),
-          'description' => t('The rl.php endpoint is correctly configured and accessible at <code>@url</code>.', [
-            '@url' => $rl_endpoint_url,
-          ]),
-        ];
-      }
-      else {
-        $requirements['rl_php_accessibility'] = [
-          'title' => t('RL: rl.php accessibility'),
-          'severity' => REQUIREMENT_ERROR,
-          'value' => t('rl.php returned HTTP @code', ['@code' => $status_code]),
-          'description' => t('The rl.php endpoint at <code>@url</code> is not responding correctly. Expected HTTP 200 but got @code. Check your web server configuration (.htaccess for Apache, or add rewrite rules for Nginx). See the <a href="@readme" target="_blank">README</a> for details.', [
-            '@url' => $rl_endpoint_url,
-            '@code' => $status_code,
-            '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
-          ]),
-        ];
-      }
-    }
-    catch (\Exception $e) {
-      $requirements['rl_php_accessibility'] = [
-        'title' => t('RL: rl.php accessibility'),
-        'severity' => REQUIREMENT_ERROR,
-        'value' => t('rl.php is not accessible'),
-        'description' => t('Failed to connect to rl.php at <code>@url</code>. Error: @error. Ensure .htaccess files are being processed (Apache) or rewrite rules are configured (Nginx). See the <a href="@readme" target="_blank">README</a> for configuration instructions.', [
-          '@url' => $rl_endpoint_url,
-          '@error' => $e->getMessage(),
-          '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
-        ]),
-      ];
     }
   }
 

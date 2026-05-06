@@ -3,7 +3,6 @@
 namespace Drupal\rl\Controller;
 
 use Drupal\Component\Utility\Html;
-use Drupal\Core\Asset\LibrariesDirectoryFileFinder;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Link;
@@ -73,13 +72,6 @@ class ReportsController extends ControllerBase {
   protected RequestStack $requestStack;
 
   /**
-   * The libraries directory file finder.
-   *
-   * @var \Drupal\Core\Asset\LibrariesDirectoryFileFinder
-   */
-  protected LibrariesDirectoryFileFinder $libraryFinder;
-
-  /**
    * The experiment registry.
    *
    * @var \Drupal\rl\Registry\ExperimentRegistryInterface
@@ -97,7 +89,6 @@ class ReportsController extends ControllerBase {
     ArmDataValidator $arm_data_validator,
     SnapshotStorageInterface $snapshot_storage,
     RequestStack $request_stack,
-    LibrariesDirectoryFileFinder $library_finder,
     ExperimentRegistryInterface $experiment_registry,
   ) {
     $this->experimentStorage = $experiment_storage;
@@ -107,7 +98,6 @@ class ReportsController extends ControllerBase {
     $this->armDataValidator = $arm_data_validator;
     $this->snapshotStorage = $snapshot_storage;
     $this->requestStack = $request_stack;
-    $this->libraryFinder = $library_finder;
     $this->experimentRegistry = $experiment_registry;
   }
 
@@ -128,7 +118,6 @@ class ReportsController extends ControllerBase {
       $container->get('rl.arm_data_validator'),
       $container->get('rl.snapshot_storage'),
       $container->get('request_stack'),
-      $container->get('library.libraries_directory_file_finder'),
       $container->get('rl.experiment_registry')
     );
   }
@@ -263,14 +252,6 @@ class ReportsController extends ControllerBase {
    *   A render array.
    */
   public function experimentDetail($experiment_id) {
-    // Check if Plotly.js library is installed.
-    if (!$this->libraryFinder->find('plotly.js-dist-min/plotly.min.js')) {
-      $status_url = Url::fromRoute('system.status')->toString();
-      $this->messenger()->addWarning($this->t('Charts require the Plotly.js library. See <a href="@url">Status report</a> for installation instructions.', [
-        '@url' => $status_url,
-      ]));
-    }
-
     // Get experiment totals from storage. A missing totals row is expected
     // for a newly-registered experiment that has not yet received any
     // traffic; we still want to render the report (with an empty state)
