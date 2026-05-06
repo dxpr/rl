@@ -2,13 +2,5 @@
   "name": "drupal/rl",
   "type": "drupal-module",
   "description": "Reinforcement Learning module for Drupal using Thompson Sampling.",
-  "license": "GPL-2.0-or-later",
-  "require": {
-    "npm-asset/plotly.js-dist-min": "^2.35"
-  },
-  "extra": {
-    "installer-paths": {
-      "libraries/{$name}": ["type:npm-asset"]
-    }
-  }
+  "license": "GPL-2.0-or-later"
 }

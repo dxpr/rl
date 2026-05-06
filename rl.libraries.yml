@@ -22,7 +22,7 @@ plotly:
     component:
       css/rl-charts.css: {}
   js:
-    /libraries/plotly.js-dist-min/plotly.min.js: { minified: true }
+    js/vendor/plotly.min.js: { minified: true }
     js/rl-plotly-charts.js: {}
   dependencies:
     - core/drupal
