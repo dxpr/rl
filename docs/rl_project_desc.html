@@ -1,60 +1,55 @@
-<p>This module is included in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
+<p><strong>Reinforcement Learning (RL)</strong> is an A/B and multivariate testing framework for Drupal where every visitor click is treated as human feedback (RLHF-style). Each page view is a trial, each conversion is a reward, and the algorithm continuously shifts traffic to whichever variant is winning. No fixed test horizons. No manual winner picking. No third-party SaaS.</p>
 
-<blockquote>The <strong>Reinforcement Learning (RL)</strong> module implements A/B testing in the most efficient and effective way possible, minimizing lost conversions using machine learning.</blockquote>
+<p>RL is part of the <a href="https://dxpr.com/c/marketing-cms?ref=50701">DXPR marketing CMS</a> stack and ships in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
 
-
-<p><strong>Thompson Sampling</strong> is a learning-while-doing method. Each time a visitor lands on your site the algorithm "rolls the dice" based on what it has learned so far. Variants that have performed well roll larger numbers, so they are shown more often, while weak copies still get a small chance to prove themselves. This simple trick means the system can discover winners very quickly without stopping normal traffic.</p>
-
-<p>Traditional A/B tests run for a fixed horizon (say two weeks) during which half your visitors keep seeing the weaker version. Thompson Sampling avoids this waste. As soon as the algorithm has even a little evidence it quietly shifts most traffic to the better variant, saving conversions and shortening the wait for useful insights.</p>
-
-<p>For full details of what goes on behind the curtains check the source code: 
-<a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.
-</p>
-
-<h3>RL Ecosystem</h3>
+<h3>What you can A/B test with RL</h3>
 
 <ul>
-<li><a href="https://www.drupal.org/project/rl_sorting"><strong>RL Sorting</strong></a> - Views sort plugin that uses RL Thompson Sampling to order content by real engagement</li>
-<li><strong>RL Page Title</strong> (bundled) - A/B test page titles on any path: nodes, Views displays, custom controllers</li>
-<li><strong>RL Menu Link</strong> (bundled) - A/B test menu link labels for menu_link_content entities and YAML-defined links</li>
+  <li><a href="https://www.drupal.org/project/rl_sorting"><strong>RL: A/B Test Views Content</strong></a> (rl_sorting): the order of items in any Drupal View</li>
+  <li><strong>RL: A/B Test Page Titles</strong> (rl_page_title, bundled): page titles for nodes, View pages, and any controller</li>
+  <li><strong>RL: A/B Test Menu Links</strong> (rl_menu_link, bundled): labels in any menu link</li>
+  <li><strong>DXPR Builder integration</strong>: variant slots inside builder blocks</li>
 </ul>
 
-<p>RL is part of the <a href="https://dxpr.com/c/marketing-cms?ref=50701">DXPR marketing CMS</a> stack, where it works alongside DXPR Builder and DXPR Theme to optimize content through automated experimentation.</p>
+<div class="note-tip">
+  <h4>Where experimentation fits in your AI workflow</h4>
+  <p>Human review catches what's obviously off-brand, off-message, or factually wrong. It can't catch what merely fails to convert; only visitors can do that. Harvard Business School research on enterprise gen AI concludes that "designing targeted experiments and using scientific methods to test, refine, and scale promising solutions" is the layer between review and full rollout.</p>
+  <p>RL is that layer for Drupal. After your team approves a variant, RL tests it in production against the alternatives, shifts traffic toward what works, and sends the result back to the report. Variants can be hand-written, AI-generated, or both; RL is indifferent to authorship.</p>
+  <p><small>Source: Berndt et al., <a href="https://hbr.org/2026/01/a-systematic-approach-to-experimenting-with-gen-ai">A Systematic Approach to Experimenting with Gen AI</a>, Harvard Business Review, January-February 2026.</small></p>
+</div>
+
+<h3>Why RL instead of fixed-horizon A/B testing?</h3>
+
+<p>Traditional A/B tests run for a fixed window (say two weeks) and split traffic 50/50 the whole time, even when one variant is obviously losing. RL turns the experiment into a feedback loop: every click adjusts the model, traffic shifts toward the leader as soon as evidence emerges, and the test never has to "end". You can run dozens or thousands of variants simultaneously (true multivariate testing), and a newly added variant is in play on the next render with no manual setup.</p>
+
+<h3>How it works</h3>
+
+<p>RL uses a multi-armed bandit (Thompson Sampling). Each variant has a reward distribution; on each render the algorithm samples from the distributions and picks the highest sample. Wins update the distribution toward higher rewards; losses update toward lower. The math: <a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.</p>
 
 <h3>Features</h3>
 
 <ul>
-<li><strong>Thompson Sampling Algorithm</strong> - Pure PHP implementation</li>
-<li><strong>Fast HTTP REST API</strong> - Optimized JSON endpoints for tracking and decisions</li>
-<li><strong>Administrative Reports</strong> - Experiment analysis interface</li>
-<li><strong>Service-based Architecture</strong> - Extensible design</li>
-<li><strong>Data Sovereignty, Privacy First</strong> - No cloud, just Drupal</li>
+  <li><strong>Multivariate by default</strong>: 2 to thousands of variants, no manual configuration</li>
+  <li><strong>Real-time RLHF loop</strong>: visitor clicks update the model on every page</li>
+  <li><strong>Fast HTTP REST API</strong>: optimized JSON endpoint for tracking and decisions</li>
+  <li><strong>Admin reports</strong>: per-experiment performance, traffic, and confidence</li>
+  <li><strong>Service-based architecture</strong>: extensible decorators, custom variant selectors</li>
+  <li><strong>Data sovereignty</strong>: no cloud, no third-party SaaS, all data stays in your Drupal database</li>
+  <li><strong>GDPR-friendly tracking</strong>: only anonymous interaction counts, no user IDs or cookies</li>
 </ul>
 
 <h3>You need RL if</h3>
 
 <ul>
-<li><strong>A/B Testing</strong> - Test content variations</li>
-<li><strong>Content Optimization</strong> - Track content engagement</li>
-<li><strong>Feature Selection</strong> - Choose features to show users</li>
-<li><strong>Recommendations</strong> - Optimize content recommendations</li>
-<li><strong>Resource Allocation</strong> - Distribute resources across options</li>
-</ul>
-
-<h3>Thompson Sampling</h3>
-
-<p>Unlike traditional A/B testing, Thompson Sampling:</p>
-
-<ul>
-<li><strong>Adapts automatically</strong> - Shifts traffic to better options</li>
-<li><strong>Handles multiple options</strong> - Works with 2+ variations, even thousands of arms are handled well</li>
-<li><strong>Continuous learning</strong> - No fixed test duration</li>
-<li><strong>Bayesian approach</strong> - Incorporates uncertainty</li>
+  <li>You want to <strong>A/B or multivariate test</strong> any part of your site without third-party SaaS</li>
+  <li>You want <strong>continuous optimization</strong> rather than fixed-horizon experiments</li>
+  <li>You want to <strong>add or remove variants on the fly</strong> without restarting tests</li>
+  <li>You want a <strong>core API</strong> you can call from any module, View, or block</li>
 </ul>
 
 <div class="note-tip">
   <h4>Prefer a turnkey demo site?</h4>
-  <p>Spin up <strong>DXPR CMS</strong>, Drupal pre-configured with DXPR Builder, DXPR Theme, RL (Reinforcement Learning) module, and security best practices.</p>
+  <p>Spin up <strong>DXPR CMS</strong>, Drupal pre-configured with DXPR Builder, DXPR Theme, RL, and security best practices.</p>
   <p><a href="https://www.drupal.org/project/dxpr_cms" title="DXPR CMS platform">Get DXPR CMS »</a></p>
 </div>
 
@@ -63,21 +58,22 @@
 <pre><code>composer require drupal/rl
 drush en rl</code></pre>
 
-<h4>Verify rl.php Access</h4>
-<p>The RL module includes a <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (following the same pattern as Drupal 11's contrib statistics module). Test that it's working:</p>
+<h4>Verify rl.php access</h4>
+
+<p>RL ships an <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (same pattern as Drupal core's <code>statistics.php</code>). Test it:</p>
 
 <pre><code>curl -X POST -d "action=ping" http://example.com/modules/contrib/rl/rl.php</code></pre>
 
 <p><strong>If the test fails:</strong></p>
 <ul>
-<li><strong>Apache</strong>: Ensure <code>.htaccess</code> files are processed (<code>AllowOverride All</code>)</li>
-<li><strong>Nginx</strong>: Copy the rewrite rules from <code>.htaccess</code> to your server config</li>
-<li><strong>Security modules</strong>: Whitelist <code>/modules/contrib/rl/rl.php</code></li>
+  <li><strong>Apache</strong>: ensure <code>.htaccess</code> files are processed (<code>AllowOverride All</code>)</li>
+  <li><strong>Nginx</strong>: copy the rewrite rules from <code>.htaccess</code> to your server config</li>
+  <li><strong>Security modules</strong>: whitelist <code>/modules/contrib/rl/rl.php</code></li>
 </ul>
 
-<p>If server policies prevent direct access to <code>rl.php</code>, use the Drupal Routes API instead.</p>
+<p>If server policies prevent direct access, use the Drupal Routes API instead.</p>
 
-<h3>Drush Command Reference</h3>
+<h3>Drush command reference</h3>
 
 <table>
   <thead>
@@ -91,7 +87,7 @@ drush en rl</code></pre>
     <tr>
       <td><strong>Discovery</strong></td>
       <td><code>rl:list</code>, <code>rl:status</code>, <code>rl:performance</code>, <code>rl:trends</code></td>
-      <td>List experiments, check phase/confidence, arm-level stats, historical trends</td>
+      <td>List A/B tests, check phase/confidence, arm-level stats, historical trends</td>
     </tr>
     <tr>
       <td><strong>Analysis</strong></td>
@@ -101,7 +97,7 @@ drush en rl</code></pre>
     <tr>
       <td><strong>Experiment CRUD</strong></td>
       <td><code>rl:experiment:create</code>, <code>rl:experiment:update</code>, <code>rl:experiment:delete</code></td>
-      <td>Create, update, and delete experiments with <code>--dry-run</code> support</td>
+      <td>Create, update, and delete A/B tests with <code>--dry-run</code> support</td>
     </tr>
     <tr>
       <td><strong>Configuration</strong></td>
@@ -111,18 +107,18 @@ drush en rl</code></pre>
     <tr>
       <td><strong>Setup</strong></td>
       <td><code>rl:setup-ai</code></td>
-      <td>Install AI skill files for Claude Code, Codex, Gemini, Copilot, Cursor</td>
+      <td>Install AI assistant skill files for Claude Code, Codex, Gemini, Copilot, Cursor</td>
     </tr>
   </tbody>
 </table>
 
-<h3>AI Coding Assistant Integration</h3>
+<h3>AI coding assistant integration</h3>
 
-<p>The RL module ships with a built-in <a href="https://agentskills.io/specification">Agent Skills</a> file that teaches AI coding assistants how to manage experiments through natural language. Compatible with Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, and other tools supporting the standard.</p>
+<p>RL ships a built-in <a href="https://agentskills.io/specification">Agent Skills</a> file that teaches AI coding assistants how to manage A/B tests through natural language. Compatible with Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, and any tool supporting the standard.</p>
 
-<p>After installing the module, run <code>drush rl:setup-ai</code> to enable AI assistant support. Your AI will then respond to natural language like:</p>
+<p>After installing the module, run <code>drush rl:setup-ai</code> to enable AI assistant support. Your assistant will then respond to prompts like:</p>
 <ul>
-  <li>"List all running experiments"</li>
+  <li>"List all running A/B tests"</li>
   <li>"Analyze the hero_cta_test experiment"</li>
   <li>"Create a new A/B test for the homepage banner"</li>
   <li>"What's the conversion rate for variant B?"</li>
@@ -134,21 +130,17 @@ drush en rl</code></pre>
 $experiment_manager = \Drupal::service('rl.experiment_manager');
 
 // Record a trial (content shown)
-$experiment_manager->recordTurn('my-experiment', 'variant-a');
+$experiment_manager-&gt;recordTurn('my-experiment', 'variant-a');
 
-// Record a success (user clicked)
-$experiment_manager->recordReward('my-experiment', 'variant-a');
+// Record a reward (user clicked)
+$experiment_manager-&gt;recordReward('my-experiment', 'variant-a');
 
-// Get Thompson Sampling scores
-$scores = $experiment_manager->getThompsonScores('my-experiment');
+// Get scores for the variants currently in play
+$scores = $experiment_manager-&gt;getThompsonScores('my-experiment', NULL, ['variant-a', 'variant-b']);
 
-// Select the best option
+// Pick a winner
 $ts_calculator = \Drupal::service('rl.ts_calculator');
-$best_option = $ts_calculator->selectBestArm($scores);
-
-// Override page cache for web components (optional)
-$cache_manager = \Drupal::service('rl.cache_manager');
-$cache_manager->overridePageCacheIfShorter(60); // 60 seconds
+$best_arm = $ts_calculator-&gt;selectBestArm($scores);
 </code></pre>
 
 <h3>JavaScript API</h3>
@@ -162,74 +154,51 @@ Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
   showVariant(armId);
 });</code></pre>
 
-<p>All three methods feed a shared 500 ms batch window, so every experiment on the page rides one POST to <code>rl.php</code>. See the README for the HTTP wire format and server-side integration patterns.</p>
-
-<h3>Cache Management</h3>
-
-<p>RL provides optional cache management for web components:</p>
-
-<pre><code>// Override page cache if experiment cache is shorter than site cache
-\Drupal::service('rl.cache_manager')->overridePageCacheIfShorter(30);
-</code></pre>
-
-<p><strong>How it works:</strong></p>
-<ul>
-<li>If site cache is 300s and experiment needs 30s → overrides to 30s</li>
-<li>If site cache is 60s and experiment needs 300s → leaves at 60s</li>
-<li>If site cache is disabled → no override</li>
-</ul>
-
-<p><strong>Use cases:</strong></p>
-<ul>
-<li>Views plugins using RL for content sorting</li>
-<li>Blocks displaying A/B tested content</li>
-<li>Components needing frequent RL score updates</li>
-</ul>
-
-<p><strong>Ready to get started?</strong> Install the module and begin implementing intelligent, adaptive decision-making in your Drupal applications today!</p>
+<p>All three methods feed a shared 500 ms batch window, so every A/B test on the page rides one POST to <code>rl.php</code>. See the README for the HTTP wire format and server-side patterns.</p>
 
 <h3>FAQ</h3>
 
-<h4>Does RL store my experiment's variants?</h4>
+<h4>Does RL store my A/B test's variants?</h4>
 
-<p><strong>It stores their performance data, not the authoritative list.</strong> Every variant that has received traffic has its own row in <code>rl_arm_data</code> with turn and reward counts. But "which variants are currently in play for experiment X" is owned by your module, not RL.</p>
+<p><strong>It stores their performance data, not the authoritative list.</strong> Every variant that has received traffic has a row in <code>rl_arm_data</code> with turn and reward counts. But "which variants are in play right now" is owned by your module, not RL.</p>
 
-<p>Different modules keep the live variant list in different places:</p>
+<p>Different consumer modules keep the live variant list in different places:</p>
 
 <ul>
-  <li><strong>ai_sorting</strong>: the content returned by a View</li>
+  <li><strong>rl_sorting</strong>: the content returned by a View</li>
   <li><strong>rl_page_title</strong>: fields on a content entity</li>
-  <li><strong>rl_menu_link</strong>: labels in a menu link</li>
+  <li><strong>rl_menu_link</strong>: labels on a menu link</li>
   <li><strong>DXPR Builder</strong>: slots inside a block component</li>
 </ul>
 
-<p>On each call, your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner. A newly added variant is automatically in play on the next render, and a removed one stops appearing. No second save step can fall out of sync with your module's UI.</p>
+<p>On each call your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner. A newly added variant is in play on the next render; a removed one stops appearing. No second save step can drift out of sync with your module's UI.</p>
 
-<h4>When do I pick a winner and end an experiment?</h4>
+<h4>When do I pick a winner and end an A/B test?</h4>
 
-<p><strong>Only when you want to.</strong> Thompson Sampling has no fixed horizon and no significance gate to wait out. It just shifts traffic to whatever variant is winning right now, and keeps adapting as evidence changes.</p>
+<p><strong>Only when you want to.</strong> RL has no fixed horizon and no significance gate to wait out. It just shifts traffic to whatever variant is winning right now and keeps adapting as evidence changes.</p>
 
-<p>Two patterns, depending on what you are testing:</p>
+<p>Two patterns, depending on what you're testing:</p>
 
 <ul>
-  <li><strong>Converging tests</strong>: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on to the next test.</li>
-  <li><strong>Evergreen experiments</strong>: blog post lists where reader interest drifts week to week, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. Thompson Sampling will follow the winner as it shifts.</li>
+  <li><strong>Converging tests</strong>: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on.</li>
+  <li><strong>Evergreen experiments</strong>: blog post lists, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. RL follows the winner as it shifts.</li>
 </ul>
 
-<p>In both cases the loser of a pair just stops receiving traffic on its own, so there is no urgency to declare a winner by hand. If you are used to fixed-horizon A/B tools, this is the biggest mental shift: there is no "test complete" flag to chase.</p>
+<p>In both cases the loser of a pair just stops receiving traffic on its own, so there's no urgency to declare a winner by hand. If you're used to fixed-horizon A/B tools, this is the biggest mental shift: there's no "test complete" flag to chase.</p>
 
-<h3>Related Modules</h3>
+<h3>Related modules</h3>
+
 <ul>
-<li><a href="https://www.drupal.org/project/rl_sorting">RL Sorting</a> - Views sort plugin that uses RL Thompson Sampling to order content by real engagement</li>
-<li><a href="https://www.drupal.org/project/analyze">Analyze</a> - Content analysis and quality scoring for Drupal</li>
-<li><a href="https://www.drupal.org/project/ai_content_strategy">AI Content Strategy</a> - AI-driven content strategy recommendations for Drupal</li>
+  <li><a href="https://www.drupal.org/project/rl_sorting">RL: A/B Test Views Content</a> (rl_sorting): A/B test the order of any Drupal View</li>
+  <li><a href="https://www.drupal.org/project/analyze">Analyze</a>: content analysis and quality scoring for Drupal</li>
+  <li><a href="https://www.drupal.org/project/ai_content_strategy">AI Content Strategy</a>: AI-driven content strategy recommendations</li>
 </ul>
 
 <h3>Resources</h3>
+
 <ul>
-  <li><a href="https://everyday-data-science.tigyog.app/a-b-testing" target="_blank" rel="noopener">Free Micro-Course on Thompson Sampling</a></li>
-  <li><a href="https://en.wikipedia.org/wiki/Multi-armed_bandit" target="_blank" rel="noopener">Multi-Armed Bandit Problem Wiki</a></li>
-  <li><a href="https://www.jstor.org/stable/2332286" target="_blank" rel="noopener">On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples</a></li>
-  <li><a href="https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf" target="_blank" rel="noopener">Finite-time Analysis of the Multiarmed Bandit
-Problem</a></li>
+  <li><a href="https://en.wikipedia.org/wiki/Multi-armed_bandit" target="_blank" rel="noopener">Multi-armed bandit problem (Wikipedia)</a></li>
+  <li><a href="https://everyday-data-science.tigyog.app/a-b-testing" target="_blank" rel="noopener">Free micro-course on Thompson Sampling</a></li>
+  <li><a href="https://www.jstor.org/stable/2332286" target="_blank" rel="noopener">Thompson's original paper (JSTOR)</a></li>
+  <li><a href="https://homes.di.unimi.it/~cesa-bianchi/Pubblicazioni/ml-02.pdf" target="_blank" rel="noopener">Finite-time analysis of the multi-armed bandit problem</a></li>
 </ul>

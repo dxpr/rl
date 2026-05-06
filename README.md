@@ -1,41 +1,66 @@
-> **Reinforcement Learning (RL)** brings Thompson Sampling multi-armed bandit A/B testing to Drupal, automatically optimizing content variants based on real user engagement without third-party services. Built by [DXPR](https://dxpr.com).
+> **Reinforcement Learning (RL)** is an A/B and multivariate testing framework
+> for Drupal where every visitor click is treated as human feedback (RLHF-style).
+> No fixed test horizons, no manual winner picking, no third-party SaaS. Built
+> by [DXPR](https://dxpr.com).
 >
 > [Getting Started](https://dxpr.com/c/marketing-cms) |
 > [Pricing](https://dxpr.com/pricing) |
 > [Try Free Demo](https://try.dxpr.com)
 
-# Reinforcement Learning (RL) - Adaptive A/B Testing for Drupal with Thompson Sampling
+# RL: A/B & Multivariate Testing for Drupal (Reinforcement Learning)
 
-Multi-armed bandit experiments in Drupal using Thompson Sampling algorithm for
-efficient A/B testing that minimizes lost conversions.
+A/B and multivariate testing for Drupal using reinforcement learning. Each page
+view is a trial, each conversion is a reward, and the algorithm continuously
+shifts traffic to whichever variant is winning. RLHF-style feedback loop, no
+fixed horizons, no third-party SaaS.
+
+## What you can A/B test
+
+- **[RL: A/B Test Views Content](https://www.drupal.org/project/rl_sorting)**
+  (`rl_sorting`): the order of items in any Drupal View
+- **RL: A/B Test Page Titles** (`rl_page_title`, bundled submodule):
+  page titles for nodes, View pages, and any controller
+- **RL: A/B Test Menu Links** (`rl_menu_link`, bundled submodule):
+  labels in any menu link
+- **DXPR Builder** integration: variant slots inside builder blocks
 
 ## Features
 
-- **Thompson Sampling Algorithm**: Pure PHP implementation
-- **Fast HTTP REST API**: Optimized JSON endpoints for tracking and decisions
-- **Administrative Reports**: Experiment analysis interface at 
+- **Multivariate by default**: 2 to thousands of variants, no manual configuration
+- **Real-time RLHF loop**: visitor clicks update the model on every page
+- **Fast HTTP REST API**: optimized JSON endpoint at `rl.php`
+- **Admin reports**: per-experiment performance, traffic, and confidence at
   `/admin/reports/rl`
-- **Service-based Architecture**: Extensible design for custom implementations
-- **Data Sovereignty**: No cloud dependencies, pure Drupal solution
+- **Service-based architecture**: extensible decorators, custom variant selectors
+- **Data sovereignty**: no cloud, no SaaS, all data stays in your Drupal database
+- **GDPR-friendly tracking**: only anonymous interaction counts, no user IDs or
+  cookies
 
-## How Thompson Sampling Works
+## Why RL instead of fixed-horizon A/B testing?
 
-Thompson Sampling is a learning-while-doing method. Each visitor triggers the
-algorithm to "roll the dice" based on learned performance. High-performing
-variants get larger numbers and show more often, while weak variants still get
-chances to prove themselves.
+Traditional A/B tests run for a fixed window (say two weeks) and split traffic
+50/50 the whole time, even when one variant is obviously losing. RL turns the
+experiment into a feedback loop: every click adjusts the model, traffic shifts
+toward the leader as soon as evidence emerges, and the test never has to "end".
+You can run dozens or thousands of variants simultaneously (true multivariate
+testing), and a newly added variant is in play on the next render with no
+manual setup.
 
-Traditional A/B tests waste conversions by showing losing variants for fixed
-durations. Thompson Sampling shifts traffic to better variants as soon as
-evidence emerges, saving conversions and reducing testing time.
+## How it works
 
-## Use Cases
+RL uses a multi-armed bandit (Thompson Sampling). Each variant has a reward
+distribution; on each render the algorithm samples from the distributions and
+picks the highest sample. Wins update the distribution toward higher rewards;
+losses update toward lower. Algorithm details:
+[ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php).
 
-- **A/B Testing**: Test content variations efficiently
-- **Content Optimization**: Track content engagement automatically
-- **Feature Selection**: Choose features to show users
-- **Recommendations**: Optimize content recommendations
-- **Resource Allocation**: Distribute resources across options
+## Use cases
+
+- **A/B test any content variation** without third-party SaaS
+- **Multivariate test** dozens or thousands of variants at once
+- **Continuous optimization**: tests never end, the model keeps learning
+- **Recommendations**: rank items by real engagement
+- **Feature flags**: route users to variants based on observed reward, not coin flip
 
 ## Installation
 
@@ -239,7 +264,7 @@ $best_arm = key($scores);
 
 Deciding server-side keeps the arm list where it belongs (with the
 experiment owner) and avoids a network round trip on every page load.
-See `ai_sorting`'s Views sort plugin for the canonical pattern and
+See `rl_sorting`'s Views sort plugin for the canonical pattern and
 `VariantSelectorBase` in this module for a reusable base class.
 
 ### Client-side (cache-friendly path)
@@ -293,7 +318,7 @@ that produced the decide's context. When the experiment manager adds
 or removes a variant, the consumer's page cache is invalidated, the
 next render emits the new attribute, and JS picks it up. JS never
 asserts what the arm set is - it just echoes whatever the current
-cached HTML says, mirroring ai_sorting's PHP pattern of recomputing
+cached HTML says, mirroring rl_sorting's PHP pattern of recomputing
 `$arm_ids` from a fresh view query on every render. This keeps
 `Drupal.rl.decide()` drift-free without requiring the rl core to
 store arm lists.
@@ -307,7 +332,7 @@ no data, network error), the returned promise resolves to `armIds[0]`
 so callers never need a `.catch()` for the common path.
 
 `Drupal.rl` is one transport among several. Modules that already ship
-their own tracking JS (like `ai_sorting`, which batches turns on its
+their own tracking JS (like `rl_sorting`, which batches turns on its
 own 100 ms window and posts them as form data) keep working untouched.
 
 ## HTTP API (`rl.php`)
@@ -318,7 +343,7 @@ server-side workers, other CMSes, edge functions. Deciding is *not*
 exposed here: it happens in PHP at render time as shown above.
 
 Four actions are supported. All are additive - adding `batch` did not
-deprecate the legacy form actions, and `ai_sorting` and other production
+deprecate the legacy form actions, and `rl_sorting` and other production
 consumers keep using them unchanged.
 
 | Action | Encoding | Purpose |
@@ -545,8 +570,13 @@ docker compose --profile lint run --rm drupal-check
 
 ## Related Modules
 
-- [RL Sorting](https://www.drupal.org/project/rl_sorting) - Views sort plugin that uses RL Thompson Sampling to order content by real engagement
-- **RL Page Title** (bundled submodule) - A/B test page titles on any path, including nodes, Views displays, and custom controllers
-- **RL Menu Link** (bundled submodule) - A/B test menu link labels for menu_link_content entities and YAML-defined links
-- [Analyze](https://www.drupal.org/project/analyze) - Content analysis and quality scoring for Drupal
-- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy) - AI-driven content strategy recommendations for Drupal
+- [RL: A/B Test Views Content](https://www.drupal.org/project/rl_sorting) (`rl_sorting`):
+  A/B test the order of any Drupal View
+- **RL: A/B Test Page Titles** (`rl_page_title`, bundled submodule):
+  page titles for nodes, Views pages, and any controller
+- **RL: A/B Test Menu Links** (`rl_menu_link`, bundled submodule):
+  labels in any menu link
+- [Analyze](https://www.drupal.org/project/analyze): content analysis and
+  quality scoring for Drupal
+- [AI Content Strategy](https://www.drupal.org/project/ai_content_strategy):
+  AI-driven content strategy recommendations for Drupal
