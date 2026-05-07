@@ -155,22 +155,40 @@ class EndpointChecker {
   /**
    * Builds the URL Drupal would emit for rl.php on the current request.
    *
-   * For a same-site self-probe we trust X-Forwarded-Proto regardless of
-   * $settings['reverse_proxy'] — using the wrong scheme is the most common
-   * cause of a false negative on this check.
+   * For a same-site self-probe we trust X-Forwarded-Proto and
+   * X-Forwarded-Port regardless of $settings['reverse_proxy']. Using the
+   * wrong scheme — or worse, carrying the local backend port (e.g. 8080)
+   * into a URL whose public scheme is HTTPS — is the most common cause of
+   * a false negative on this check.
    */
   protected function buildPublicUrl(?Request $request, string $rl_path): string {
     if ($request === NULL) {
       return '';
     }
     $forwarded_proto = $request->headers->get('X-Forwarded-Proto');
-    $scheme = in_array($forwarded_proto, ['http', 'https'], TRUE)
-      ? $forwarded_proto
-      : $request->getScheme();
+    if (in_array($forwarded_proto, ['http', 'https'], TRUE)) {
+      $scheme = $forwarded_proto;
+      $host = $request->getHost();
+      $forwarded_port = $request->headers->get('X-Forwarded-Port');
+      $port = ($forwarded_port !== NULL && ctype_digit($forwarded_port))
+        ? (int) $forwarded_port
+        : NULL;
+    }
+    else {
+      $scheme = $request->getScheme();
+      $host = $request->getHost();
+      $port = $request->getPort();
+    }
+    $is_default_port = $port === NULL
+      || ($scheme === 'http' && $port === 80)
+      || ($scheme === 'https' && $port === 443);
+    if (!$is_default_port) {
+      $host .= ':' . $port;
+    }
     return sprintf(
       '%s://%s%s/%s/rl.php',
       $scheme,
-      $request->getHttpHost(),
+      $host,
       $request->getBasePath(),
       $rl_path
     );
