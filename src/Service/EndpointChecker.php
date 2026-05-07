@@ -18,12 +18,16 @@ use Symfony\Component\HttpFoundation\RequestStack;
  * Strategy:
  *   1. Probe the public URL Drupal would emit on the current request,
  *      preferring HTTPS when X-Forwarded-Proto signals it (even if
- *      $settings['reverse_proxy'] isn't configured — for a same-site
+ *      $settings['reverse_proxy'] isn't configured; for a same-site
  *      self-probe this is safe and avoids the most common false negative).
  *   2. If that fails, retry on http://127.0.0.1[:port] with the original
  *      Host header so we can tell "rl.php is broken" from "the proxy /
  *      scheme / DNS chain to the public hostname is broken."
- *   3. Return a structured result so hook_requirements() can give a
+ *   3. If the loopback also fails and the environment looks containerized,
+ *      try DNS-resolvable web-server service names (nginx, web, apache,
+ *      httpd). This covers Docker Compose stacks (Wodby, DDEV, custom) where
+ *      PHP-FPM and the web server run in separate containers.
+ *   4. Return a structured result so hook_requirements() can give a
  *      pointed description rather than a generic "not accessible."
  */
 class EndpointChecker {
@@ -38,6 +42,22 @@ class EndpointChecker {
    * State key for the cached result.
    */
   protected const STATE_KEY = 'rl.endpoint_accessible';
+
+  /**
+   * Common Docker Compose service names for web servers.
+   *
+   * Checked via DNS resolution only when the public and loopback probes both
+   * fail and the environment appears to be containerized. The DNS scan adds
+   * ~5 ms total; only names that resolve are probed via HTTP.
+   */
+  protected const CONTAINER_WEB_CANDIDATES = [
+    'nginx',
+    'web',
+    'apache',
+    'httpd',
+    'appserver',
+    'webserver',
+  ];
 
   /**
    * Result statuses returned by ::check().
@@ -126,21 +146,33 @@ class EndpointChecker {
       return $public_result;
     }
 
-    // Loopback fallback. Only attempt when we have a real Request — in CLI
+    // Loopback fallback. Only attempt when we have a real Request; in CLI
     // there's nothing to fall back to, and the public probe already returned
     // a deterministic failure.
     if ($request === NULL) {
       return $public_result;
     }
+    $host_header = $request->getHost();
     $loopback_url = $this->buildLoopbackUrl($request, $rl_path);
-    $loopback_result = $this->probe($loopback_url, $request->getHost());
+    $loopback_result = $this->probe($loopback_url, $host_header);
 
-    if ($loopback_result['status'] !== self::STATUS_OK) {
-      return $public_result;
+    if ($loopback_result['status'] === self::STATUS_OK) {
+      return $this->upgradeOnLoopbackSuccess($public_result, $public_url, $loopback_url);
     }
 
-    // Network-layer failure on public + loopback OK = browser-reachable
-    // (Docker / split-horizon DNS only blocks us, not browsers). Upgrade.
+    // Container-aware fallback: try Docker service names that resolve via DNS.
+    $container_url = $this->probeContainerWebServers($request, $rl_path, $host_header);
+    if ($container_url !== NULL) {
+      return $this->upgradeOnLoopbackSuccess($public_result, $public_url, $container_url);
+    }
+
+    return $public_result;
+  }
+
+  /**
+   * Builds an OK result when a loopback or container probe succeeds.
+   */
+  protected function upgradeOnLoopbackSuccess(array $public_result, string $public_url, string $loopback_url): array {
     if ($public_result['status'] === self::STATUS_CONNECTION_ERROR) {
       return [
         'status' => self::STATUS_OK,
@@ -157,6 +189,37 @@ class EndpointChecker {
       'loopback_ok' => TRUE,
       'loopback_url' => $loopback_url,
     ];
+  }
+
+  /**
+   * Tries common Docker Compose web-server service names.
+   *
+   * Only runs when /.dockerenv exists (standard Docker container marker).
+   * Uses gethostbyname() to filter candidates to those that resolve via
+   * Docker's internal DNS (~5 ms total), then probes only the first hit.
+   *
+   * @return string|null
+   *   The URL that returned "pong", or NULL if none succeeded.
+   */
+  protected function probeContainerWebServers(Request $request, string $rl_path, string $host_header): ?string {
+    if (!file_exists('/.dockerenv')) {
+      return NULL;
+    }
+
+    $base_path = $request->getBasePath();
+    foreach (self::CONTAINER_WEB_CANDIDATES as $service) {
+      $ip = gethostbyname($service);
+      if ($ip === $service) {
+        continue;
+      }
+      $url = sprintf('http://%s%s/%s/rl.php', $service, $base_path, $rl_path);
+      $result = $this->probe($url, $host_header);
+      if ($result['status'] === self::STATUS_OK) {
+        return $url;
+      }
+    }
+
+    return NULL;
   }
 
   /**
@@ -220,7 +283,7 @@ class EndpointChecker {
    *
    * Redirects ARE followed (legit setups may HTTP→HTTPS upgrade or do
    * canonical-host redirects), but the chain is tracked so a body-mismatch
-   * diagnostic can name the redirect target — usually the smoking gun for
+   * diagnostic can name the redirect target, which is usually the smoking gun for
    * scheme or host misconfiguration.
    */
   protected function probe(string $url, ?string $host_header = NULL): array {
