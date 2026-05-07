@@ -48,6 +48,26 @@
 
 ### Changed
 
+- `EndpointChecker` (the `rl.php` accessibility check used by
+  `hook_requirements()`) hardened against false negatives behind reverse
+  proxies and false positives from misconfigured redirects (#50):
+  - validates the response body is `pong`, not just a 200 status;
+  - upgrades the probe URL to HTTPS based on `X-Forwarded-Proto` even when
+    `$settings['reverse_proxy']` isn't configured (safe for a same-site
+    self-probe);
+  - on public-URL failure, retries on `http://127.0.0.1` with the original
+    `Host` header to distinguish "rl.php is broken" from "the proxy /
+    scheme / DNS chain to the public hostname is broken";
+  - returns a structured result so the status-report description names the
+    actual failure mode (`redirected`, `http_error`, `body_mismatch`,
+    `connection_error`, `file_missing`) instead of a generic "not
+    accessible";
+  - caches success for 1 hour but failures for only 5 minutes, so a fixed
+    misconfig clears without a manual cache rebuild;
+  - narrows the swallow-all `\Exception` fallback to cURL `errno 6/7`
+    (DNS / TCP-connect) so SSL handshake errors and timeouts are surfaced.
+  Public API: existing `EndpointChecker::isAccessible(): bool` is preserved
+  as a thin wrapper over the new `EndpointChecker::getResult(): array`.
 - **BC break (minor):** `ExperimentManagerInterface` now declares three new
   methods:
   - `purgeExperiment(string $experiment_id)` - removes turns, rewards,

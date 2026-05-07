@@ -7,6 +7,7 @@
 
 use Drupal\Core\Database\SchemaObjectExistsException;
 use Drupal\Core\Database\SchemaObjectDoesNotExistException;
+use Drupal\rl\Service\EndpointChecker;
 
 /**
  * Implements hook_install().
@@ -449,17 +450,75 @@ function rl_requirements($phase) {
 
     /** @var \Drupal\rl\Service\EndpointChecker $checker */
     $checker = \Drupal::service('rl.endpoint_checker');
-    $accessible = $checker->isAccessible();
-    $requirements['rl_php_accessibility'] = [
+    $result = $checker->getResult();
+    $readme = 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access';
+
+    $requirement = [
       'title' => t('RL: rl.php accessibility'),
-      'severity' => $accessible ? REQUIREMENT_OK : REQUIREMENT_ERROR,
-      'value' => $accessible ? t('rl.php is accessible') : t('rl.php is not accessible'),
     ];
-    if (!$accessible) {
-      $requirements['rl_php_accessibility']['description'] = t('The web server is not serving rl.php. Ensure .htaccess files are being processed (Apache) or rewrite rules are configured (Nginx). See the <a href="@readme" target="_blank">README</a> for configuration instructions.', [
-        '@readme' => 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access',
-      ]);
+
+    switch ($result['status']) {
+      case EndpointChecker::STATUS_OK:
+        $requirement['severity'] = REQUIREMENT_OK;
+        $requirement['value'] = t('rl.php is accessible');
+        break;
+
+      case EndpointChecker::STATUS_REDIRECTED:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php probe was redirected to an unexpected target');
+        $requirement['description'] = t('A request to rl.php at the public URL ended somewhere unexpected (@detail). This usually means Drupal is generating absolute URLs with the wrong scheme — set <code>$settings[\'reverse_proxy\']</code> and <code>$settings[\'reverse_proxy_trusted_headers\']</code> so X-Forwarded-Proto is honored, or fix the proxy / redirect rules so requests stay on the same host. See the <a href="@readme" target="_blank">README</a>.', [
+          '@detail' => $result['detail'] ?? '',
+          '@readme' => $readme,
+        ]);
+        break;
+
+      case EndpointChecker::STATUS_HTTP_ERROR:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php returned HTTP @code', ['@code' => $result['code'] ?? 0]);
+        $requirement['description'] = t('The web server returned HTTP @code for rl.php at @url. Ensure .htaccess files are being processed (Apache) or rewrite rules pass real files through (Nginx). See the <a href="@readme" target="_blank">README</a>.', [
+          '@code' => $result['code'] ?? 0,
+          '@url' => $result['public_url'] ?? '(unknown URL)',
+          '@readme' => $readme,
+        ]);
+        break;
+
+      case EndpointChecker::STATUS_BODY_MISMATCH:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php returned unexpected content');
+        $requirement['description'] = t('rl.php is being served at @url but returned unexpected content (@detail). Another module or rewrite rule may be intercepting the request, or a redirect chain led somewhere wrong. See the <a href="@readme" target="_blank">README</a>.', [
+          '@url' => $result['public_url'] ?? '(unknown URL)',
+          '@detail' => $result['detail'] ?? '',
+          '@readme' => $readme,
+        ]);
+        break;
+
+      case EndpointChecker::STATUS_CONNECTION_ERROR:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php connection failed');
+        $requirement['description'] = t('The HTTP probe to rl.php failed: @detail. The web server may not be running, the public hostname may not resolve from inside the container, or TLS may be misconfigured. See the <a href="@readme" target="_blank">README</a>.', [
+          '@detail' => $result['detail'] ?? '',
+          '@readme' => $readme,
+        ]);
+        break;
+
+      case EndpointChecker::STATUS_FILE_MISSING:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php is missing on disk');
+        $requirement['description'] = t('rl.php is not present where it should be: @detail. Reinstall or re-deploy the rl module.', [
+          '@detail' => $result['detail'] ?? '',
+        ]);
+        break;
+
+      default:
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['value'] = t('rl.php accessibility unknown');
+        $requirement['description'] = t('The endpoint check returned an unrecognised status (@status). See the <a href="@readme" target="_blank">README</a>.', [
+          '@status' => $result['status'] ?? '(none)',
+          '@readme' => $readme,
+        ]);
     }
+
+    $requirements['rl_php_accessibility'] = $requirement;
   }
 
   // Check if installed AI skill files are outdated.

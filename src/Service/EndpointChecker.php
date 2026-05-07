@@ -2,23 +2,53 @@
 
 namespace Drupal\rl\Service;
 
-use Drupal\Core\State\StateInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Extension\ModuleExtensionList;
+use Drupal\Core\State\StateInterface;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\ConnectException;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
- * Checks whether rl.php is accessible via HTTP, cached for 1 hour.
+ * Checks whether rl.php is accessible via HTTP.
  *
- * The check pings rl.php from the browser's origin. When the HTTP
- * request fails due to networking (e.g. Docker container isolation)
- * but the file exists on disk, the endpoint is assumed accessible.
+ * Cached for 1 hour on success, 5 minutes on failure (so a fixed misconfig
+ * clears quickly without forcing a manual cache rebuild).
+ *
+ * Strategy:
+ *   1. Probe the public URL Drupal would emit on the current request,
+ *      preferring HTTPS when X-Forwarded-Proto signals it (even if
+ *      $settings['reverse_proxy'] isn't configured — for a same-site
+ *      self-probe this is safe and avoids the most common false negative).
+ *   2. If that fails, retry on http://127.0.0.1[:port] with the original
+ *      Host header so we can tell "rl.php is broken" from "the proxy /
+ *      scheme / DNS chain to the public hostname is broken."
+ *   3. Return a structured result so hook_requirements() can give a
+ *      pointed description rather than a generic "not accessible."
  */
 class EndpointChecker {
 
-  protected const CACHE_TTL = 3600;
+  /**
+   * Cache TTLs.
+   */
+  protected const SUCCESS_TTL = 3600;
+  protected const FAILURE_TTL = 300;
+
+  /**
+   * State key for the cached result.
+   */
   protected const STATE_KEY = 'rl.endpoint_accessible';
+
+  /**
+   * Result statuses returned by ::check().
+   */
+  public const STATUS_OK = 'ok';
+  public const STATUS_REDIRECTED = 'redirected';
+  public const STATUS_HTTP_ERROR = 'http_error';
+  public const STATUS_BODY_MISMATCH = 'body_mismatch';
+  public const STATUS_CONNECTION_ERROR = 'connection_error';
+  public const STATUS_FILE_MISSING = 'file_missing';
 
   public function __construct(
     protected StateInterface $state,
@@ -30,15 +60,38 @@ class EndpointChecker {
 
   /**
    * Returns TRUE when rl.php is believed accessible by the web server.
+   *
+   * Thin wrapper over ::getResult() for callers that only need a boolean.
    */
   public function isAccessible(): bool {
-    $cached = $this->state->get(static::STATE_KEY);
-    if (is_array($cached) && isset($cached['checked']) && ($this->time->getRequestTime() - $cached['checked']) < static::CACHE_TTL) {
-      return !empty($cached['accessible']);
+    return $this->getResult()['status'] === self::STATUS_OK;
+  }
+
+  /**
+   * Returns the cached check result with full diagnostic detail.
+   *
+   * @return array
+   *   An associative array with at least:
+   *   - status: one of the STATUS_* constants.
+   *   - detail: a human-readable explanation, or NULL on success.
+   *   And optionally, depending on status:
+   *   - code: HTTP status code of the failed response.
+   *   - public_url / loopback_url: URLs probed.
+   *   - redirects: redirect chain followed during the probe.
+   */
+  public function getResult(): array {
+    $cached = $this->state->get(self::STATE_KEY);
+    if (is_array($cached) && isset($cached['checked'], $cached['result']) && is_array($cached['result'])) {
+      $ttl = $cached['result']['status'] === self::STATUS_OK
+        ? self::SUCCESS_TTL
+        : self::FAILURE_TTL;
+      if (($this->time->getRequestTime() - $cached['checked']) < $ttl) {
+        return $cached['result'];
+      }
     }
     $result = $this->check();
-    $this->state->set(static::STATE_KEY, [
-      'accessible' => $result,
+    $this->state->set(self::STATE_KEY, [
+      'result' => $result,
       'checked' => $this->time->getRequestTime(),
     ]);
     return $result;
@@ -48,38 +101,192 @@ class EndpointChecker {
    * Clears the cached result so the next call re-checks.
    */
   public function resetCache(): void {
-    $this->state->delete(static::STATE_KEY);
+    $this->state->delete(self::STATE_KEY);
   }
 
   /**
    * Performs the actual rl.php accessibility check.
    */
-  protected function check(): bool {
+  protected function check(): array {
     $rl_path = $this->moduleList->getPath('rl');
     $file_path = DRUPAL_ROOT . '/' . $rl_path . '/rl.php';
 
     if (!file_exists($file_path)) {
-      return FALSE;
+      return [
+        'status' => self::STATUS_FILE_MISSING,
+        'detail' => sprintf('rl.php is missing on disk at %s.', $file_path),
+      ];
     }
 
     $request = $this->requestStack->getCurrentRequest();
-    $base_url = $request ? $request->getSchemeAndHttpHost() : '';
-    $base_path = $request ? $request->getBasePath() : '';
-    $url = $base_url . $base_path . '/' . $rl_path . '/rl.php';
+    $public_url = $this->buildPublicUrl($request, $rl_path);
+    $public_result = $this->probe($public_url);
+    $public_result['public_url'] = $public_url;
+
+    if ($public_result['status'] === self::STATUS_OK) {
+      return $public_result;
+    }
+
+    // Loopback fallback. Only attempt when we have a real Request — in CLI
+    // there's nothing to fall back to, and the public probe already returned
+    // a deterministic failure.
+    if ($request !== NULL) {
+      $loopback_url = $this->buildLoopbackUrl($request, $rl_path);
+      $loopback_result = $this->probe($loopback_url, $request->getHost());
+      if ($loopback_result['status'] === self::STATUS_OK) {
+        // The file is reachable on loopback — the failure is in the path
+        // from public hostname → web server (proxy / scheme / DNS).
+        return [
+          'status' => self::STATUS_REDIRECTED,
+          'detail' => sprintf(
+            'rl.php is reachable on loopback (%s) but the public URL probe failed: %s',
+            $loopback_url,
+            $public_result['detail'] ?? '(no detail)'
+          ),
+          'public_url' => $public_url,
+          'loopback_url' => $loopback_url,
+        ] + $public_result;
+      }
+    }
+
+    return $public_result;
+  }
+
+  /**
+   * Builds the URL Drupal would emit for rl.php on the current request.
+   *
+   * For a same-site self-probe we trust X-Forwarded-Proto regardless of
+   * $settings['reverse_proxy'] — using the wrong scheme is the most common
+   * cause of a false negative on this check.
+   */
+  protected function buildPublicUrl(?Request $request, string $rl_path): string {
+    if ($request === NULL) {
+      return '';
+    }
+    $forwarded_proto = $request->headers->get('X-Forwarded-Proto');
+    $scheme = in_array($forwarded_proto, ['http', 'https'], TRUE)
+      ? $forwarded_proto
+      : $request->getScheme();
+    return sprintf(
+      '%s://%s%s/%s/rl.php',
+      $scheme,
+      $request->getHttpHost(),
+      $request->getBasePath(),
+      $rl_path
+    );
+  }
+
+  /**
+   * Builds an http://127.0.0.1[:port]/... URL for the loopback probe.
+   *
+   * Uses the local request port since the loopback bypasses any public TLS
+   * terminator and lands on the same web server that just served us.
+   */
+  protected function buildLoopbackUrl(Request $request, string $rl_path): string {
+    $port = $request->getPort();
+    $port_part = ($port && $port !== 80) ? ':' . $port : '';
+    return sprintf(
+      'http://127.0.0.1%s%s/%s/rl.php',
+      $port_part,
+      $request->getBasePath(),
+      $rl_path
+    );
+  }
+
+  /**
+   * POSTs action=ping to a URL and classifies the response.
+   *
+   * Redirects ARE followed (legit setups may HTTP→HTTPS upgrade or do
+   * canonical-host redirects), but the chain is tracked so a body-mismatch
+   * diagnostic can name the redirect target — usually the smoking gun for
+   * scheme or host misconfiguration.
+   */
+  protected function probe(string $url, ?string $host_header = NULL): array {
+    if ($url === '') {
+      return [
+        'status' => self::STATUS_HTTP_ERROR,
+        'detail' => 'No URL available to probe (CLI / no current request).',
+      ];
+    }
+    $options = [
+      'form_params' => ['action' => 'ping'],
+      'timeout' => 3,
+      'http_errors' => FALSE,
+      'allow_redirects' => [
+        'max' => 5,
+        'strict' => TRUE,
+        'track_redirects' => TRUE,
+      ],
+    ];
+    if ($host_header !== NULL) {
+      $options['headers'] = ['Host' => $host_header];
+    }
 
     try {
-      $response = $this->httpClient->post($url, [
-        'form_params' => ['action' => 'ping'],
-        'timeout' => 3,
-        'http_errors' => FALSE,
-      ]);
-      return $response->getStatusCode() === 200;
+      $response = $this->httpClient->post($url, $options);
     }
-    catch (\Exception $e) {
-      // Connection failed (cURL error 6/7 in Docker, firewalls, etc.).
-      // The file exists on disk, so assume the web server serves it.
-      return TRUE;
+    catch (ConnectException $e) {
+      // DNS / TCP-connect failures only. cURL errno 6 (COULDNT_RESOLVE_HOST)
+      // and 7 (COULDNT_CONNECT) are the classic Docker / split-horizon-DNS
+      // scenarios where the server can't reach its own public hostname even
+      // though browsers can. file_exists() above passed, so assume the local
+      // web server is fine. Other ConnectExceptions (TLS handshake errors,
+      // timeouts) are real problems worth reporting.
+      $errno = $e->getHandlerContext()['errno'] ?? NULL;
+      if (in_array($errno, [6, 7], TRUE)) {
+        return [
+          'status' => self::STATUS_OK,
+          'detail' => sprintf('rl.php exists on disk; outbound HTTP to public URL fails (cURL errno %d). Assuming the local web server serves it.', $errno),
+        ];
+      }
+      return [
+        'status' => self::STATUS_CONNECTION_ERROR,
+        'detail' => $e->getMessage(),
+      ];
     }
+    catch (\Throwable $e) {
+      return [
+        'status' => self::STATUS_CONNECTION_ERROR,
+        'detail' => $e->getMessage(),
+      ];
+    }
+
+    $code = $response->getStatusCode();
+    $redirect_chain = $response->getHeader('X-Guzzle-Redirect-History');
+
+    if ($code !== 200) {
+      $result = [
+        'status' => self::STATUS_HTTP_ERROR,
+        'detail' => sprintf('rl.php probe returned HTTP %d.', $code),
+        'code' => $code,
+      ];
+      if (!empty($redirect_chain)) {
+        $result['redirects'] = $redirect_chain;
+      }
+      return $result;
+    }
+
+    $body = trim((string) $response->getBody());
+    if ($body !== 'pong') {
+      $result = [
+        'status' => self::STATUS_BODY_MISMATCH,
+        'detail' => sprintf(
+          'rl.php probe returned HTTP 200 but body was %s, not "pong".',
+          $body === '' ? '(empty)' : '"' . substr($body, 0, 80) . '"'
+        ),
+        'code' => $code,
+      ];
+      if (!empty($redirect_chain)) {
+        $result['detail'] .= ' Followed redirect to: ' . end($redirect_chain) . '.';
+        $result['redirects'] = $redirect_chain;
+      }
+      return $result;
+    }
+
+    return [
+      'status' => self::STATUS_OK,
+      'detail' => NULL,
+    ];
   }
 
 }
