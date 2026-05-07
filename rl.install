@@ -452,6 +452,9 @@ function rl_requirements($phase) {
     $checker = \Drupal::service('rl.endpoint_checker');
     $result = $checker->getResult();
     $readme = 'https://git.drupalcode.org/project/rl/-/blob/1.x/README.md#post-installation-verify-rlphp-access';
+    $loopback_hint = !empty($result['loopback_ok'])
+      ? t('Note: rl.php is reachable on loopback (@loopback), so the local web server is fine — the failure is in the public hostname → web server path (proxy, scheme, redirect rule).', ['@loopback' => $result['loopback_url'] ?? ''])
+      : '';
 
     $requirement = [
       'title' => t('RL: rl.php accessibility'),
@@ -466,8 +469,10 @@ function rl_requirements($phase) {
       case EndpointChecker::STATUS_REDIRECTED:
         $requirement['severity'] = REQUIREMENT_ERROR;
         $requirement['value'] = t('rl.php probe was redirected to an unexpected target');
-        $requirement['description'] = t('A request to rl.php at the public URL ended somewhere unexpected (@detail). This usually means Drupal is generating absolute URLs with the wrong scheme — set <code>$settings[\'reverse_proxy\']</code> and <code>$settings[\'reverse_proxy_trusted_headers\']</code> so X-Forwarded-Proto is honored, or fix the proxy / redirect rules so requests stay on the same host. See the <a href="@readme" target="_blank">README</a>.', [
-          '@detail' => $result['detail'] ?? '',
+        $requirement['description'] = t('The probe to @url followed a redirect chain to @final and the final body was not "pong". This usually means Drupal generates absolute URLs with the wrong scheme — set <code>$settings[\'reverse_proxy\']</code> and <code>$settings[\'reverse_proxy_trusted_headers\']</code>, or fix the redirect rule that drops the host. @hint See the <a href="@readme" target="_blank">README</a>.', [
+          '@url' => $result['public_url'] ?? '(unknown URL)',
+          '@final' => isset($result['redirects']) ? end($result['redirects']) : '(unknown)',
+          '@hint' => $loopback_hint,
           '@readme' => $readme,
         ]);
         break;
@@ -475,9 +480,10 @@ function rl_requirements($phase) {
       case EndpointChecker::STATUS_HTTP_ERROR:
         $requirement['severity'] = REQUIREMENT_ERROR;
         $requirement['value'] = t('rl.php returned HTTP @code', ['@code' => $result['code'] ?? 0]);
-        $requirement['description'] = t('The web server returned HTTP @code for rl.php at @url. Ensure .htaccess files are being processed (Apache) or rewrite rules pass real files through (Nginx). See the <a href="@readme" target="_blank">README</a>.', [
+        $requirement['description'] = t('The web server returned HTTP @code for rl.php at @url. Ensure .htaccess is processed (Apache) or rewrite rules pass real files through (Nginx). @hint See the <a href="@readme" target="_blank">README</a>.', [
           '@code' => $result['code'] ?? 0,
           '@url' => $result['public_url'] ?? '(unknown URL)',
+          '@hint' => $loopback_hint,
           '@readme' => $readme,
         ]);
         break;
@@ -485,9 +491,10 @@ function rl_requirements($phase) {
       case EndpointChecker::STATUS_BODY_MISMATCH:
         $requirement['severity'] = REQUIREMENT_ERROR;
         $requirement['value'] = t('rl.php returned unexpected content');
-        $requirement['description'] = t('rl.php is being served at @url but returned unexpected content (@detail). Another module or rewrite rule may be intercepting the request, or a redirect chain led somewhere wrong. See the <a href="@readme" target="_blank">README</a>.', [
+        $requirement['description'] = t('rl.php is served at @url but returned unexpected content (@detail). Another module or rewrite rule may be intercepting the request, or a redirect led somewhere wrong. @hint See the <a href="@readme" target="_blank">README</a>.', [
           '@url' => $result['public_url'] ?? '(unknown URL)',
           '@detail' => $result['detail'] ?? '',
+          '@hint' => $loopback_hint,
           '@readme' => $readme,
         ]);
         break;
@@ -495,7 +502,7 @@ function rl_requirements($phase) {
       case EndpointChecker::STATUS_CONNECTION_ERROR:
         $requirement['severity'] = REQUIREMENT_ERROR;
         $requirement['value'] = t('rl.php connection failed');
-        $requirement['description'] = t('The HTTP probe to rl.php failed: @detail. The web server may not be running, the public hostname may not resolve from inside the container, or TLS may be misconfigured. See the <a href="@readme" target="_blank">README</a>.', [
+        $requirement['description'] = t('The HTTP probe to rl.php failed at the network layer: @detail. The web server may not be running, the public hostname may not resolve from inside the container, or TLS may be misconfigured. See the <a href="@readme" target="_blank">README</a>.', [
           '@detail' => $result['detail'] ?? '',
           '@readme' => $readme,
         ]);

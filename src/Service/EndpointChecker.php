@@ -6,7 +6,6 @@ use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Extension\ModuleExtensionList;
 use Drupal\Core\State\StateInterface;
 use GuzzleHttp\ClientInterface;
-use GuzzleHttp\Exception\ConnectException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -130,36 +129,41 @@ class EndpointChecker {
     // Loopback fallback. Only attempt when we have a real Request — in CLI
     // there's nothing to fall back to, and the public probe already returned
     // a deterministic failure.
-    if ($request !== NULL) {
-      $loopback_url = $this->buildLoopbackUrl($request, $rl_path);
-      $loopback_result = $this->probe($loopback_url, $request->getHost());
-      if ($loopback_result['status'] === self::STATUS_OK) {
-        // The file is reachable on loopback — the failure is in the path
-        // from public hostname → web server (proxy / scheme / DNS).
-        return [
-          'status' => self::STATUS_REDIRECTED,
-          'detail' => sprintf(
-            'rl.php is reachable on loopback (%s) but the public URL probe failed: %s',
-            $loopback_url,
-            $public_result['detail'] ?? '(no detail)'
-          ),
-          'public_url' => $public_url,
-          'loopback_url' => $loopback_url,
-        ] + $public_result;
-      }
+    if ($request === NULL) {
+      return $public_result;
+    }
+    $loopback_url = $this->buildLoopbackUrl($request, $rl_path);
+    $loopback_result = $this->probe($loopback_url, $request->getHost());
+
+    if ($loopback_result['status'] !== self::STATUS_OK) {
+      return $public_result;
     }
 
-    return $public_result;
+    // Network-layer failure on public + loopback OK = browser-reachable
+    // (Docker / split-horizon DNS only blocks us, not browsers). Upgrade.
+    if ($public_result['status'] === self::STATUS_CONNECTION_ERROR) {
+      return [
+        'status' => self::STATUS_OK,
+        'detail' => sprintf(
+          'rl.php served on loopback (%s). Public probe failed at network layer: %s. This does not affect browser access.',
+          $loopback_url,
+          $public_result['detail'] ?? '(no detail)'
+        ),
+        'public_url' => $public_url,
+        'loopback_url' => $loopback_url,
+      ];
+    }
+    return $public_result + [
+      'loopback_ok' => TRUE,
+      'loopback_url' => $loopback_url,
+    ];
   }
 
   /**
    * Builds the URL Drupal would emit for rl.php on the current request.
    *
-   * For a same-site self-probe we trust X-Forwarded-Proto and
-   * X-Forwarded-Port regardless of $settings['reverse_proxy']. Using the
-   * wrong scheme — or worse, carrying the local backend port (e.g. 8080)
-   * into a URL whose public scheme is HTTPS — is the most common cause of
-   * a false negative on this check.
+   * Self-probe-only exception: trusts X-Forwarded-Proto / -Port without
+   * $settings['reverse_proxy'] (safe here, do not copy elsewhere).
    */
   protected function buildPublicUrl(?Request $request, string $rl_path): string {
     if ($request === NULL) {
@@ -243,26 +247,9 @@ class EndpointChecker {
     try {
       $response = $this->httpClient->post($url, $options);
     }
-    catch (ConnectException $e) {
-      // DNS / TCP-connect failures only. cURL errno 6 (COULDNT_RESOLVE_HOST)
-      // and 7 (COULDNT_CONNECT) are the classic Docker / split-horizon-DNS
-      // scenarios where the server can't reach its own public hostname even
-      // though browsers can. file_exists() above passed, so assume the local
-      // web server is fine. Other ConnectExceptions (TLS handshake errors,
-      // timeouts) are real problems worth reporting.
-      $errno = $e->getHandlerContext()['errno'] ?? NULL;
-      if (in_array($errno, [6, 7], TRUE)) {
-        return [
-          'status' => self::STATUS_OK,
-          'detail' => sprintf('rl.php exists on disk; outbound HTTP to public URL fails (cURL errno %d). Assuming the local web server serves it.', $errno),
-        ];
-      }
-      return [
-        'status' => self::STATUS_CONNECTION_ERROR,
-        'detail' => $e->getMessage(),
-      ];
-    }
     catch (\Throwable $e) {
+      // Transport-layer failure (DNS / TCP / TLS / timeout); check() will
+      // upgrade to OK iff the loopback probe succeeds.
       return [
         'status' => self::STATUS_CONNECTION_ERROR,
         'detail' => $e->getMessage(),
