@@ -279,8 +279,11 @@ final class RlConfigCommands extends RlCommandsBase {
    */
   protected function normalizeValue(string $value, array $schema): mixed {
     return match ($schema['type']) {
-      'boolean' => in_array(strtolower($value), ['1', 'true', 'yes', 'on']) ? TRUE :
-        (in_array(strtolower($value), ['0', 'false', 'no', 'off']) ? FALSE : NULL),
+      'boolean' => match (TRUE) {
+        in_array(strtolower($value), ['1', 'true', 'yes', 'on']) => TRUE,
+        in_array(strtolower($value), ['0', 'false', 'no', 'off']) => FALSE,
+        default => NULL,
+      },
       'integer' => is_numeric($value) ? (int) $value : NULL,
       default => $value,
     };
