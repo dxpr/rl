@@ -28,8 +28,13 @@ interface SnapshotStorageInterface {
    *   Cumulative rewards for this arm.
    * @param int $total_experiment_turns
    *   Total turns across all arms in experiment.
+   * @param int $step_size
+   *   How much total_experiment_turns increased on this request.
+   *   Defaults to 1 for single-arm calls; should be the arm count for
+   *   multi-arm recordTurns calls so the sampling algorithm can detect
+   *   interval boundary crossings.
    */
-  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns): void;
+  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns, int $step_size = 1): void;
 
   /**
    * Get snapshot history for an experiment.

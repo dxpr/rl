@@ -77,7 +77,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->execute();
 
     // Record snapshot if enabled.
-    $this->maybeRecordSnapshots($experiment_id, [$arm_id]);
+    $this->maybeRecordSnapshots($experiment_id, [$arm_id], 1);
   }
 
   /**
@@ -113,8 +113,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
-    // Record snapshots if enabled.
-    $this->maybeRecordSnapshots($experiment_id, $arm_ids);
+    // Record snapshots if enabled. Step size = arm count since
+    // total_turns was incremented by that amount.
+    $this->maybeRecordSnapshots($experiment_id, $arm_ids, $arm_count);
   }
 
   /**
@@ -234,8 +235,10 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
    *   The experiment ID.
    * @param array $arm_ids
    *   Array of arm IDs to snapshot.
+   * @param int $step_size
+   *   How much total_turns increased on this request.
    */
-  protected function maybeRecordSnapshots(string $experiment_id, array $arm_ids): void {
+  protected function maybeRecordSnapshots(string $experiment_id, array $arm_ids, int $step_size = 1): void {
     if (!$this->snapshotStorage || !$this->snapshotStorage->isEnabled()) {
       return;
     }
@@ -250,7 +253,8 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
           $arm_id,
           (int) $arm_data->turns,
           (int) $arm_data->rewards,
-          $total_turns
+          $total_turns,
+          $step_size
         );
       }
     }

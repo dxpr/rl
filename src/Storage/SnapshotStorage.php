@@ -68,7 +68,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns): void {
+  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns, int $step_size = 1): void {
     if (!$this->isEnabled()) {
       return;
     }
@@ -77,11 +77,11 @@ class SnapshotStorage implements SnapshotStorageInterface {
     $arm_count = $this->getArmCount($experiment_id);
     $snapshots_per_arm = $this->calculateSnapshotsPerArm($arm_count);
 
-    if (!$this->shouldRecordSnapshot($experiment_id, $arm_id, $total_experiment_turns, $snapshots_per_arm)) {
+    if (!$this->shouldRecordSnapshot($experiment_id, $arm_id, $total_experiment_turns, $snapshots_per_arm, $step_size)) {
       return;
     }
 
-    $is_milestone = $this->isMilestone($total_experiment_turns, $snapshots_per_arm);
+    $is_milestone = $this->isMilestone($total_experiment_turns, $snapshots_per_arm, $step_size);
 
     $this->database->insert('rl_arm_snapshots')
       ->fields([
@@ -283,6 +283,11 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * Determine if we should record a snapshot at this point.
    *
+   * Uses range-crossing: checks whether the range
+   * [total_turns - step_size + 1, total_turns] crosses a sampling
+   * boundary. This handles multi-arm experiments where total_turns
+   * jumps by the arm count per request.
+   *
    * @param string $experiment_id
    *   The experiment ID.
    * @param string $arm_id
@@ -291,22 +296,24 @@ class SnapshotStorage implements SnapshotStorageInterface {
    *   Current total experiment turns.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
+   * @param int $step_size
+   *   How much total_turns increased on this request.
    *
    * @return bool
    *   TRUE if we should record.
    */
-  protected function shouldRecordSnapshot(string $experiment_id, string $arm_id, int $total_turns, int $snapshots_per_arm): bool {
+  protected function shouldRecordSnapshot(string $experiment_id, string $arm_id, int $total_turns, int $snapshots_per_arm, int $step_size = 1): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
+    $previous_turns = $total_turns - max(1, $step_size);
 
-    // Always record in first window.
-    if ($total_turns <= $first_window) {
+    // Record if the step crossed into or is within the first window.
+    if ($previous_turns < $first_window) {
       return TRUE;
     }
 
-    // Always record recent (cleanup handles the window).
-    // For middle section, use interval.
+    // For middle section, check if step crossed an interval boundary.
     $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return ($total_turns % $interval) === 0;
+    return (int) floor($total_turns / $interval) !== (int) floor($previous_turns / $interval);
   }
 
   /**
@@ -316,21 +323,24 @@ class SnapshotStorage implements SnapshotStorageInterface {
    *   Current total turns.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
+   * @param int $step_size
+   *   How much total_turns increased on this request.
    *
    * @return bool
    *   TRUE if this is a milestone.
    */
-  protected function isMilestone(int $total_turns, int $snapshots_per_arm): bool {
+  protected function isMilestone(int $total_turns, int $snapshots_per_arm, int $step_size = 1): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
+    $previous_turns = $total_turns - max(1, $step_size);
 
     // First window are all milestones.
-    if ($total_turns <= $first_window) {
+    if ($previous_turns < $first_window) {
       return TRUE;
     }
 
-    // Middle section milestones at interval points.
+    // Middle section milestones at interval boundary crossings.
     $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return ($total_turns % $interval) === 0;
+    return (int) floor($total_turns / $interval) !== (int) floor($previous_turns / $interval);
   }
 
   /**
