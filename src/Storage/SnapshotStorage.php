@@ -19,7 +19,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * Maximum rows per experiment to prevent single experiment dominating.
    */
-  const MAX_ROWS_PER_EXPERIMENT = 10000;
+  const MAX_ROWS_PER_EXPERIMENT = 100000;
 
   /**
    * The database connection.
@@ -68,20 +68,19 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns, int $step_size = 1): void {
+  public function recordSnapshot(string $experiment_id, string $arm_id, int $turns, int $rewards, int $total_experiment_turns): void {
     if (!$this->isEnabled()) {
       return;
     }
 
-    // Check if we should record a snapshot based on our budget strategy.
     $arm_count = $this->getArmCount($experiment_id);
     $snapshots_per_arm = $this->calculateSnapshotsPerArm($arm_count);
 
-    if (!$this->shouldRecordSnapshot($experiment_id, $arm_id, $total_experiment_turns, $snapshots_per_arm, $step_size)) {
+    if (!$this->shouldRecordSnapshot($turns, $snapshots_per_arm)) {
       return;
     }
 
-    $is_milestone = $this->isMilestone($total_experiment_turns, $snapshots_per_arm, $step_size);
+    $is_milestone = $this->isMilestone($turns, $snapshots_per_arm);
 
     $this->database->insert('rl_arm_snapshots')
       ->fields([
@@ -162,7 +161,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
         ->fetchCol();
 
       foreach ($arms as $arm_id) {
-        // Get non-milestone snapshots beyond recent window.
+        // Remove non-milestone snapshots beyond recent window.
         $subquery = $this->database->select('rl_arm_snapshots', 's')
           ->fields('s', ['id'])
           ->condition('experiment_id', $experiment_id)
@@ -177,6 +176,33 @@ class SnapshotStorage implements SnapshotStorageInterface {
           $deleted += $this->database->delete('rl_arm_snapshots')
             ->condition('id', $ids_to_delete, 'IN')
             ->execute();
+        }
+
+        // If still over per-arm budget, remove oldest rows regardless
+        // of milestone status. This handles growing arm counts where
+        // the per-arm quota shrinks over time.
+        $remaining = (int) $this->database->select('rl_arm_snapshots', 's')
+          ->condition('experiment_id', $experiment_id)
+          ->condition('arm_id', $arm_id)
+          ->countQuery()
+          ->execute()
+          ->fetchField();
+
+        if ($remaining > $snapshots_per_arm) {
+          $excess_ids = $this->database->select('rl_arm_snapshots', 's')
+            ->fields('s', ['id'])
+            ->condition('experiment_id', $experiment_id)
+            ->condition('arm_id', $arm_id)
+            ->orderBy('total_experiment_turns', 'ASC')
+            ->range(0, $remaining - $snapshots_per_arm)
+            ->execute()
+            ->fetchCol();
+
+          if (!empty($excess_ids)) {
+            $deleted += $this->database->delete('rl_arm_snapshots')
+              ->condition('id', $excess_ids, 'IN')
+              ->execute();
+          }
         }
       }
     }
@@ -224,7 +250,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
     }
     return min(
       self::MAX_SNAPSHOTS_PER_ARM,
-      max(20, (int) floor(self::MAX_ROWS_PER_EXPERIMENT / $arm_count))
+      max(2, (int) floor(self::MAX_ROWS_PER_EXPERIMENT / $arm_count))
     );
   }
 
@@ -283,64 +309,56 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * Determine if we should record a snapshot at this point.
    *
-   * Uses range-crossing: checks whether the range
-   * [total_turns - step_size + 1, total_turns] crosses a sampling
-   * boundary. This handles multi-arm experiments where total_turns
-   * jumps by the arm count per request.
+   * Sampling is based on per-arm turns rather than total experiment turns.
+   * Each arm's turn counter increments by exactly 1 per exposure regardless
+   * of batch size, so the modulo check is reliable without step-size
+   * awareness.
    *
-   * @param string $experiment_id
-   *   The experiment ID.
-   * @param string $arm_id
-   *   The arm ID.
-   * @param int $total_turns
-   *   Current total experiment turns.
+   * @param int $arm_turns
+   *   Cumulative turns for this specific arm.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
-   * @param int $step_size
-   *   How much total_turns increased on this request.
    *
    * @return bool
    *   TRUE if we should record.
    */
-  protected function shouldRecordSnapshot(string $experiment_id, string $arm_id, int $total_turns, int $snapshots_per_arm, int $step_size = 1): bool {
+  protected function shouldRecordSnapshot(int $arm_turns, int $snapshots_per_arm): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
-    $previous_turns = $total_turns - max(1, $step_size);
 
-    // Record if the step crossed into or is within the first window.
-    if ($previous_turns < $first_window) {
+    if ($arm_turns <= $first_window) {
       return TRUE;
     }
 
-    // For middle section, check if step crossed an interval boundary.
-    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return (int) floor($total_turns / $interval) !== (int) floor($previous_turns / $interval);
+    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $arm_turns);
+    return ($arm_turns % $interval) === 0;
   }
 
   /**
-   * Determine if this is a permanent milestone snapshot.
+   * Determine if this is a milestone snapshot.
    *
-   * @param int $total_turns
-   *   Current total turns.
+   * First-window snapshots are always milestones. Beyond that, milestones
+   * use a coarser multiple of the sampling interval so they always land on
+   * recorded snapshots. Cleanup prefers removing non-milestones first but
+   * can also remove milestones when the per-arm budget shrinks.
+   *
+   * @param int $arm_turns
+   *   Cumulative turns for this specific arm.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
-   * @param int $step_size
-   *   How much total_turns increased on this request.
    *
    * @return bool
    *   TRUE if this is a milestone.
    */
-  protected function isMilestone(int $total_turns, int $snapshots_per_arm, int $step_size = 1): bool {
+  protected function isMilestone(int $arm_turns, int $snapshots_per_arm): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
-    $previous_turns = $total_turns - max(1, $step_size);
 
-    // First window are all milestones.
-    if ($previous_turns < $first_window) {
+    if ($arm_turns <= $first_window) {
       return TRUE;
     }
 
-    // Middle section milestones at interval boundary crossings.
-    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return (int) floor($total_turns / $interval) !== (int) floor($previous_turns / $interval);
+    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $arm_turns);
+    $milestone_interval = $interval * 5;
+    return ($arm_turns % $milestone_interval) === 0;
   }
 
   /**
