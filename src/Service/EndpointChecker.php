@@ -308,7 +308,7 @@ class EndpointChecker {
     }
 
     try {
-      $response = $this->httpClient->post($url, $options);
+      $response = $this->httpClient->request('POST', $url, $options);
     }
     catch (\Throwable $e) {
       // Transport-layer failure (DNS / TCP / TLS / timeout); check() will
