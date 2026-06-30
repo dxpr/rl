@@ -178,9 +178,8 @@ class SnapshotStorage implements SnapshotStorageInterface {
             ->execute();
         }
 
-        // If still over per-arm budget, remove oldest rows regardless
-        // of milestone status. This handles growing arm counts where
-        // the per-arm quota shrinks over time.
+        // If still over per-arm budget, compact middle history while
+        // preserving the early and recent windows.
         $remaining = (int) $this->database->select('rl_arm_snapshots', 's')
           ->condition('experiment_id', $experiment_id)
           ->condition('arm_id', $arm_id)
@@ -189,34 +188,27 @@ class SnapshotStorage implements SnapshotStorageInterface {
           ->fetchField();
 
         if ($remaining > $snapshots_per_arm) {
-          $excess_ids = $this->database->select('rl_arm_snapshots', 's')
-            ->fields('s', ['id'])
-            ->condition('experiment_id', $experiment_id)
-            ->condition('arm_id', $arm_id)
-            ->orderBy('total_experiment_turns', 'ASC')
-            ->range(0, $remaining - $snapshots_per_arm)
-            ->execute()
-            ->fetchCol();
-
-          if (!empty($excess_ids)) {
-            $deleted += $this->database->delete('rl_arm_snapshots')
-              ->condition('id', $excess_ids, 'IN')
-              ->execute();
-          }
+          $deleted += $this->compactArmSnapshots(
+            $experiment_id,
+            $arm_id,
+            $remaining - $snapshots_per_arm,
+            $snapshots_per_arm
+          );
         }
       }
     }
 
     // Global cleanup if over max rows.
     $max_rows = $this->configFactory->get('rl.settings')->get('event_log_max_rows') ?: 100000;
-    $total_rows = $this->database->select('rl_arm_snapshots', 's')
+    $total_rows = (int) $this->database->select('rl_arm_snapshots', 's')
       ->countQuery()
       ->execute()
       ->fetchField();
 
     if ($total_rows > $max_rows) {
       $to_delete = $total_rows - $max_rows;
-      // Delete oldest non-milestone rows.
+
+      // First pass: delete oldest non-milestone rows.
       $ids = $this->database->select('rl_arm_snapshots', 's')
         ->fields('s', ['id'])
         ->condition('is_milestone', 0)
@@ -229,6 +221,28 @@ class SnapshotStorage implements SnapshotStorageInterface {
         $deleted += $this->database->delete('rl_arm_snapshots')
           ->condition('id', $ids, 'IN')
           ->execute();
+      }
+
+      // Second pass: if still over limit, remove oldest rows regardless
+      // of milestone status so the global cap is always enforceable.
+      $total_rows = (int) $this->database->select('rl_arm_snapshots', 's')
+        ->countQuery()
+        ->execute()
+        ->fetchField();
+
+      if ($total_rows > $max_rows) {
+        $ids = $this->database->select('rl_arm_snapshots', 's')
+          ->fields('s', ['id'])
+          ->orderBy('created', 'ASC')
+          ->range(0, $total_rows - $max_rows)
+          ->execute()
+          ->fetchCol();
+
+        if (!empty($ids)) {
+          $deleted += $this->database->delete('rl_arm_snapshots')
+            ->condition('id', $ids, 'IN')
+            ->execute();
+        }
       }
     }
 
@@ -359,6 +373,75 @@ class SnapshotStorage implements SnapshotStorageInterface {
     $interval = $this->calculateMiddleInterval($snapshots_per_arm, $arm_turns);
     $milestone_interval = $interval * 5;
     return ($arm_turns % $milestone_interval) === 0;
+  }
+
+  /**
+   * Remove excess snapshots for one arm, preserving early and recent windows.
+   *
+   * Deletes from the middle section first so that the first-window (early
+   * learning) and recent-window (current state) snapshots are kept. Only
+   * falls back to trimming early/recent rows when the middle is exhausted.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   * @param string $arm_id
+   *   The arm ID.
+   * @param int $excess
+   *   Number of rows to delete.
+   * @param int $snapshots_per_arm
+   *   Current per-arm budget.
+   *
+   * @return int
+   *   Number of rows actually deleted.
+   */
+  protected function compactArmSnapshots(string $experiment_id, string $arm_id, int $excess, int $snapshots_per_arm): int {
+    $first_window = $this->calculateFirstWindow($snapshots_per_arm);
+    $recent_window = $this->calculateRecentWindow($snapshots_per_arm);
+
+    $all_ids = $this->database->select('rl_arm_snapshots', 's')
+      ->fields('s', ['id'])
+      ->condition('experiment_id', $experiment_id)
+      ->condition('arm_id', $arm_id)
+      ->orderBy('total_experiment_turns', 'ASC')
+      ->execute()
+      ->fetchCol();
+
+    $total = count($all_ids);
+    $keep_early = min($first_window, $total);
+    $keep_recent = min($recent_window, max(0, $total - $keep_early));
+
+    $early_ids = array_slice($all_ids, 0, $keep_early);
+    $recent_ids = $keep_recent > 0 ? array_slice($all_ids, -$keep_recent) : [];
+    $protected = array_flip(array_merge($early_ids, $recent_ids));
+
+    // Build the delete list from middle rows (oldest middle first).
+    $to_delete = [];
+    for ($i = $keep_early; $i < $total - $keep_recent && count($to_delete) < $excess; $i++) {
+      if (!isset($protected[$all_ids[$i]])) {
+        $to_delete[] = $all_ids[$i];
+      }
+    }
+
+    // If middle exhausted and still need to delete, trim oldest overall.
+    if (count($to_delete) < $excess) {
+      foreach ($all_ids as $id) {
+        if (count($to_delete) >= $excess) {
+          break;
+        }
+        if (!in_array($id, $to_delete, TRUE)) {
+          $to_delete[] = $id;
+        }
+      }
+    }
+
+    $deleted = 0;
+    if (!empty($to_delete)) {
+      $deleted = (int) $this->database->delete('rl_arm_snapshots')
+        ->condition('id', $to_delete, 'IN')
+        ->execute();
+    }
+
+    return $deleted;
   }
 
   /**
