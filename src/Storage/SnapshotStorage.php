@@ -19,7 +19,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * Maximum rows per experiment to prevent single experiment dominating.
    */
-  const MAX_ROWS_PER_EXPERIMENT = 10000;
+  const MAX_ROWS_PER_EXPERIMENT = 100000;
 
   /**
    * The database connection.
@@ -73,15 +73,14 @@ class SnapshotStorage implements SnapshotStorageInterface {
       return;
     }
 
-    // Check if we should record a snapshot based on our budget strategy.
     $arm_count = $this->getArmCount($experiment_id);
     $snapshots_per_arm = $this->calculateSnapshotsPerArm($arm_count);
 
-    if (!$this->shouldRecordSnapshot($experiment_id, $arm_id, $total_experiment_turns, $snapshots_per_arm)) {
+    if (!$this->shouldRecordSnapshot($turns, $snapshots_per_arm)) {
       return;
     }
 
-    $is_milestone = $this->isMilestone($total_experiment_turns, $snapshots_per_arm);
+    $is_milestone = $this->isMilestone($turns, $snapshots_per_arm);
 
     $this->database->insert('rl_arm_snapshots')
       ->fields([
@@ -162,7 +161,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
         ->fetchCol();
 
       foreach ($arms as $arm_id) {
-        // Get non-milestone snapshots beyond recent window.
+        // Remove non-milestone snapshots beyond recent window.
         $subquery = $this->database->select('rl_arm_snapshots', 's')
           ->fields('s', ['id'])
           ->condition('experiment_id', $experiment_id)
@@ -178,19 +177,38 @@ class SnapshotStorage implements SnapshotStorageInterface {
             ->condition('id', $ids_to_delete, 'IN')
             ->execute();
         }
+
+        // If still over per-arm budget, compact middle history while
+        // preserving the early and recent windows.
+        $remaining = (int) $this->database->select('rl_arm_snapshots', 's')
+          ->condition('experiment_id', $experiment_id)
+          ->condition('arm_id', $arm_id)
+          ->countQuery()
+          ->execute()
+          ->fetchField();
+
+        if ($remaining > $snapshots_per_arm) {
+          $deleted += $this->compactArmSnapshots(
+            $experiment_id,
+            $arm_id,
+            $remaining - $snapshots_per_arm,
+            $snapshots_per_arm
+          );
+        }
       }
     }
 
     // Global cleanup if over max rows.
     $max_rows = $this->configFactory->get('rl.settings')->get('event_log_max_rows') ?: 100000;
-    $total_rows = $this->database->select('rl_arm_snapshots', 's')
+    $total_rows = (int) $this->database->select('rl_arm_snapshots', 's')
       ->countQuery()
       ->execute()
       ->fetchField();
 
     if ($total_rows > $max_rows) {
       $to_delete = $total_rows - $max_rows;
-      // Delete oldest non-milestone rows.
+
+      // First pass: delete oldest non-milestone rows.
       $ids = $this->database->select('rl_arm_snapshots', 's')
         ->fields('s', ['id'])
         ->condition('is_milestone', 0)
@@ -203,6 +221,28 @@ class SnapshotStorage implements SnapshotStorageInterface {
         $deleted += $this->database->delete('rl_arm_snapshots')
           ->condition('id', $ids, 'IN')
           ->execute();
+      }
+
+      // Second pass: if still over limit, remove oldest rows regardless
+      // of milestone status so the global cap is always enforceable.
+      $total_rows = (int) $this->database->select('rl_arm_snapshots', 's')
+        ->countQuery()
+        ->execute()
+        ->fetchField();
+
+      if ($total_rows > $max_rows) {
+        $ids = $this->database->select('rl_arm_snapshots', 's')
+          ->fields('s', ['id'])
+          ->orderBy('created', 'ASC')
+          ->range(0, $total_rows - $max_rows)
+          ->execute()
+          ->fetchCol();
+
+        if (!empty($ids)) {
+          $deleted += $this->database->delete('rl_arm_snapshots')
+            ->condition('id', $ids, 'IN')
+            ->execute();
+        }
       }
     }
 
@@ -224,7 +264,7 @@ class SnapshotStorage implements SnapshotStorageInterface {
     }
     return min(
       self::MAX_SNAPSHOTS_PER_ARM,
-      max(20, (int) floor(self::MAX_ROWS_PER_EXPERIMENT / $arm_count))
+      max(2, (int) floor(self::MAX_ROWS_PER_EXPERIMENT / $arm_count))
     );
   }
 
@@ -283,54 +323,125 @@ class SnapshotStorage implements SnapshotStorageInterface {
   /**
    * Determine if we should record a snapshot at this point.
    *
-   * @param string $experiment_id
-   *   The experiment ID.
-   * @param string $arm_id
-   *   The arm ID.
-   * @param int $total_turns
-   *   Current total experiment turns.
+   * Sampling is based on per-arm turns rather than total experiment turns.
+   * Each arm's turn counter increments by exactly 1 per exposure regardless
+   * of batch size, so the modulo check is reliable without step-size
+   * awareness.
+   *
+   * @param int $arm_turns
+   *   Cumulative turns for this specific arm.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
    *
    * @return bool
    *   TRUE if we should record.
    */
-  protected function shouldRecordSnapshot(string $experiment_id, string $arm_id, int $total_turns, int $snapshots_per_arm): bool {
+  protected function shouldRecordSnapshot(int $arm_turns, int $snapshots_per_arm): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
 
-    // Always record in first window.
-    if ($total_turns <= $first_window) {
+    if ($arm_turns <= $first_window) {
       return TRUE;
     }
 
-    // Always record recent (cleanup handles the window).
-    // For middle section, use interval.
-    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return ($total_turns % $interval) === 0;
+    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $arm_turns);
+    return ($arm_turns % $interval) === 0;
   }
 
   /**
-   * Determine if this is a permanent milestone snapshot.
+   * Determine if this is a milestone snapshot.
    *
-   * @param int $total_turns
-   *   Current total turns.
+   * First-window snapshots are always milestones. Beyond that, milestones
+   * use a coarser multiple of the sampling interval so they always land on
+   * recorded snapshots. Cleanup prefers removing non-milestones first but
+   * can also remove milestones when the per-arm budget shrinks.
+   *
+   * @param int $arm_turns
+   *   Cumulative turns for this specific arm.
    * @param int $snapshots_per_arm
    *   Snapshot budget per arm.
    *
    * @return bool
    *   TRUE if this is a milestone.
    */
-  protected function isMilestone(int $total_turns, int $snapshots_per_arm): bool {
+  protected function isMilestone(int $arm_turns, int $snapshots_per_arm): bool {
     $first_window = $this->calculateFirstWindow($snapshots_per_arm);
 
-    // First window are all milestones.
-    if ($total_turns <= $first_window) {
+    if ($arm_turns <= $first_window) {
       return TRUE;
     }
 
-    // Middle section milestones at interval points.
-    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $total_turns);
-    return ($total_turns % $interval) === 0;
+    $interval = $this->calculateMiddleInterval($snapshots_per_arm, $arm_turns);
+    $milestone_interval = $interval * 5;
+    return ($arm_turns % $milestone_interval) === 0;
+  }
+
+  /**
+   * Remove excess snapshots for one arm, preserving early and recent windows.
+   *
+   * Deletes from the middle section first so that the first-window (early
+   * learning) and recent-window (current state) snapshots are kept. Only
+   * falls back to trimming early/recent rows when the middle is exhausted.
+   *
+   * @param string $experiment_id
+   *   The experiment ID.
+   * @param string $arm_id
+   *   The arm ID.
+   * @param int $excess
+   *   Number of rows to delete.
+   * @param int $snapshots_per_arm
+   *   Current per-arm budget.
+   *
+   * @return int
+   *   Number of rows actually deleted.
+   */
+  protected function compactArmSnapshots(string $experiment_id, string $arm_id, int $excess, int $snapshots_per_arm): int {
+    $first_window = $this->calculateFirstWindow($snapshots_per_arm);
+    $recent_window = $this->calculateRecentWindow($snapshots_per_arm);
+
+    $all_ids = $this->database->select('rl_arm_snapshots', 's')
+      ->fields('s', ['id'])
+      ->condition('experiment_id', $experiment_id)
+      ->condition('arm_id', $arm_id)
+      ->orderBy('total_experiment_turns', 'ASC')
+      ->execute()
+      ->fetchCol();
+
+    $total = count($all_ids);
+    $keep_early = min($first_window, $total);
+    $keep_recent = min($recent_window, max(0, $total - $keep_early));
+
+    $early_ids = array_slice($all_ids, 0, $keep_early);
+    $recent_ids = $keep_recent > 0 ? array_slice($all_ids, -$keep_recent) : [];
+    $protected = array_flip(array_merge($early_ids, $recent_ids));
+
+    // Build the delete list from middle rows (oldest middle first).
+    $to_delete = [];
+    for ($i = $keep_early; $i < $total - $keep_recent && count($to_delete) < $excess; $i++) {
+      if (!isset($protected[$all_ids[$i]])) {
+        $to_delete[] = $all_ids[$i];
+      }
+    }
+
+    // If middle exhausted and still need to delete, trim oldest overall.
+    if (count($to_delete) < $excess) {
+      foreach ($all_ids as $id) {
+        if (count($to_delete) >= $excess) {
+          break;
+        }
+        if (!in_array($id, $to_delete, TRUE)) {
+          $to_delete[] = $id;
+        }
+      }
+    }
+
+    $deleted = 0;
+    if (!empty($to_delete)) {
+      $deleted = (int) $this->database->delete('rl_arm_snapshots')
+        ->condition('id', $to_delete, 'IN')
+        ->execute();
+    }
+
+    return $deleted;
   }
 
   /**
