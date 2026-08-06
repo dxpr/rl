@@ -11,19 +11,18 @@
  */
 
 (function (Drupal, drupalSettings, once) {
-
   'use strict';
 
   Drupal.behaviors.rlExampleFrontendTracking = {
-    attach: function (context) {
-      var config = drupalSettings.rlExampleFrontend;
+    attach(context) {
+      const config = drupalSettings.rlExampleFrontend;
       if (!config || !config.experimentId || !config.armId) {
         return;
       }
 
-      once('rl-frontend-ab', '.rl-example-frontend-newsletter-form', context).forEach(function (form) {
-        var observer = new IntersectionObserver(function (entries) {
-          entries.forEach(function (entry) {
+      once('rl-frontend-ab', '.rl-example-frontend-newsletter-form', context).forEach((form) => {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
             if (entry.isIntersecting) {
               Drupal.rl.turn(config.experimentId, config.armId);
               observer.disconnect();
@@ -32,14 +31,13 @@
         }, { threshold: 0.5 });
         observer.observe(form);
 
-        var submitButton = form.querySelector('input[type="submit"]');
+        const submitButton = form.querySelector('input[type="submit"]');
         if (submitButton) {
-          submitButton.addEventListener('click', function () {
+          submitButton.addEventListener('click', () => {
             Drupal.rl.reward(config.experimentId, config.armId);
           });
         }
       });
     },
   };
-
 })(Drupal, drupalSettings, once);

@@ -16,19 +16,18 @@
  */
 
 (function (Drupal, drupalSettings, once) {
-
   'use strict';
 
   Drupal.behaviors.rlPageTitleTracking = {
-    attach: function (context) {
+    attach(context) {
       if (!drupalSettings.rlPageTitle) {
         return;
       }
 
-      once('rl-page-title-tracking', 'body', context).forEach(function () {
-        var settings = drupalSettings.rlPageTitle;
-        var experimentId = settings.experimentId;
-        var armId = settings.armId;
+      once('rl-page-title-tracking', 'body', context).forEach(() => {
+        const settings = drupalSettings.rlPageTitle;
+        const experimentId = settings.experimentId;
+        const armId = settings.armId;
 
         Drupal.rl.turn(experimentId, armId);
 
@@ -37,8 +36,8 @@
         // emits a reward, which is the correct signal for Thompson Sampling.
         // The window-scoped flag only prevents duplicate rewards from the
         // same page load (e.g., if attachBehaviors fires twice).
-        var pageLoadFlag = '__rl_pt_rewarded_' + experimentId + '_' + armId;
-        setTimeout(function () {
+        const pageLoadFlag = `__rl_pt_rewarded_${experimentId}_${armId}`;
+        setTimeout(() => {
           if (window[pageLoadFlag]) {
             return;
           }
@@ -48,5 +47,4 @@
       });
     },
   };
-
 })(Drupal, drupalSettings, once);
