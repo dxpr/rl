@@ -38,11 +38,10 @@
  */
 
 (function (Drupal, drupalSettings) {
-
   'use strict';
 
-  var queue = emptyQueue();
-  var timer = null;
+  let queue = emptyQueue();
+  let timer = null;
 
   function emptyQueue() {
     return {
@@ -61,8 +60,8 @@
   }
 
   function hasPending() {
-    for (var id in queue.decides) {
-      if (Object.prototype.hasOwnProperty.call(queue.decides, id)) {
+    for (const id in queue.decides) {
+      if (Object.hasOwn(queue.decides, id)) {
         return true;
       }
     }
@@ -73,27 +72,27 @@
     if (timer !== null) {
       return;
     }
-    timer = setTimeout(function () {
+    timer = setTimeout(() => {
       timer = null;
       flush();
     }, 500);
   }
 
   function takeQueue() {
-    var snapshot = queue;
+    const snapshot = queue;
     queue = emptyQueue();
     return snapshot;
   }
 
   function batchUrl(url) {
-    return url + (url.indexOf('?') === -1 ? '?' : '&') + 'action=batch';
+    return `${url}${url.includes('?') ? '&' : '?'}action=batch`;
   }
 
   function buildPayload(snapshot) {
-    var decides = [];
-    for (var id in snapshot.decides) {
-      if (Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        var entry = { id: id, arms: snapshot.decides[id].arms };
+    const decides = [];
+    for (const id in snapshot.decides) {
+      if (Object.hasOwn(snapshot.decides, id)) {
+        const entry = { id, arms: snapshot.decides[id].arms };
         if (snapshot.decides[id].rank) {
           entry.rank = true;
         }
@@ -101,54 +100,54 @@
       }
     }
     return {
-      decides: decides,
+      decides,
       turns: snapshot.turns,
       rewards: snapshot.rewards,
     };
   }
 
   function resolveDecides(snapshot, decisions) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
+    for (const id in snapshot.decides) {
+      if (!Object.hasOwn(snapshot.decides, id)) {
         continue;
       }
-      var entry = snapshot.decides[id];
-      var decision = (decisions && decisions[id]) || {};
-      var armId = decision.armId || entry.arms[0];
-      var ranking;
+      const entry = snapshot.decides[id];
+      const decision = (decisions && decisions[id]) || {};
+      const armId = decision.armId || entry.arms[0];
+      let ranking;
       if (Array.isArray(decision.ranking) && decision.ranking.length) {
         ranking = decision.ranking;
       }
       else {
         ranking = entry.arms.slice();
-        var winnerIdx = ranking.indexOf(armId);
+        const winnerIdx = ranking.indexOf(armId);
         if (winnerIdx > 0) {
           ranking.splice(winnerIdx, 1);
           ranking.unshift(armId);
         }
       }
 
-      entry.resolvers.forEach(function (resolve) {
+      entry.resolvers.forEach((resolve) => {
         resolve(armId);
       });
-      entry.rankResolvers.forEach(function (resolve) {
+      entry.rankResolvers.forEach((resolve) => {
         resolve(ranking);
       });
     }
   }
 
   function fallbackDecides(snapshot) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
+    for (const id in snapshot.decides) {
+      if (!Object.hasOwn(snapshot.decides, id)) {
         continue;
       }
-      var entry = snapshot.decides[id];
-      var fallback = entry.arms[0];
-      var fallbackRanking = entry.arms.slice();
-      entry.resolvers.forEach(function (resolve) {
+      const entry = snapshot.decides[id];
+      const fallback = entry.arms[0];
+      const fallbackRanking = entry.arms.slice();
+      entry.resolvers.forEach((resolve) => {
         resolve(fallback);
       });
-      entry.rankResolvers.forEach(function (resolve) {
+      entry.rankResolvers.forEach((resolve) => {
         resolve(fallbackRanking);
       });
     }
@@ -158,21 +157,21 @@
     if (!hasPending()) {
       return;
     }
-    var url = endpoint();
-    var snapshot = takeQueue();
+    const url = endpoint();
+    const snapshot = takeQueue();
     if (!url) {
       fallbackDecides(snapshot);
       return;
     }
-    var body = JSON.stringify(buildPayload(snapshot));
+    const body = JSON.stringify(buildPayload(snapshot));
 
     fetch(batchUrl(url), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: body,
+      body,
       credentials: 'same-origin',
       keepalive: true,
-    }).then(function (response) {
+    }).then((response) => {
       // rl.php returns 422 when every entry in a non-empty batch was
       // rejected (unknown experiment, invalid ids, manager
       // unavailable). Read the JSON body anyway so the errors array
@@ -187,12 +186,12 @@
         return null;
       }
       return response.json();
-    }).then(function (json) {
+    }).then((json) => {
       if (json) {
         reportErrors(json.errors);
         resolveDecides(snapshot, json.decisions || {});
       }
-    }).catch(function () {
+    }).catch(() => {
       fallbackDecides(snapshot);
     });
   }
@@ -206,13 +205,18 @@
       return;
     }
     if (typeof Drupal.rl.onErrors === 'function') {
-      try { Drupal.rl.onErrors(errors); } catch (e) { /* never let a listener poison the next flush */ }
+      try {
+        Drupal.rl.onErrors(errors);
+      }
+      catch { /* never let a listener poison the next flush */ }
     }
     if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-      errors.forEach(function (err) {
-        if (!err || typeof err !== 'object') { return; }
+      errors.forEach((err) => {
+        if (!err || typeof err !== 'object') {
+          return;
+        }
         console.warn(
-          '[rl] ' + (err.kind || 'entry') + ' for ' + (err.id || '(no id)') + ' rejected: ' + (err.reason || 'unknown')
+          `[rl] ${err.kind || 'entry'} for ${err.id || '(no id)'} rejected: ${err.reason || 'unknown'}`,
         );
       });
     }
@@ -222,11 +226,11 @@
     if (!hasPending()) {
       return;
     }
-    var url = endpoint();
+    const url = endpoint();
     if (!url) {
       return;
     }
-    var snapshot = takeQueue();
+    const snapshot = takeQueue();
 
     // sendBeacon is fire-and-forget: we cannot read the response, so
     // pending decides cannot be fulfilled from this path. Resolve them
@@ -236,14 +240,14 @@
     if (snapshot.turns.length === 0 && snapshot.rewards.length === 0) {
       return;
     }
-    var body = JSON.stringify({
+    const body = JSON.stringify({
       decides: [],
       turns: snapshot.turns,
       rewards: snapshot.rewards,
     });
 
     if ('sendBeacon' in navigator) {
-      var blob = new Blob([body], { type: 'application/json' });
+      const blob = new Blob([body], { type: 'application/json' });
       navigator.sendBeacon(batchUrl(url), blob);
     }
   }
@@ -273,12 +277,12 @@
      *   server failure (unknown experiment, no data, network error) so
      *   callers do not need a .catch() for the common path.
      */
-    decide: function (experimentId, armIds) {
+    decide(experimentId, armIds) {
       if (!Array.isArray(armIds) || armIds.length < 2) {
         return Promise.reject(new Error('Drupal.rl.decide requires an array of at least 2 arm ids'));
       }
-      return new Promise(function (resolve) {
-        var entry = queue.decides[experimentId];
+      return new Promise((resolve) => {
+        let entry = queue.decides[experimentId];
         if (!entry) {
           entry = queue.decides[experimentId] = {
             arms: armIds.slice(),
@@ -314,12 +318,12 @@
      *   (best first). Falls back to the caller-provided order on
      *   any failure.
      */
-    rank: function (experimentId, armIds) {
+    rank(experimentId, armIds) {
       if (!Array.isArray(armIds) || armIds.length < 2) {
         return Promise.reject(new Error('Drupal.rl.rank requires an array of at least 2 arm ids'));
       }
-      return new Promise(function (resolve) {
-        var entry = queue.decides[experimentId];
+      return new Promise((resolve) => {
+        let entry = queue.decides[experimentId];
         if (!entry) {
           entry = queue.decides[experimentId] = {
             arms: armIds.slice(),
@@ -340,7 +344,7 @@
      * @param {string} experimentId
      * @param {string} armId
      */
-    turn: function (experimentId, armId) {
+    turn(experimentId, armId) {
       queue.turns.push({ id: experimentId, arm: armId });
       schedule();
     },
@@ -351,7 +355,7 @@
      * @param {string} experimentId
      * @param {string} armId
      */
-    reward: function (experimentId, armId) {
+    reward(experimentId, armId) {
       queue.rewards.push({ id: experimentId, arm: armId });
       schedule();
     },
@@ -359,7 +363,7 @@
     /**
      * Force an immediate flush of the buffered queue.
      */
-    flush: function () {
+    flush() {
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
@@ -374,11 +378,10 @@
   // navigation; pagehide covers desktop back/forward cache restoration.
   // Pending decides are resolved with the fallback arm - the page is
   // going away so the answer no longer matters.
-  document.addEventListener('visibilitychange', function () {
+  document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushBeacon();
     }
   });
   window.addEventListener('pagehide', flushBeacon);
-
 })(Drupal, drupalSettings);

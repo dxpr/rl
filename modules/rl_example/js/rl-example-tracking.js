@@ -8,19 +8,18 @@
  */
 
 (function (Drupal, drupalSettings, once) {
-
   'use strict';
 
   Drupal.behaviors.rlExampleViewportTracking = {
-    attach: function (context) {
-      var tracking = drupalSettings.rlExample && drupalSettings.rlExample.tracking;
+    attach(context) {
+      const tracking = drupalSettings.rlExample && drupalSettings.rlExample.tracking;
       if (!tracking) {
         return;
       }
 
-      once('rl-example-viewport', '.rl-example-newsletter-form', context).forEach(function (form) {
-        var observer = new IntersectionObserver(function (entries) {
-          entries.forEach(function (entry) {
+      once('rl-example-viewport', '.rl-example-newsletter-form', context).forEach((form) => {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
             if (entry.isIntersecting) {
               Drupal.rl.turn(tracking.experimentId, tracking.armId);
               observer.disconnect();
@@ -31,5 +30,4 @@
       });
     },
   };
-
 })(Drupal, drupalSettings, once);

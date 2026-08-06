@@ -2,7 +2,7 @@
   'use strict';
 
   Drupal.behaviors.rlPlotlyCharts = {
-    attach: function (context, settings) {
+    attach(context, settings) {
       if (!settings.rlPlotly) {
         return;
       }
@@ -15,10 +15,10 @@
       const data = settings.rlPlotly;
 
       // Small delay to ensure Plotly is ready
-      setTimeout(function() {
+      setTimeout(() => {
         initPlotlyCharts(data);
       }, 200);
-    }
+    },
   };
 
   function getContainerHeight(elementId) {
@@ -45,17 +45,17 @@
     // Breakpoint table: [maxWidth, fontSize, titleSize, axisTitleSize, tickSize,
     //   margins[l,r,t,b], camera[x,y,z], colorbarLen, colorbarThickness, maxLabelLength]
     const breakpoints = [
-      [430,  10, 13, 11, 9,  [50, 30, 40, 60],   [2.0, -2.0, 1.2],  0.6,  15, 20],
-      [768,  11, 14, 12, 10, [60, 35, 45, 80],   [1.8, -1.9, 1.0],  0.7,  18, 30],
-      [1200, 12, 15, 13, 11, [70, 40, 50, 90],   [1.7, -1.8, 0.95], 0.75, 20, 40],
-      [1920, 13, 16, 14, 11, [80, 40, 50, 100],  [1.6, -1.8, 0.9],  0.8,  20, 50],
-      [Infinity, 14, 18, 15, 12, [100, 50, 60, 120], [1.5, -1.7, 0.85], 0.85, 25, 60]
+      [430, 10, 13, 11, 9, [50, 30, 40, 60], [2.0, -2.0, 1.2], 0.6, 15, 20],
+      [768, 11, 14, 12, 10, [60, 35, 45, 80], [1.8, -1.9, 1.0], 0.7, 18, 30],
+      [1200, 12, 15, 13, 11, [70, 40, 50, 90], [1.7, -1.8, 0.95], 0.75, 20, 40],
+      [1920, 13, 16, 14, 11, [80, 40, 50, 100], [1.6, -1.8, 0.9], 0.8, 20, 50],
+      [Infinity, 14, 18, 15, 12, [100, 50, 60, 120], [1.5, -1.7, 0.85], 0.85, 25, 60],
     ];
 
-    const bp = breakpoints.find(function(b) { return width <= b[0]; });
+    const bp = breakpoints.find(b => width <= b[0]);
     return {
       height: height3d,
-      height2d: height2d,
+      height2d,
       fontSize: bp[1],
       titleSize: bp[2],
       axisTitleSize: bp[3],
@@ -64,7 +64,7 @@
       camera: { eye: { x: bp[6][0], y: bp[6][1], z: bp[6][2] } },
       colorbarLen: bp[7],
       colorbarThickness: bp[8],
-      maxLabelLength: bp[9]
+      maxLabelLength: bp[9],
     };
   }
 
@@ -72,11 +72,13 @@
    * Truncate label to max length.
    */
   function truncateLabel(label, maxLen) {
-    if (!label && label !== 0) return 'Variant';
+    if (!label && label !== 0)
+      return 'Variant';
     // Convert to string if not already (handles numeric IDs)
     const str = String(label);
-    if (str.length <= maxLen) return str;
-    return str.substring(0, maxLen - 3) + '...';
+    if (str.length <= maxLen)
+      return str;
+    return `${str.substring(0, maxLen - 3)}...`;
   }
 
   function initPlotlyCharts(data) {
@@ -93,13 +95,14 @@
       paper_bgcolor: 'rgba(255,255,255,1)',
       plot_bgcolor: 'rgba(255,255,255,1)',
       font: { size: config.fontSize, family: 'Arial, sans-serif' },
-      margin: config.margin
+      margin: config.margin,
     };
 
     let numArms = 0;
     if (data.lineChartData && data.lineChartData.arms) {
       numArms = data.lineChartData.arms.length;
-    } else if (data.surface3d && data.surface3d.zMatrixScore) {
+    }
+    else if (data.surface3d && data.surface3d.zMatrixScore) {
       numArms = data.surface3d.zMatrixScore.length;
     }
 
@@ -121,12 +124,12 @@
 
         for (let idx = 0; idx < maxLineArms; idx++) {
           const arm = data.lineChartData.arms[idx];
-          const armLabel = arm.label || ('Variant #' + idx);
+          const armLabel = arm.label || (`Variant #${idx}`);
           const truncatedLabel = truncateLabel(armLabel, config.maxLabelLength);
 
           const xValues = [];
           const yValues = [];
-          arm.data.forEach(function(point) {
+          arm.data.forEach((point) => {
             xValues.push(point.x);
             // Use score or rate based on metric setting
             yValues.push(metric === 'score' ? point.score : point.rate);
@@ -140,9 +143,9 @@
             y: yValues,
             line: {
               color: arm.color,
-              width: 2
+              width: 2,
             },
-            hovertemplate: '<b>' + armLabel + '</b><br>' + xAxisLabel + ': %{x}<br>' + metricLabel + ': %{y:.1f}%<extra></extra>'
+            hovertemplate: `<b>${armLabel}</b><br>${xAxisLabel}: %{x}<br>${metricLabel}: %{y:.1f}%<extra></extra>`,
           });
         }
 
@@ -152,7 +155,7 @@
         const xAxisConfig = {
           title: { text: xAxisLabel, font: { size: config.axisTitleSize } },
           tickfont: { size: config.tickSize },
-          gridcolor: 'rgba(0,0,0,0.1)'
+          gridcolor: 'rgba(0,0,0,0.1)',
         };
 
         // Use custom tick labels for time-based axes
@@ -167,14 +170,14 @@
         Plotly.newPlot('rl-plotly-2d-lines', traces2d, Object.assign({}, defaultLayout, {
           title: {
             text: chartTitle,
-            font: { size: config.titleSize }
+            font: { size: config.titleSize },
           },
           xaxis: xAxisConfig,
           yaxis: {
-            title: { text: metricLabel + ' (%)', font: { size: config.axisTitleSize } },
+            title: { text: `${metricLabel} (%)`, font: { size: config.axisTitleSize } },
             tickfont: { size: config.tickSize },
             gridcolor: 'rgba(0,0,0,0.1)',
-            rangemode: 'tozero'
+            rangemode: 'tozero',
           },
           height: lineChartHeight,
           showlegend: lineChartNumArms <= lineChartThreshold,
@@ -184,19 +187,20 @@
             y: lineChartNumArms <= 5 ? 1 : -0.2,
             xanchor: 'left',
             x: lineChartNumArms <= 5 ? 1.02 : 0,
-            font: { size: config.tickSize }
+            font: { size: config.tickSize },
           },
-          hovermode: 'closest'
+          hovermode: 'closest',
         }), { responsive: true });
 
         // Update tip text if showing subset of variants
         if (lineChartNumArms > maxLineArms) {
           const tipEl = lineChartEl.parentElement.querySelector('.rl-chart-tip');
           if (tipEl) {
-            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + maxLineArms + ' active variants out of ' + lineChartNumArms + ' total. Hover for details.';
+            tipEl.innerHTML = `<strong>Tip:</strong> Showing top ${maxLineArms} active variants out of ${lineChartNumArms} total. Hover for details.`;
           }
         }
-      } catch (e) {
+      }
+      catch (e) {
         console.error('2D line chart error:', e);
       }
     }
@@ -217,7 +221,7 @@
           armRates.push({ index: i, rate: lastRate });
         }
         // Sort by rate ASCENDING (lowest rate = lowest index = front, highest rate = back)
-        armRates.sort(function(a, b) { return a.rate - b.rate; });
+        armRates.sort((a, b) => a.rate - b.rate);
 
         // Reorder data based on sorted indices
         const sortedZMatrix = [];
@@ -226,10 +230,10 @@
         for (let i = 0; i < armRates.length; i++) {
           const origIdx = armRates[i].index;
           sortedZMatrix.push(zMatrix[origIdx]);
-          sortedLabels.push(armLabels[origIdx] || ('Variant #' + origIdx));
+          sortedLabels.push(armLabels[origIdx] || (`Variant #${origIdx}`));
         }
 
-        const armIndices = [...Array(landscapeNumArms).keys()];
+        const armIndices = Array.from({ length: landscapeNumArms }, (_, i) => i);
 
         // Build pre-formatted hovertext array (Plotly 3D surfaces don't support %{text} in hovertemplate)
         const hoverTextData = [];
@@ -238,7 +242,7 @@
 
         for (let ai = 0; ai < landscapeNumArms; ai++) {
           const hoverRow = [];
-          const fullLabel = sortedLabels[ai] || ('Variant #' + ai);
+          const fullLabel = sortedLabels[ai] || (`Variant #${ai}`);
           const displayLabel = truncateLabel(fullLabel, config.maxLabelLength);
           truncatedLabels.push(displayLabel);
 
@@ -248,7 +252,7 @@
             // Use custom label if available for time-based axes
             const xDisplay = (data.xLabels && data.xLabels[xValue]) ? data.xLabels[xValue] : xValue;
             // Build complete hover text for each point
-            hoverRow.push('<b>' + fullLabel + '</b><br>' + xAxisLabel3d + ': ' + xDisplay + '<br>' + metricLabel + ': ' + val.toFixed(1) + '%');
+            hoverRow.push(`<b>${fullLabel}</b><br>${xAxisLabel3d}: ${xDisplay}<br>${metricLabel}: ${val.toFixed(1)}%`);
           }
           hoverTextData.push(hoverRow);
         }
@@ -256,13 +260,13 @@
         // Configure Y-axis based on number of arms
         const yAxisConfig = {
           title: { text: 'Variant', font: { size: config.axisTitleSize } },
-          tickfont: { size: config.tickSize }
+          tickfont: { size: config.tickSize },
         };
 
         // Show arm labels on Y-axis when 15 or fewer variants for readability
         // Use shorter labels for 3D axis (max 25 chars) to ensure proper alignment
         if (landscapeNumArms <= 15) {
-          const shortLabels = sortedLabels.map(function(label) {
+          const shortLabels = sortedLabels.map((label) => {
             return truncateLabel(label, 25);
           });
           yAxisConfig.tickvals = armIndices;
@@ -273,7 +277,7 @@
         // Configure X-axis based on time axis type
         const xAxis3dConfig = {
           title: { text: xAxisLabel3d, font: { size: config.axisTitleSize } },
-          tickfont: { size: config.tickSize }
+          tickfont: { size: config.tickSize },
         };
 
         // Use custom tick labels for time-based axes
@@ -285,12 +289,18 @@
         }
 
         // Single pass for all statistics (min, max, sum, sumSq for variance)
-        let zMin = Infinity, zMax = -Infinity, zSum = 0, zSumSq = 0, zCount = 0;
+        let zMin = Infinity;
+        let zMax = -Infinity;
+        let zSum = 0;
+        let zSumSq = 0;
+        let zCount = 0;
         for (let ai = 0; ai < sortedZMatrix.length; ai++) {
           for (let ti = 0; ti < sortedZMatrix[ai].length; ti++) {
             const val = sortedZMatrix[ai][ti];
-            if (val < zMin) zMin = val;
-            if (val > zMax) zMax = val;
+            if (val < zMin)
+              zMin = val;
+            if (val > zMax)
+              zMax = val;
             zSum += val;
             zSumSq += val * val;
             zCount++;
@@ -313,11 +323,11 @@
         // High variance (ridged surface): moderate ambient, keep good contrast
         const varianceFactor = Math.min(1, coeffOfVar * 2); // Normalize to 0-1
         const adaptiveLighting = {
-          ambient: 0.9 - (varianceFactor * 0.25),   // 0.9 for flat, 0.65 for ridged
-          diffuse: 0.8,                              // Keep constant
-          specular: 0.15 + (varianceFactor * 0.1),  // 0.15 for flat, 0.25 for ridged
-          roughness: 0.5,                            // Keep constant
-          fresnel: 0.2                               // Keep constant
+          ambient: 0.9 - (varianceFactor * 0.25), // 0.9 for flat, 0.65 for ridged
+          diffuse: 0.8, // Keep constant
+          specular: 0.15 + (varianceFactor * 0.1), // 0.15 for flat, 0.25 for ridged
+          roughness: 0.5, // Keep constant
+          fresnel: 0.2, // Keep constant
         };
 
         Plotly.newPlot('rl-plotly-3d-surface', [{
@@ -337,38 +347,38 @@
               show: true,
               usecolormap: true,
               highlightcolor: '#ffffff',
-              project: { z: false }
+              project: { z: false },
             },
             x: { show: false },
-            y: { show: false }
+            y: { show: false },
           },
           lighting: adaptiveLighting,
           lightposition: {
             x: 100,
             y: 200,
-            z: 100
+            z: 100,
           },
           colorbar: {
             title: { text: metricLabel, side: 'right', font: { size: config.axisTitleSize } },
             thickness: config.colorbarThickness,
-            len: config.colorbarLen
-          }
+            len: config.colorbarLen,
+          },
         }], Object.assign({}, defaultLayout, {
           title: { text: chartTitle, font: { size: config.titleSize } },
           scene: {
             xaxis: xAxis3dConfig,
             yaxis: yAxisConfig,
             zaxis: {
-              title: { text: metricLabel + ' (%)', font: { size: config.axisTitleSize } },
-              tickfont: { size: config.tickSize }
+              title: { text: `${metricLabel} (%)`, font: { size: config.axisTitleSize } },
+              tickfont: { size: config.tickSize },
             },
             camera: {
               eye: config.camera.eye,
-              center: { x: 0, y: 0, z: -0.1 }
+              center: { x: 0, y: 0, z: -0.1 },
             },
-            aspectratio: { x: 1.5, y: 1, z: 0.8 }
+            aspectratio: { x: 1.5, y: 1, z: 0.8 },
           },
-          height: getContainerHeight('rl-plotly-3d-surface')
+          height: getContainerHeight('rl-plotly-3d-surface'),
         }), { responsive: true });
 
         // Update tip text if showing subset of variants
@@ -376,10 +386,11 @@
         if (landscapeNumArms < totalArmsAll) {
           const tipEl = surface3dEl.parentElement.querySelector('.rl-chart-tip');
           if (tipEl) {
-            tipEl.innerHTML = '<strong>Tip:</strong> Showing top ' + landscapeNumArms + ' active variants out of ' + totalArmsAll + ' total. Taller/brighter = better ' + metricLabel.toLowerCase() + '.';
+            tipEl.innerHTML = `<strong>Tip:</strong> Showing top ${landscapeNumArms} active variants out of ${totalArmsAll} total. Taller/brighter = better ${metricLabel.toLowerCase()}.`;
           }
         }
-      } catch (e) {
+      }
+      catch (e) {
         console.error('3D posterior landscape error:', e);
       }
     }
@@ -400,13 +411,13 @@
 
     function activateTab(target) {
       const tabs = document.querySelectorAll('.rl-chart-tab');
-      tabs.forEach(function(btn) {
+      tabs.forEach((btn) => {
         const on = btn.dataset.rlTab === target;
         btn.classList.toggle('is-active', on);
         btn.setAttribute('aria-selected', on ? 'true' : 'false');
       });
       const panes = document.querySelectorAll('.rl-chart-pane');
-      panes.forEach(function(pane) {
+      panes.forEach((pane) => {
         pane.classList.toggle('is-active', pane.dataset.rlPane === target);
       });
 
@@ -420,18 +431,19 @@
     }
 
     const tabButtons = once('rl-chart-tabs', '.rl-chart-tab');
-    tabButtons.forEach(function(btn) {
-      btn.addEventListener('click', function() {
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
         activateTab(btn.dataset.rlTab);
       });
-      btn.addEventListener('keydown', function(e) {
+      btn.addEventListener('keydown', (e) => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
           return;
         }
         e.preventDefault();
         const all = Array.from(document.querySelectorAll('.rl-chart-tab'));
         const idx = all.indexOf(btn);
-        if (idx === -1) return;
+        if (idx === -1)
+          return;
         const next = e.key === 'ArrowRight'
           ? all[(idx + 1) % all.length]
           : all[(idx - 1 + all.length) % all.length];
@@ -448,11 +460,10 @@
    */
   function debounce(func, wait) {
     let timeout;
-    return function executedFunction() {
+    return function executedFunction(...args) {
       const context = this;
-      const args = arguments;
       clearTimeout(timeout);
-      timeout = setTimeout(function() {
+      timeout = setTimeout(() => {
         func.apply(context, args);
       }, wait);
     };
@@ -481,12 +492,13 @@
     lastWindowHeight = currentHeight;
 
     const data = drupalSettings.rlPlotly;
-    if (!data) return;
+    if (!data)
+      return;
 
     // Use Plotly.Plots.resize() for responsive charts - it respects the container
     const chartIds = ['rl-plotly-2d-lines', 'rl-plotly-3d-surface'];
 
-    chartIds.forEach(function(chartId) {
+    chartIds.forEach((chartId) => {
       const el = document.getElementById(chartId);
       if (el && el.data && el.layout) {
         Plotly.Plots.resize(el);
@@ -499,5 +511,4 @@
 
   // Only use window resize event - avoid ResizeObserver to prevent infinite loops
   window.addEventListener('resize', debouncedResize, { passive: true });
-
 })(Drupal, drupalSettings, once);
