@@ -15,7 +15,7 @@
   flex-shrink: 0;
   width: 2.5em;
   height: 2.5em;
-  background: linear-gradient(135deg, var(--rl-color-1, #0077B6), var(--rl-color-5, #26828E), var(--rl-color-8, #6CCE59));
+  background: linear-gradient(135deg, var(--rl-color-1), var(--rl-color-5), var(--rl-color-8));
   border-radius: 0.5em;
   display: flex;
   align-items: center;
