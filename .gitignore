@@ -1,3 +1,5 @@
 # Ignore .claude directory except skills
 .claude/*
 !.claude/skills/
+
+node_modules/
