@@ -115,9 +115,18 @@
       var entry = snapshot.decides[id];
       var decision = (decisions && decisions[id]) || {};
       var armId = decision.armId || entry.arms[0];
-      var ranking = (Array.isArray(decision.ranking) && decision.ranking.length)
-        ? decision.ranking
-        : entry.arms.slice();
+      var ranking;
+      if (Array.isArray(decision.ranking) && decision.ranking.length) {
+        ranking = decision.ranking;
+      }
+      else {
+        ranking = entry.arms.slice();
+        var winnerIdx = ranking.indexOf(armId);
+        if (winnerIdx > 0) {
+          ranking.splice(winnerIdx, 1);
+          ranking.unshift(armId);
+        }
+      }
 
       entry.resolvers.forEach(function (resolve) {
         resolve(armId);
