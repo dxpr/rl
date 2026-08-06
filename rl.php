@@ -279,17 +279,11 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
         $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'scoring_failed'];
         continue;
       }
+      $scores = array_intersect_key($scores, array_flip($arm_ids));
       arsort($scores);
       $decision = ['armId' => (string) key($scores)];
       if (!empty($decide['rank'])) {
-        $ranking = [];
-        foreach (array_keys($scores) as $arm) {
-          $arm = (string) $arm;
-          if (in_array($arm, $arm_ids, TRUE)) {
-            $ranking[] = $arm;
-          }
-        }
-        $decision['ranking'] = $ranking;
+        $decision['ranking'] = array_map('strval', array_keys($scores));
       }
       $decisions->{$eid} = $decision;
       $succeeded++;
