@@ -623,7 +623,8 @@ class ReportsController extends ControllerBase {
 
     $build['charts'] = [
       '#theme' => 'rl_charts',
-      '#title' => $this->t('Performance Over Time'),
+      '#title' => $this->t('Variant Performance'),
+      '#subtitle' => $this->t('Conversion score (%) by total impressions and content variant'),
       '#tip_hover' => $this->t('Hover for details. Higher = better.'),
       '#tip_taller' => $this->t('Hover for details. Taller/brighter = better conversion score.'),
       '#interaction_hint' => $this->t('Drag to rotate @bullet Scroll to zoom', ['@bullet' => '•']),
