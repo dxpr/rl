@@ -242,6 +242,7 @@ class ReportsController extends ControllerBase {
     // back to the registry for experiments that have been registered but
     // have not yet received any traffic. Finally, fall back to the raw ID.
     $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
+    // @phpstan-ignore nullsafe.neverNull
     $experiment_name = $experiment_totals?->experiment_name
       ?? $this->experimentRegistry->getExperimentName($experiment_id)
       ?? $experiment_id;
