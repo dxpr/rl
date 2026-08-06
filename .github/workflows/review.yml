@@ -7,7 +7,7 @@ env:
 
 jobs:
   changes:
-    runs-on: ubicloud-standard-2
+    runs-on: ubicloud-standard-4
     outputs:
       javascript: ${{ steps.filter.outputs.javascript }}
     steps:
@@ -24,7 +24,7 @@ jobs:
   eslint:
     needs: changes
     if: needs.changes.outputs.javascript == 'true'
-    runs-on: ubicloud-standard-2
+    runs-on: ubicloud-standard-4
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@v6
