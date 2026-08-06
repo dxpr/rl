@@ -281,9 +281,12 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
         continue;
       }
       arsort($scores);
-      $decision = ['armId' => (string) key($scores)];
-      if (!empty($decide['rank'])) {
-        $decision['ranking'] = array_map('strval', array_keys($scores));
+      // Filter to only the requested arms so historical arms that are no
+      // longer in the caller's list do not leak into the response.
+      $ranked = array_values(array_intersect(array_keys($scores), $arm_ids));
+      $decision = ['armId' => (string) $ranked[0]];
+      if (!empty($decide['rank']) && $decide['rank'] === TRUE) {
+        $decision['ranking'] = array_map('strval', $ranked);
       }
       $decisions->{$eid} = $decision;
       $succeeded++;

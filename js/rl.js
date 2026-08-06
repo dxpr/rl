@@ -61,12 +61,13 @@
   }
 
   function hasPending() {
-    for (var id in queue.decides) {
+    var id;
+    for (id in queue.decides) {
       if (Object.prototype.hasOwnProperty.call(queue.decides, id)) {
         return true;
       }
     }
-    for (var id in queue.ranks) {
+    for (id in queue.ranks) {
       if (Object.prototype.hasOwnProperty.call(queue.ranks, id)) {
         return true;
       }
@@ -97,13 +98,14 @@
   function buildPayload(snapshot) {
     var decides = [];
     var rankIds = Object.create(null);
-    for (var id in snapshot.ranks) {
+    var id;
+    for (id in snapshot.ranks) {
       if (Object.prototype.hasOwnProperty.call(snapshot.ranks, id)) {
         decides.push({ id: id, arms: snapshot.ranks[id].arms, rank: true });
         rankIds[id] = true;
       }
     }
-    for (var id in snapshot.decides) {
+    for (id in snapshot.decides) {
       if (Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
         if (!rankIds[id]) {
           decides.push({ id: id, arms: snapshot.decides[id].arms });
@@ -164,7 +166,18 @@
         ranking = decisions[id].ranking;
       }
       if (!ranking) {
-        ranking = entry.arms;
+        ranking = entry.arms.slice();
+        // If the server returned a winner but no ranking (e.g. old
+        // rl.php without rank support), move it to the front so the
+        // caller benefits from the information we do have.
+        if (decisions && decisions[id] && decisions[id].armId) {
+          var winner = decisions[id].armId;
+          var idx = ranking.indexOf(winner);
+          if (idx > 0) {
+            ranking.splice(idx, 1);
+            ranking.unshift(winner);
+          }
+        }
       }
       entry.resolvers.forEach(function (resolve) {
         resolve(ranking);
@@ -338,6 +351,10 @@
      * Same batching, same discipline (read arm ids from the DOM),
      * same fallback behaviour: on any failure the promise resolves to
      * the caller-provided arm order so the list stays usable.
+     *
+     * If both decide() and rank() target the same experiment in one
+     * batch window, they share one wire request using the rank
+     * caller's arm list.
      *
      * @param {string} experimentId
      *   The pre-registered experiment id.
