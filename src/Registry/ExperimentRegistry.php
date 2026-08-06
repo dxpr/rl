@@ -55,7 +55,6 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
       // Use merge to handle duplicate registrations gracefully.
       $fields = [
         'module' => $module,
-        'registered_at' => $this->time->getRequestTime(),
       ];
 
       if ($experiment_name !== NULL) {
@@ -64,6 +63,7 @@ class ExperimentRegistry implements ExperimentRegistryInterface {
 
       $this->database->merge('rl_experiment_registry')
         ->key('experiment_id', $experiment_id)
+        ->insertFields(['registered_at' => $this->time->getRequestTime()])
         ->fields($fields)
         ->execute();
     }

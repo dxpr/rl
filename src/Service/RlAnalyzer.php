@@ -242,7 +242,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
     // We fetch raw data and group in PHP for database compatibility.
     $query = $this->database->select('rl_arm_snapshots', 's');
     $query->condition('s.experiment_id', $experimentId);
-    $query->fields('s', ['turns', 'rewards', 'created']);
+    $query->fields('s', ['arm_id', 'turns', 'rewards', 'created']);
     $query->orderBy('s.created', 'DESC');
     // Fetch more rows than needed since we'll aggregate them.
     $query->range(0, $periods * 100);
@@ -541,33 +541,65 @@ class RlAnalyzer implements RlAnalyzerInterface {
    *   Associative array keyed by period string with aggregated data.
    */
   protected function groupSnapshotsByPeriod(array $rawResults, string $period, int $maxPeriods): array {
-    $grouped = [];
+    // Snapshots store cumulative values per arm. To get per-period activity
+    // we take the latest snapshot per arm per period, sum across arms to get
+    // period-end totals, then diff consecutive periods.
+    $armPeriodMax = [];
 
     foreach ($rawResults as $row) {
       $timestamp = (int) $row->created;
+      $armId = $row->arm_id;
 
-      // Generate period key based on period type.
       $periodKey = match ($period) {
         'daily' => date('Y-m-d', $timestamp),
         'monthly' => date('Y-m', $timestamp),
         default => date('Y', $timestamp) . '-W' . date('W', $timestamp),
       };
 
-      if (!isset($grouped[$periodKey])) {
-        $grouped[$periodKey] = [
-          'impressions' => 0,
-          'conversions' => 0,
-          'period_end' => $timestamp,
+      if (!isset($armPeriodMax[$periodKey][$armId])
+          || $timestamp > $armPeriodMax[$periodKey][$armId]['ts']) {
+        $armPeriodMax[$periodKey][$armId] = [
+          'turns' => (int) $row->turns,
+          'rewards' => (int) $row->rewards,
+          'ts' => $timestamp,
         ];
       }
-
-      $grouped[$periodKey]['impressions'] += (int) $row->turns;
-      $grouped[$periodKey]['conversions'] += (int) $row->rewards;
-      $grouped[$periodKey]['period_end'] = max($grouped[$periodKey]['period_end'], $timestamp);
     }
 
-    // Sort by period key and limit.
-    ksort($grouped);
+    // Sum latest-per-arm values to get period-end cumulative totals.
+    $periodTotals = [];
+    foreach ($armPeriodMax as $periodKey => $arms) {
+      $totalTurns = 0;
+      $totalRewards = 0;
+      $periodEnd = 0;
+      foreach ($arms as $arm) {
+        $totalTurns += $arm['turns'];
+        $totalRewards += $arm['rewards'];
+        $periodEnd = max($periodEnd, $arm['ts']);
+      }
+      $periodTotals[$periodKey] = [
+        'turns' => $totalTurns,
+        'rewards' => $totalRewards,
+        'period_end' => $periodEnd,
+      ];
+    }
+
+    ksort($periodTotals);
+
+    // Diff consecutive periods to get per-period incremental activity.
+    $grouped = [];
+    $prevTurns = 0;
+    $prevRewards = 0;
+    foreach ($periodTotals as $periodKey => $totals) {
+      $grouped[$periodKey] = [
+        'impressions' => max(0, $totals['turns'] - $prevTurns),
+        'conversions' => max(0, $totals['rewards'] - $prevRewards),
+        'period_end' => $totals['period_end'],
+      ];
+      $prevTurns = $totals['turns'];
+      $prevRewards = $totals['rewards'];
+    }
+
     $grouped = array_slice($grouped, -$maxPeriods, $maxPeriods, TRUE);
 
     return $grouped;
@@ -599,7 +631,8 @@ class RlAnalyzer implements RlAnalyzerInterface {
     $query->fields('a', ['arm_id', 'turns', 'rewards']);
     $query->condition('experiment_id', $experimentId);
     $query->condition('turns', 50, '>=');
-    $query->orderBy('rewards', 'DESC');
+    $query->addExpression('rewards / turns', 'conversion_rate');
+    $query->orderBy('conversion_rate', 'DESC');
     $query->range(0, 2);
     $topArms = $query->execute()->fetchAll();
 

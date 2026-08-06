@@ -55,9 +55,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     // Update arm data.
     $this->database->merge('rl_arm_data')
       ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+      ->insertFields(['created' => $timestamp])
       ->fields([
         'turns' => 1,
-        'created' => $timestamp,
         'updated' => $timestamp,
       ])
       ->expression('turns', 'turns + :inc', [':inc' => 1])
@@ -67,9 +67,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     // Update total turns.
     $this->database->merge('rl_experiment_totals')
       ->key('experiment_id', $experiment_id)
+      ->insertFields(['created' => $timestamp])
       ->fields([
         'total_turns' => 1,
-        'created' => $timestamp,
         'updated' => $timestamp,
       ])
       ->expression('total_turns', 'total_turns + :inc', [':inc' => 1])
@@ -91,9 +91,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     foreach ($arm_ids as $arm_id) {
       $this->database->merge('rl_arm_data')
         ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+        ->insertFields(['created' => $timestamp])
         ->fields([
           'turns' => 1,
-          'created' => $timestamp,
           'updated' => $timestamp,
         ])
         ->expression('turns', 'turns + :inc', [':inc' => 1])
@@ -104,9 +104,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     // Record total turns = number of arms shown (sum of individual turns).
     $this->database->merge('rl_experiment_totals')
       ->key('experiment_id', $experiment_id)
+      ->insertFields(['created' => $timestamp])
       ->fields([
         'total_turns' => $arm_count,
-        'created' => $timestamp,
         'updated' => $timestamp,
       ])
       ->expression('total_turns', 'total_turns + :inc', [':inc' => $arm_count])
@@ -125,9 +125,9 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
 
     $this->database->merge('rl_arm_data')
       ->keys(['experiment_id' => $experiment_id, 'arm_id' => $arm_id])
+      ->insertFields(['created' => $timestamp])
       ->fields([
         'rewards' => 1,
-        'created' => $timestamp,
         'updated' => $timestamp,
       ])
       ->expression('rewards', 'rewards + :inc', [':inc' => 1])
@@ -137,8 +137,8 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
     // Also update experiment totals timestamp.
     $this->database->merge('rl_experiment_totals')
       ->key('experiment_id', $experiment_id)
+      ->insertFields(['created' => $timestamp])
       ->fields([
-        'created' => $timestamp,
         'updated' => $timestamp,
       ])
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
@@ -157,7 +157,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->condition('experiment_id', $experiment_id)
       ->condition('arm_id', $arm_id)
       ->execute()
-      ->fetchObject();
+      ->fetchObject() ?: NULL;
   }
 
   /**

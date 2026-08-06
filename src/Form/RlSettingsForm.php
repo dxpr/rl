@@ -91,15 +91,20 @@ class RlSettingsForm extends ConfigFormBase {
     $was_enabled = $config->get('enable_event_log') ?? FALSE;
     $is_enabled = (bool) $form_state->getValue('enable_event_log');
 
-    // If disabling event log, redirect to confirmation form.
+    // If disabling event log, save other settings then redirect to confirmation.
     if ($was_enabled && !$is_enabled) {
+      $this->config('rl.settings')
+        ->set('debug_mode', (bool) $form_state->getValue('debug_mode'))
+        ->set('event_log_max_rows', (int) $form_state->getValue('event_log_max_rows'))
+        ->set('chart_line_threshold', (int) $form_state->getValue('chart_line_threshold'))
+        ->save();
       $form_state->setRedirectUrl(Url::fromRoute('rl.settings.disable_event_log'));
       return;
     }
 
     // Save all settings normally.
     $this->config('rl.settings')
-      ->set('debug_mode', $form_state->getValue('debug_mode'))
+      ->set('debug_mode', (bool) $form_state->getValue('debug_mode'))
       ->set('enable_event_log', $is_enabled)
       ->set('event_log_max_rows', (int) $form_state->getValue('event_log_max_rows'))
       ->set('chart_line_threshold', (int) $form_state->getValue('chart_line_threshold'))
