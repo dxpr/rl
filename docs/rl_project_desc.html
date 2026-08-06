@@ -31,7 +31,7 @@
 <ul>
   <li><strong>Multivariate by default</strong>: 2 to thousands of variants, no manual configuration</li>
   <li><strong>Real-time RLHF loop</strong>: visitor clicks update the model on every page</li>
-  <li><strong>Fast HTTP REST API</strong>: optimized JSON endpoint for tracking and decisions</li>
+  <li><strong>Fast HTTP REST API</strong>: optimized JSON endpoint for tracking, decisions, and full rankings</li>
   <li><strong>Admin reports</strong>: per-experiment performance, traffic, and confidence</li>
   <li><strong>Service-based architecture</strong>: extensible decorators, custom variant selectors</li>
   <li><strong>Data sovereignty</strong>: no cloud, no third-party SaaS, all data stays in your Drupal database</li>
@@ -44,6 +44,7 @@
   <li>You want to <strong>A/B or multivariate test</strong> any part of your site without third-party SaaS</li>
   <li>You want <strong>continuous optimization</strong> rather than fixed-horizon experiments</li>
   <li>You want to <strong>add or remove variants on the fly</strong> without restarting tests</li>
+  <li>You want to <strong>sort lists by engagement</strong> (FAQs, accordions, carousels) without burning page cache</li>
   <li>You want a <strong>core API</strong> you can call from any module, View, or block</li>
 </ul>
 
@@ -147,14 +148,21 @@ $best_arm = $ts_calculator-&gt;selectBestArm($scores);
 
 <p>Attach the <code>rl/api</code> library to get <code>Drupal.rl</code> on the page:</p>
 
-<pre><code>Drupal.rl.turn('hero_cta', 'v0');
-Drupal.rl.reward('hero_cta', 'v0');
-
+<pre><code>// Pick one winner (A/B variant selection).
 Drupal.rl.decide('hero_cta', ['v0', 'v1', 'v2']).then(function (armId) {
   showVariant(armId);
-});</code></pre>
+});
 
-<p>All three methods feed a shared 500 ms batch window, so every A/B test on the page rides one POST to <code>rl.php</code>. See the README for the HTTP wire format and server-side patterns.</p>
+// Get a full ranking (list sorting by engagement).
+Drupal.rl.rank('faq_sort', ['q0', 'q1', 'q2']).then(function (sorted) {
+  sorted.forEach(function (armId) { parent.appendChild(items[armId]); });
+});
+
+// Track impressions and conversions.
+Drupal.rl.turn('hero_cta', 'v0');
+Drupal.rl.reward('hero_cta', 'v0');</code></pre>
+
+<p>All methods feed a shared 500 ms batch window, so every A/B test on the page rides one POST to <code>rl.php</code>. See the README for the HTTP wire format and server-side patterns.</p>
 
 <h3>FAQ</h3>
 

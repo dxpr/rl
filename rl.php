@@ -12,14 +12,11 @@
  *     production consumers (ai_sorting, and any third-party JS that was
  *     written before Drupal.rl shipped). These remain fully supported.
  *   - batch: JSON POST body used by Drupal.rl on the client side. Carries
- *     multiple turn and reward events for potentially several experiments
- *     in a single request. See the docblock on handle_batch_request()
- *     below for the payload shape.
- *
- * Deciding which variant to show is an application concern that belongs in
- * PHP at render time (see ai_sorting's Views sort plugin, or
- * VariantSelectorBase in this module). rl.php intentionally does not
- * expose a client-side decide endpoint.
+ *     decides, turns, and rewards for potentially several experiments in
+ *     a single request. Decides return a Thompson Sampling winner per
+ *     experiment; callers may request a full ranking instead of (or in
+ *     addition to) the single winner. See the docblock on
+ *     handle_batch_request() below for the payload shape.
  */
 
 use Drupal\Core\DrupalKernel;
@@ -176,6 +173,7 @@ catch (\Exception $e) {
  * {
  *   "decides": [
  *     {"id": "<experiment_id>", "arms": ["<arm>", "<arm>", ...]},
+ *     {"id": "<experiment_id>", "arms": [...], "rank": true},
  *     ...
  *   ],
  *   "turns":   [{"id": "<experiment_id>", "arm": "<arm>"}, ...],
@@ -188,6 +186,16 @@ catch (\Exception $e) {
  * @code
  * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
  * @endcode
+ *
+ * When `"rank": true` is set on a decide entry, the response includes
+ * the full sorted arm list alongside the winner:
+ * @code
+ * {"decisions": {"<eid>": {"armId": "<arm>", "ranking": ["<arm>", ...]}}}
+ * @endcode
+ *
+ * `armId` always equals `ranking[0]`. Callers that only need a single
+ * winner can ignore `ranking`; callers that need a full ordering (e.g.
+ * client-side list sorting) read `ranking` instead.
  *
  * Rejected entries are recorded in `errors` with a machine-readable
  * `reason` (unknown_experiment, invalid_arm_id, missing_arms,
@@ -273,7 +281,11 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
         continue;
       }
       arsort($scores);
-      $decisions->{$eid} = ['armId' => (string) key($scores)];
+      $decision = ['armId' => (string) key($scores)];
+      if (!empty($decide['rank'])) {
+        $decision['ranking'] = array_map('strval', array_keys($scores));
+      }
+      $decisions->{$eid} = $decision;
       $succeeded++;
     }
   }

@@ -59,6 +59,7 @@ losses update toward lower. Algorithm details:
 - **A/B test any content variation** without third-party SaaS
 - **Multivariate test** dozens or thousands of variants at once
 - **Continuous optimization**: tests never end, the model keeps learning
+- **Engagement-ranked lists**: sort FAQs, accordions, carousels, or any list by what visitors actually click
 - **Recommendations**: rank items by real engagement
 - **Feature flags**: route users to variants based on observed reward, not coin flip
 
@@ -271,8 +272,9 @@ See `rl_sorting`'s Views sort plugin for the canonical pattern and
 
 Some consumers have to decide in JS: full-page-cached builders that
 render all variants into the HTML and swap them on the client so they
-can keep Varnish/Fastly caching. For that case there is
-`Drupal.rl.decide()`, documented below.
+can keep Varnish/Fastly caching. For those cases there are
+`Drupal.rl.decide()` (single winner) and `Drupal.rl.rank()` (full
+sorted order), documented below.
 
 ## JavaScript API (`Drupal.rl`)
 
@@ -297,11 +299,26 @@ Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
   showVariant(armId);
 });
 
+// Ask for a full ranking when you need to reorder a list, not just
+// pick one winner (accordions, FAQs, carousels, sorted feeds).
+var items = document.querySelectorAll('[data-rl-arm]');
+var itemIds = Array.prototype.map.call(items, function (el) {
+  return el.dataset.rlArm;
+});
+Drupal.rl.rank('faq_sort', itemIds).then(function (sorted) {
+  // sorted = ['q3', 'q0', 'q1', 'q2'] (full ranked order, best first)
+  var parent = items[0].parentNode;
+  sorted.forEach(function (armId) {
+    var el = parent.querySelector('[data-rl-arm="' + armId + '"]');
+    parent.appendChild(el);
+  });
+});
+
 // Optional: force an immediate flush.
 Drupal.rl.flush();
 ```
 
-Events accumulate for 500 ms and then flush in one POST. Decide,
+Events accumulate for 500 ms and then flush in one POST. Decide, rank,
 turn, and reward events share the same queue and the same request, so
 a page with a DXPR Builder variant block plus tracking on other
 elements ends up making a single round trip. Buffered tracking events
@@ -328,8 +345,20 @@ node ids, anything matching `^[a-zA-Z0-9_-]+$`) is whatever you emit
 into the attribute. The rl core is arm-agnostic.
 
 If the server returns no decision for an experiment (not registered,
-no data, network error), the returned promise resolves to `armIds[0]`
-so callers never need a `.catch()` for the common path.
+no data, network error), `decide()` resolves to `armIds[0]` and
+`rank()` resolves to the caller-provided `armIds` array unchanged, so
+callers never need a `.catch()` for the common path.
+
+### `rank()` vs `decide()`
+
+`decide()` returns `Promise<string>`: one winning arm. Use it when you
+need to show a single variant (A/B hero images, page titles).
+
+`rank()` returns `Promise<Array<string>>`: the full arm list sorted by
+Thompson Sampling score, best first. Use it when you need to reorder a
+list of items by engagement (FAQ accordions, toggle lists, carousels,
+sorted feeds). Both methods share the same batch queue, so calling them
+on the same page costs no extra requests.
 
 `Drupal.rl` is one transport among several. Modules that already ship
 their own tracking JS (like `rl_sorting`, which batches turns on its
@@ -352,7 +381,7 @@ consumers keep using them unchanged.
 | `turn` | form POST | Record one impression. |
 | `turns` | form POST | Record impressions for many arms in one experiment. |
 | `reward` | form POST | Record one conversion. |
-| `batch` | JSON POST | Record turns and rewards across many experiments in one request. Used by `Drupal.rl`. |
+| `batch` | JSON POST | Decides, turns, and rewards across many experiments in one request. Used by `Drupal.rl`. |
 
 Experiment IDs and arm IDs must match `^[a-zA-Z0-9_-]+$`. Experiments
 must already be registered via `ExperimentRegistryInterface::register()`;
@@ -383,7 +412,8 @@ Content-Type: application/json
 
 {
   "decides": [
-    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]}
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
+    {"id": "faq_sort", "arms": ["q0", "q1", "q2", "q3"], "rank": true}
   ],
   "turns": [
     {"id": "hero_cta", "arm": "v0"},
@@ -400,12 +430,22 @@ dropped silently so one bad event does not poison the rest of the
 batch. The response is
 
 ```json
-{"ok":true,"decisions":{"hero_cta":{"armId":"v1"}}}
+{
+  "ok": true,
+  "decisions": {
+    "hero_cta": {"armId": "v1"},
+    "faq_sort": {"armId": "q2", "ranking": ["q2", "q0", "q3", "q1"]}
+  }
+}
 ```
 
 `decisions` contains only entries that had a successful Thompson
-Sampling lookup. Missing keys mean "use the default variant". Turns
-and rewards are fire-and-forget writes with no per-event response.
+Sampling lookup. Missing keys mean "use the default variant". When
+`"rank": true` is set on a decide entry, the response includes a
+`ranking` array with all arms sorted by score (best first). `armId`
+always equals `ranking[0]`. Callers that only need a single winner can
+ignore `ranking`. Turns and rewards are fire-and-forget writes with no
+per-event response.
 
 ### Curl examples
 
