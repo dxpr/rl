@@ -17,16 +17,15 @@
  */
 
 (function (Drupal, drupalSettings, once) {
-
   'use strict';
 
   Drupal.behaviors.rlMenuLinkTracking = {
-    attach: function (context) {
-      var anchors = once('rl-menu-link-tracking', 'a[data-rl-ml-experiment-id]', context);
+    attach(context) {
+      const anchors = once('rl-menu-link-tracking', 'a[data-rl-ml-experiment-id]', context);
 
-      anchors.forEach(function (anchor) {
-        var experimentId = anchor.getAttribute('data-rl-ml-experiment-id');
-        var armId = anchor.getAttribute('data-rl-ml-arm-id');
+      anchors.forEach((anchor) => {
+        const experimentId = anchor.getAttribute('data-rl-ml-experiment-id');
+        const armId = anchor.getAttribute('data-rl-ml-arm-id');
         if (!experimentId || !armId) {
           return;
         }
@@ -34,8 +33,8 @@
         // Turn tracking via IntersectionObserver. The data attribute prevents
         // multiple turns for the same anchor in a single page load.
         if ('IntersectionObserver' in window) {
-          var observer = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
+          const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
               if (entry.isIntersecting && !entry.target.dataset.rlMlTracked) {
                 entry.target.dataset.rlMlTracked = '1';
                 Drupal.rl.turn(experimentId, armId);
@@ -51,7 +50,7 @@
         // Reward tracking on click. No sessionStorage cap; each click is a
         // valid reward signal. The data attribute prevents double-counting
         // a single click event.
-        anchor.addEventListener('click', function () {
+        anchor.addEventListener('click', () => {
           if (anchor.dataset.rlMlClicked) {
             return;
           }
@@ -59,12 +58,11 @@
           Drupal.rl.reward(experimentId, armId);
           // Clear the flag after the click event finishes propagating, so a
           // second click later in the same page load can also be recorded.
-          window.setTimeout(function () {
+          window.setTimeout(() => {
             delete anchor.dataset.rlMlClicked;
           }, 0);
         });
       });
     },
   };
-
 })(Drupal, drupalSettings, once);
