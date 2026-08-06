@@ -32,7 +32,6 @@ class CacheResponseSubscriber implements EventSubscriberInterface {
 
     if ($cache_override !== NULL) {
       $response = $event->getResponse();
-      $response->setPublic();
       $response->setMaxAge($cache_override);
 
       // Also update the cacheability metadata for Drupal's internal page cache.

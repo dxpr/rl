@@ -242,7 +242,8 @@ class ReportsController extends ControllerBase {
     // back to the registry for experiments that have been registered but
     // have not yet received any traffic. Finally, fall back to the raw ID.
     $experiment_totals = $this->experimentStorage->getExperimentTotals($experiment_id);
-    $experiment_name = $experiment_totals->experiment_name
+    // @phpstan-ignore nullsafe.neverNull
+    $experiment_name = $experiment_totals?->experiment_name
       ?? $this->experimentRegistry->getExperimentName($experiment_id)
       ?? $experiment_id;
     return $this->t('Experiment: @name', ['@name' => $experiment_name]);
@@ -390,6 +391,9 @@ class ReportsController extends ControllerBase {
     }
     elseif (stripos($order, 'Conversions') !== FALSE) {
       $sort_field = 'rewards';
+    }
+    elseif (stripos($order, 'Conversion Score') !== FALSE) {
+      $sort_field = 'conversion_score';
     }
     elseif (stripos($order, 'Conversion Rate') !== FALSE) {
       $sort_field = 'conversion_rate';
