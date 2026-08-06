@@ -188,7 +188,9 @@ catch (\Exception $e) {
  *
  * Decides resolve to Thompson Sampling winners and are returned keyed
  * by experiment id. When "rank": true is set on a decide entry, the
- * full sorted arm list is included as "ranking":
+ * response includes "ranking": an ordered list containing only the
+ * arms the caller sent, sorted by Thompson Sampling score (best
+ * first). Historical arms not in the request are excluded.
  * @code
  * {"decisions": {"<experiment_id>": {"armId": "<arm>"}}}
  * {"decisions": {"<experiment_id>": {"armId": "<arm>", "ranking": ["<arm>", ...]}}}
@@ -280,7 +282,14 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
       arsort($scores);
       $decision = ['armId' => (string) key($scores)];
       if (!empty($decide['rank'])) {
-        $decision['ranking'] = array_map('strval', array_keys($scores));
+        $ranking = [];
+        foreach (array_keys($scores) as $arm) {
+          $arm = (string) $arm;
+          if (in_array($arm, $arm_ids, TRUE)) {
+            $ranking[] = $arm;
+          }
+        }
+        $decision['ranking'] = $ranking;
       }
       $decisions->{$eid} = $decision;
       $succeeded++;

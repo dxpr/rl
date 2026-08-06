@@ -304,7 +304,7 @@ Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
 var items = document.querySelector('[data-rl-experiment="faq_sort"]');
 var faqArms = items.dataset.rlArms.split(',');
 Drupal.rl.rank('faq_sort', faqArms).then(function (sorted) {
-  // sorted = ['t3', 't0', 't1', 't2'] — all arms, best first
+  // sorted = ['t3', 't0', 't1', 't2'], all arms, best first
   sorted.forEach(function (armId) {
     items.appendChild(items.querySelector('[data-rl-arm="' + armId + '"]'));
   });

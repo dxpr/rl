@@ -115,7 +115,9 @@
       var entry = snapshot.decides[id];
       var decision = (decisions && decisions[id]) || {};
       var armId = decision.armId || entry.arms[0];
-      var ranking = decision.ranking || entry.arms.slice();
+      var ranking = (Array.isArray(decision.ranking) && decision.ranking.length)
+        ? decision.ranking
+        : entry.arms.slice();
 
       entry.resolvers.forEach(function (resolve) {
         resolve(armId);
@@ -165,7 +167,7 @@
       // rl.php returns 422 when every entry in a non-empty batch was
       // rejected (unknown experiment, invalid ids, manager
       // unavailable). Read the JSON body anyway so the errors array
-      // reaches the console — without this, a site-wide mistake like
+      // reaches the console; without this, a site-wide mistake like
       // "registry cache missed the new hook so no experiment rows
       // exist" looks identical to a healthy empty batch and the
       // operator has nothing to grep for in devtools. Other non-2xx
@@ -288,8 +290,10 @@
      * first). The same batching, deduplication, and fallback rules
      * as decide() apply. When both decide() and rank() are called
      * for the same experiment in the same flush cycle, they share
-     * the same batch entry; decide callers receive the top arm,
-     * rank callers receive the full sorted list.
+     * the same batch entry: the first caller's arm list wins (the
+     * second caller's armIds are validated but not merged). Decide
+     * callers receive the top arm; rank callers receive the full
+     * sorted list.
      *
      * @param {string} experimentId
      *   The pre-registered experiment id.
