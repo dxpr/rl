@@ -85,7 +85,7 @@
   }
 
   function batchUrl(url) {
-    return `${url + (!url.includes('?') ? '?' : '&')}action=batch`;
+    return `${url}${url.includes('?') ? '&' : '?'}action=batch`;
   }
 
   function buildPayload(snapshot) {
