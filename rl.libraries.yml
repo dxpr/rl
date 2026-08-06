@@ -28,6 +28,7 @@ plotly:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - rl/experiment-highlight
 
 date-filter:
   version: 1.0
@@ -39,3 +40,4 @@ date-filter:
   dependencies:
     - core/drupal
     - core/once
+    - rl/experiment-highlight
