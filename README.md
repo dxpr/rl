@@ -60,6 +60,7 @@ losses update toward lower. Algorithm details:
 - **Multivariate test** dozens or thousands of variants at once
 - **Continuous optimization**: tests never end, the model keeps learning
 - **Recommendations**: rank items by real engagement
+- **Smart sorting**: reorder lists, accordions, or FAQs by visitor engagement
 - **Feature flags**: route users to variants based on observed reward, not coin flip
 
 ## Installation
@@ -297,6 +298,18 @@ Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
   showVariant(armId);
 });
 
+// Ask for a full ranking when you need to sort, not just pick a winner.
+// Use case: reordering accordion items, FAQ lists, or any sortable
+// content by visitor engagement.
+var items = document.querySelector('[data-rl-experiment="faq_sort"]');
+var faqArms = items.dataset.rlArms.split(',');
+Drupal.rl.rank('faq_sort', faqArms).then(function (sorted) {
+  // sorted = ['t3', 't0', 't1', 't2'] — all arms, best first
+  sorted.forEach(function (armId) {
+    items.appendChild(items.querySelector('[data-rl-arm="' + armId + '"]'));
+  });
+});
+
 // Optional: force an immediate flush.
 Drupal.rl.flush();
 ```
@@ -308,7 +321,7 @@ elements ends up making a single round trip. Buffered tracking events
 are also flushed via `navigator.sendBeacon` on `visibilitychange` and
 `pagehide` so they survive navigation.
 
-### Discipline for `decide()`
+### Discipline for `decide()` and `rank()`
 
 > **Never hardcode arm ids in JS. Always read them from a DOM
 > attribute that the server-side renderer emitted.**
@@ -317,11 +330,11 @@ Rationale: the DOM is downstream of the same server-render pipeline
 that produced the decide's context. When the experiment manager adds
 or removes a variant, the consumer's page cache is invalidated, the
 next render emits the new attribute, and JS picks it up. JS never
-asserts what the arm set is - it just echoes whatever the current
+asserts what the arm set is; it just echoes whatever the current
 cached HTML says, mirroring rl_sorting's PHP pattern of recomputing
 `$arm_ids` from a fresh view query on every render. This keeps
-`Drupal.rl.decide()` drift-free without requiring the rl core to
-store arm lists.
+`Drupal.rl.decide()` and `Drupal.rl.rank()` drift-free without
+requiring the rl core to store arm lists.
 
 The convention your builder uses internally (numeric `v0..vN`, UUIDs,
 node ids, anything matching `^[a-zA-Z0-9_-]+$`) is whatever you emit
@@ -383,7 +396,8 @@ Content-Type: application/json
 
 {
   "decides": [
-    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]}
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
+    {"id": "faq_sort", "arms": ["t0", "t1", "t2", "t3"], "rank": true}
   ],
   "turns": [
     {"id": "hero_cta", "arm": "v0"},
@@ -400,12 +414,22 @@ dropped silently so one bad event does not poison the rest of the
 batch. The response is
 
 ```json
-{"ok":true,"decisions":{"hero_cta":{"armId":"v1"}}}
+{
+  "ok": true,
+  "decisions": {
+    "hero_cta": {"armId": "v1"},
+    "faq_sort": {"armId": "t2", "ranking": ["t2", "t0", "t3", "t1"]}
+  }
+}
 ```
 
 `decisions` contains only entries that had a successful Thompson
-Sampling lookup. Missing keys mean "use the default variant". Turns
-and rewards are fire-and-forget writes with no per-event response.
+Sampling lookup. Missing keys mean "use the default variant". When
+`"rank": true` is set on a decide entry, the response includes a
+`ranking` array with all arm IDs sorted by Thompson Sampling score
+(best first). The `armId` field is always present and equals
+`ranking[0]` for backwards compatibility. Turns and rewards are
+fire-and-forget writes with no per-event response.
 
 ### Curl examples
 

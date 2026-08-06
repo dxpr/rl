@@ -2,8 +2,9 @@
  * @file
  * Thin RL transport proxy with request batching.
  *
- * Exposes Drupal.rl.decide(), Drupal.rl.turn(), Drupal.rl.reward(), and
- * Drupal.rl.flush(). Batches calls into a single POST to rl.php so that
+ * Exposes Drupal.rl.decide(), Drupal.rl.rank(), Drupal.rl.turn(),
+ * Drupal.rl.reward(), and Drupal.rl.flush(). Batches calls into a
+ * single POST to rl.php so that
  * multiple RL-powered features on the same page share one request
  * instead of each making its own.
  *
@@ -12,12 +13,14 @@
  * visibilitychange / pagehide flush tracking writes immediately via
  * navigator.sendBeacon so buffered events survive navigation.
  *
- * About decide(): client-side decide exists to serve consumers that
- * render variants in JS (DXPR Builder's runtime, etc.) where shifting
- * the decision to PHP would burn full-page cache. Consumers that can
- * decide server-side (ai_sorting, rl_page_title, rl_menu_link,
- * rl_example, rl_example_frontend) should keep doing so; decide() is
- * for the client-rendered path only.
+ * About decide() and rank(): client-side decide/rank exist to serve
+ * consumers that render variants in JS (DXPR Builder's runtime, etc.)
+ * where shifting the decision to PHP would burn full-page cache.
+ * decide() returns a single winner; rank() returns the full sorted
+ * arm list for use cases like reordering accordion items or lists.
+ * Consumers that can decide server-side (ai_sorting, rl_page_title,
+ * rl_menu_link, rl_example, rl_example_frontend) should keep doing
+ * so; decide()/rank() are for the client-rendered path only.
  *
  * Important discipline for callers:
  *   Read the arm id list from the DOM at call time. Do not hardcode
@@ -43,7 +46,7 @@
 
   function emptyQueue() {
     return {
-      // experimentId -> { arms: [...], resolvers: [fn] }
+      // experimentId -> { arms: [...], rank: bool, resolvers: [fn], rankResolvers: [fn] }
       decides: Object.create(null),
       turns: [],
       rewards: [],
@@ -90,7 +93,11 @@
     var decides = [];
     for (var id in snapshot.decides) {
       if (Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        decides.push({ id: id, arms: snapshot.decides[id].arms });
+        var entry = { id: id, arms: snapshot.decides[id].arms };
+        if (snapshot.decides[id].rank) {
+          entry.rank = true;
+        }
+        decides.push(entry);
       }
     }
     return {
@@ -106,19 +113,15 @@
         continue;
       }
       var entry = snapshot.decides[id];
-      var armId = null;
-      if (decisions && decisions[id] && decisions[id].armId) {
-        armId = decisions[id].armId;
-      }
-      // Fallback: first arm in the caller-provided list. This keeps the
-      // promise contract "always resolves to a usable arm" so consumers
-      // do not need a .catch() for the common failure modes (unknown
-      // experiment, empty data, network error).
-      if (!armId) {
-        armId = entry.arms[0];
-      }
+      var decision = (decisions && decisions[id]) || {};
+      var armId = decision.armId || entry.arms[0];
+      var ranking = decision.ranking || entry.arms.slice();
+
       entry.resolvers.forEach(function (resolve) {
         resolve(armId);
+      });
+      entry.rankResolvers.forEach(function (resolve) {
+        resolve(ranking);
       });
     }
   }
@@ -130,8 +133,12 @@
       }
       var entry = snapshot.decides[id];
       var fallback = entry.arms[0];
+      var fallbackRanking = entry.arms.slice();
       entry.resolvers.forEach(function (resolve) {
         resolve(fallback);
+      });
+      entry.rankResolvers.forEach(function (resolve) {
+        resolve(fallbackRanking);
       });
     }
   }
@@ -264,10 +271,52 @@
         if (!entry) {
           entry = queue.decides[experimentId] = {
             arms: armIds.slice(),
+            rank: false,
             resolvers: [],
+            rankResolvers: [],
           };
         }
         entry.resolvers.push(resolve);
+        schedule();
+      });
+    },
+
+    /**
+     * Request a full Thompson Sampling ranking for an experiment.
+     *
+     * Returns all arm IDs sorted by Thompson Sampling score (best
+     * first). The same batching, deduplication, and fallback rules
+     * as decide() apply. When both decide() and rank() are called
+     * for the same experiment in the same flush cycle, they share
+     * the same batch entry; decide callers receive the top arm,
+     * rank callers receive the full sorted list.
+     *
+     * @param {string} experimentId
+     *   The pre-registered experiment id.
+     * @param {Array<string>} armIds
+     *   The arm ids in play. Minimum 2.
+     *
+     * @return {Promise<Array<string>>}
+     *   Resolves to all arm ids sorted by Thompson Sampling score
+     *   (best first). Falls back to the caller-provided order on
+     *   any failure.
+     */
+    rank: function (experimentId, armIds) {
+      if (!Array.isArray(armIds) || armIds.length < 2) {
+        return Promise.reject(new Error('Drupal.rl.rank requires an array of at least 2 arm ids'));
+      }
+      return new Promise(function (resolve) {
+        var entry = queue.decides[experimentId];
+        if (!entry) {
+          entry = queue.decides[experimentId] = {
+            arms: armIds.slice(),
+            rank: true,
+            resolvers: [],
+            rankResolvers: [],
+          };
+        }
+        entry.rank = true;
+        entry.rankResolvers.push(resolve);
         schedule();
       });
     },
