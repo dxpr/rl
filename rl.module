@@ -30,6 +30,7 @@ function rl_theme() {
     'rl_charts' => [
       'variables' => [
         'title' => NULL,
+        'subtitle' => NULL,
         'tip_hover' => NULL,
         'tip_taller' => NULL,
         'interaction_hint' => NULL,
