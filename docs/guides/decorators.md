@@ -15,8 +15,14 @@ namespace Drupal\my_module\Decorator;
 
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
 
+/**
+ * Decorates experiments owned by my_module.
+ */
 class MyExperimentDecorator implements ExperimentDecoratorInterface {
 
+  /**
+   * {@inheritdoc}
+   */
   public function decorateExperiment(string $experiment_id): ?array {
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
@@ -24,15 +30,19 @@ class MyExperimentDecorator implements ExperimentDecoratorInterface {
     return ['#markup' => 'My Custom Experiment Name'];
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function decorateArm(string $experiment_id, string $arm_id): ?array {
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
     $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
     if ($entity) {
+      $label = htmlspecialchars($entity->label());
+      $id = htmlspecialchars($arm_id);
       return [
-        '#markup' => htmlspecialchars($entity->label()) .
-          ' <small>(' . htmlspecialchars($arm_id) . ')</small>',
+        '#markup' => $label . ' <small>(' . $id . ')</small>',
       ];
     }
     return NULL;
