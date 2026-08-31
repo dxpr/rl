@@ -7,28 +7,9 @@ composer require drupal/rl
 drush en rl
 ```
 
-After enabling, visit `/admin/config/system/rl` to review the default settings,
-then see [Configuration](configuration.md) for next steps.
-
-## Plotly.js library (required for charts)
-
-The RL module uses Plotly.js for experiment charts. Install it via Composer using
-[Asset Packagist](https://asset-packagist.org):
-
-```bash
-# Add Asset Packagist repository (if not already configured)
-composer config repositories.asset-packagist composer https://asset-packagist.org
-
-# Install the Composer plugin for npm assets (if not already installed)
-composer require oomphinc/composer-installers-extender
-composer config extra.installer-types --json '["npm-asset"]'
-composer config extra.installer-paths.web/libraries/\{\$name\} --json '["type:npm-asset"]'
-
-# Install Plotly.js
-composer require npm-asset/plotly.js-dist-min:^2.35
-```
-
-This installs the library to `web/libraries/plotly.js-dist-min/`.
+After enabling, visit `/admin/config/services/reinforcement-learning` to
+review the default settings, then see [Configuration](configuration.md)
+for next steps.
 
 ## Post-installation: verify rl.php access
 
@@ -46,8 +27,9 @@ curl -X POST -d "action=ping" http://example.com/modules/contrib/rl/rl.php
 - **Nginx**: add the configuration rules below to your server block
 - **Security modules**: whitelist `/modules/contrib/rl/rl.php`
 
-If server policies prevent direct access to `rl.php`, use the Drupal
-Routes API instead.
+Direct access to `rl.php` is required for the tracking endpoint. If your
+server configuration prevents it, you will need to add a custom route in
+your own module that proxies requests to the RL services.
 
 ### Nginx configuration
 

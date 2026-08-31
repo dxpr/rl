@@ -63,8 +63,8 @@ Content-Type: application/json
 ```
 
 All three sections are optional. Invalid or unregistered entries are
-dropped silently so one bad event does not poison the rest of the
-batch. The response is:
+rejected individually without poisoning the rest of the batch. A
+successful response looks like:
 
 ```json
 {
@@ -84,11 +84,30 @@ Sampling lookup. Missing keys mean "use the default variant". When
 `ranking[0]` for backwards compatibility. Turns and rewards are
 fire-and-forget writes with no per-event response.
 
+When some entries are rejected (invalid IDs, unregistered experiments,
+malformed entries), the response includes an `errors` array:
+
+```json
+{
+  "ok": false,
+  "errors": [
+    {"kind": "decide", "id": "unknown_exp", "reason": "unknown_experiment"},
+    {"kind": "turn", "id": "bad!", "reason": "invalid_id"}
+  ]
+}
+```
+
+Each error includes the `kind` (decide, turn, or reward), the `id` that
+failed, and a machine-readable `reason`. Partial successes return HTTP 200
+with both `decisions` and `errors`; the response is 422 only when every
+entry in the batch was rejected.
+
 ## Error responses
 
 | Status | When |
 | --- | --- |
 | `400` | Missing/invalid `action`, malformed JSON, or missing `experiment_id` on a legacy action. |
+| `422` | Batch request where every entry was rejected (all invalid or unregistered). |
 | `500` | Drupal kernel failed to boot. Error logged to the PHP error log. |
 
 ## Performance notes

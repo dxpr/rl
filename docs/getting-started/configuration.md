@@ -2,8 +2,9 @@
 
 ## Module settings
 
-After enabling the module, visit **Administration > Configuration > System >
-RL Settings** (`/admin/config/system/rl`) to configure the module.
+After enabling the module, visit **Administration > Configuration >
+Web services > Reinforcement Learning**
+(`/admin/config/services/reinforcement-learning`) to configure the module.
 
 <!-- TODO: screenshot of the RL settings form -->
 
@@ -14,10 +15,10 @@ You can also manage settings via Drush:
 drush rl:config:list
 
 # Get a specific setting
-drush rl:config:get exploration_rate
+drush rl:config:get debug_mode
 
 # Set a specific setting
-drush rl:config:set exploration_rate 0.1
+drush rl:config:set event_log_max_rows 50000
 ```
 
 See the [Drush commands guide](../guides/drush.md) for the full reference.

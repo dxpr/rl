@@ -11,12 +11,20 @@ Implement the `ExperimentDecoratorInterface`:
 ```php
 namespace Drupal\my_module\Decorator;
 
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
 
 /**
  * Decorates experiments owned by my_module.
  */
 class MyExperimentDecorator implements ExperimentDecoratorInterface {
+
+  /**
+   * Constructs a MyExperimentDecorator.
+   */
+  public function __construct(
+    protected readonly EntityTypeManagerInterface $entityTypeManager,
+  ) {}
 
   /**
    * {@inheritdoc}
@@ -35,7 +43,7 @@ class MyExperimentDecorator implements ExperimentDecoratorInterface {
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
-    $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
+    $entity = $this->entityTypeManager->getStorage('node')->load($arm_id);
     if ($entity) {
       $label = htmlspecialchars($entity->label());
       $id = htmlspecialchars($arm_id);
