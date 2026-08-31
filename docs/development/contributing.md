@@ -71,6 +71,9 @@ The module is built around these core services:
 
 Consumer modules (like `rl_sorting`, `rl_page_title`, `rl_menu_link`) extend
 the core by registering experiments and implementing variant selectors and
-decorators.
+decorators. Each consumer provides an experiment entity, a selector service
+extending `VariantSelectorBase`, a report decorator, and tracking JS. See the
+[Building a Consumer Module](../guides/integrations.md) guide for a detailed
+walkthrough using `rl_page_title` and `rl_menu_link` as worked examples.
 
 <!-- TODO: architecture diagram showing core services and how consumer modules plug in -->

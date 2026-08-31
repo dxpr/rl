@@ -24,6 +24,7 @@ nav:
       - JavaScript API: 'api/javascript.md'
       - HTTP API: 'api/http.md'
   - Guides:
+      - Building a Consumer Module: 'guides/integrations.md'
       - Drush Commands: 'guides/drush.md'
       - Experiment Decorators: 'guides/decorators.md'
       - Cache Management: 'guides/cache.md'
