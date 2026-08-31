@@ -5,6 +5,8 @@ view is a trial, each conversion is a reward, and the algorithm continuously
 shifts traffic to whichever variant is winning. RLHF-style feedback loop, no
 fixed horizons, no third-party SaaS.
 
+![3D Posterior Landscape showing variant performance over time](images/rl-3d-posterior-landscape.jpg)
+
 ## What you can A/B test
 
 - **[RL: A/B Test Views Content](https://www.drupal.org/project/rl_sorting)**
@@ -26,8 +28,6 @@ fixed horizons, no third-party SaaS.
 - **Data sovereignty**: no cloud, no SaaS, all data stays in your Drupal database
 - **GDPR-friendly tracking**: only anonymous interaction counts, no user IDs or
   cookies
-
-![3D Posterior Landscape showing variant performance over time](images/rl-3d-posterior-landscape.jpg)
 
 ## Why RL instead of fixed-horizon A/B testing?
 
