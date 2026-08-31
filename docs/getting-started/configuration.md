@@ -1,6 +1,31 @@
 # Configuration
 
-## Deciding which variant to show
+## Module settings
+
+After enabling the module, visit **Administration > Configuration > System >
+RL Settings** (`/admin/config/system/rl`) to configure the module.
+
+<!-- TODO: screenshot of the RL settings form -->
+
+You can also manage settings via Drush:
+
+```bash
+# List all settings with current values
+drush rl:config:list
+
+# Get a specific setting
+drush rl:config:get exploration_rate
+
+# Set a specific setting
+drush rl:config:set exploration_rate 0.1
+```
+
+See the [Drush commands guide](../guides/drush.md) for the full reference.
+
+## Choosing a variant selection strategy
+
+RL supports two approaches for deciding which variant to show. Pick the one
+that fits your caching setup.
 
 ### Server-side (preferred)
 
@@ -12,7 +37,7 @@ filters, plugin config), so it can call the RL service directly:
 $scores = $experiment_manager->getThompsonScores(
   'my_experiment',
   NULL,
-  ['v0', 'v1', 'v2']  // arm ids owned by your domain
+  ['v0', 'v1', 'v2'],
 );
 arsort($scores);
 $best_arm = key($scores);
@@ -30,23 +55,12 @@ render all variants into the HTML and swap them on the client so they
 can keep Varnish/Fastly caching. For that case there is
 `Drupal.rl.decide()`, documented in the [JavaScript API](../api/javascript.md).
 
-## Cache management
+## Viewing reports
 
-RL provides optional cache management for web components:
+Once experiments are running and collecting data, visit
+**Administration > Reports > RL** (`/admin/reports/rl`) to see
+per-experiment performance, traffic distribution, and confidence levels.
 
-```php
-// Override page cache if experiment cache is shorter than site cache
-\Drupal::service('rl.cache_manager')->overridePageCacheIfShorter(30);
-```
+<!-- TODO: screenshot of the RL reports dashboard showing experiment list -->
 
-**How it works:**
-
-- If site cache is 300s and experiment needs 30s: overrides to 30s
-- If site cache is 60s and experiment needs 300s: leaves at 60s
-- If site cache is disabled: no override
-
-**Use cases:**
-
-- Views plugins using RL for content sorting
-- Blocks displaying A/B tested content
-- Components needing frequent RL score updates
+<!-- TODO: screenshot of a single experiment detail view with charts -->

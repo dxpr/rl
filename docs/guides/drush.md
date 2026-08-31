@@ -52,3 +52,5 @@ drush rl:performance hero_cta_test --format=yaml
 # Full analysis with recommendations
 drush rl:analyze hero_cta_test
 ```
+
+<!-- TODO: terminal screenshot showing output of `drush rl:analyze` with recommendations -->

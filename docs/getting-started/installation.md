@@ -7,6 +7,9 @@ composer require drupal/rl
 drush en rl
 ```
 
+After enabling, visit `/admin/config/system/rl` to review the default settings,
+then see [Configuration](configuration.md) for next steps.
+
 ## Plotly.js library (required for charts)
 
 The RL module uses Plotly.js for experiment charts. Install it via Composer using

@@ -28,5 +28,6 @@ nav:
       - Experiment Decorators: 'guides/decorators.md'
       - Cache Management: 'guides/cache.md'
       - AI Assistant Integration: 'guides/ai-assistant.md'
+      - FAQ: 'guides/faq.md'
   - Development:
       - Contributing: 'development/contributing.md'
