@@ -35,3 +35,5 @@ Your assistant will respond to prompts like:
 - "Analyse the hero_cta_test experiment"
 - "Create a new A/B test for the homepage banner"
 - "What's the conversion rate for variant B?"
+
+<!-- TODO: screenshot of a Claude Code session using `/rl analyze` on a live experiment -->

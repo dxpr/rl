@@ -27,6 +27,8 @@ fixed horizons, no third-party SaaS.
 - **GDPR-friendly tracking**: only anonymous interaction counts, no user IDs or
   cookies
 
+<!-- TODO: screenshot of the RL reports dashboard at /admin/reports/rl showing experiment list with traffic and confidence columns -->
+
 ## Why RL instead of fixed-horizon A/B testing?
 
 Traditional A/B tests run for a fixed window (say two weeks) and split traffic
@@ -44,6 +46,8 @@ distribution; on each render the algorithm samples from the distributions and
 picks the highest sample. Wins update the distribution toward higher rewards;
 losses update toward lower. Algorithm details:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php).
+
+<!-- TODO: diagram showing the Thompson Sampling feedback loop: render variant > visitor impression > conversion event > score update > next render shifted -->
 
 ## Use cases
 
