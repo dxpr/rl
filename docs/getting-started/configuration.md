@@ -62,6 +62,11 @@ Once experiments are running and collecting data, visit
 **Administration > Reports > RL** (`/admin/reports/rl`) to see
 per-experiment performance, traffic distribution, and confidence levels.
 
-<!-- TODO: screenshot of the RL reports dashboard showing experiment list -->
+![RL experiment list showing impressions, conversions, and variant counts](../images/rl-experiment-list.jpg)
 
-<!-- TODO: screenshot of a single experiment detail view with charts -->
+Click **View** on any experiment to see its detail page with interactive
+charts. The 2D line chart shows conversion scores over time; the 3D
+posterior landscape visualises how Thompson Sampling distributions evolve
+across variants and impressions.
+
+![3D Posterior Landscape chart for experiment detail](../images/rl-3d-posterior-landscape.jpg)
