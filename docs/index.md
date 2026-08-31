@@ -27,7 +27,7 @@ fixed horizons, no third-party SaaS.
 - **GDPR-friendly tracking**: only anonymous interaction counts, no user IDs or
   cookies
 
-<!-- TODO: screenshot of the RL reports dashboard at /admin/reports/rl showing experiment list with traffic and confidence columns -->
+![3D Posterior Landscape showing variant performance over time](images/rl-3d-posterior-landscape.jpg)
 
 ## Why RL instead of fixed-horizon A/B testing?
 
@@ -48,6 +48,7 @@ losses update toward lower. Algorithm details:
 [ThompsonCalculator.php](https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php).
 
 <!-- TODO: diagram showing the Thompson Sampling feedback loop: render variant > visitor impression > conversion event > score update > next render shifted -->
+
 
 ## Use cases
 
