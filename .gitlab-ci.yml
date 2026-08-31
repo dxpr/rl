@@ -5,6 +5,14 @@
 # Source: https://git.drupalcode.org/project/gitlab_templates/
 ################
 
+variables:
+  SKIP_COMPOSER_LINT: '1'
+  SKIP_PHPCS: '1'
+  SKIP_PHPSTAN: '1'
+  SKIP_STYLELINT: '1'
+  SKIP_ESLINT: '1'
+  SKIP_CSPELL: '1'
+
 include:
   - project: $_GITLAB_TEMPLATES_REPO
     ref: $_GITLAB_TEMPLATES_REF

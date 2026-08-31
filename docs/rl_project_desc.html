@@ -2,6 +2,8 @@
 
 <p>RL is part of the <a href="https://dxpr.com/c/marketing-cms?ref=50701">DXPR marketing CMS</a> stack and ships in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
 
+<p><img src="/files/project-images/Screenshot%202025-08-28%20at%2011.44.17.png" alt="RL Experiments Reporting UI showing a list of active A/B tests with experiment names, arm counts, total trials, and reward rates in a sortable admin table" /></p>
+
 <h2>What you can A/B test with RL</h2>
 
 <ul>
@@ -26,6 +28,8 @@
 
 <p>RL uses a multi-armed bandit (Thompson Sampling). Each variant has a reward distribution; on each render the algorithm samples from the distributions and picks the highest sample. Wins update the distribution toward higher rewards; losses update toward lower. The math: <a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.</p>
 
+<p><img src="/files/project-images/rl-3d-posterior-landscape.jpg" alt="3D posterior landscape chart visualising Thompson Sampling: three variant reward distributions rendered as coloured surfaces across a probability axis, showing how the algorithm shifts traffic toward higher-performing variants over time" /></p>
+
 <h2>Features</h2>
 
 <ul>
@@ -37,6 +41,8 @@
   <li><strong>Data sovereignty</strong>: no cloud, no third-party SaaS, all data stays in your Drupal database</li>
   <li><strong>GDPR-friendly tracking</strong>: only anonymous interaction counts, no user IDs or cookies</li>
 </ul>
+
+<p><img src="/files/project-images/Screenshot%202025-08-28%20at%2011.44.26.png" alt="RL Experiment Details report showing per-variant performance with trial counts, reward rates, Thompson Sampling scores, and confidence intervals for each arm in a running A/B test" /></p>
 
 <h2>You need RL if</h2>
 
@@ -169,7 +175,7 @@ Drupal.rl.reward('hero_cta', 'v0');</code></pre>
 <dl>
   <dt>Does RL store my A/B test's variants?</dt>
   <dd>
-    <p><strong>It stores their performance data, not the authoritative list.</strong> Every variant that has received traffic has a row in <code>rl_arm_data</code> with turn and reward counts. But "which variants are in play right now" is owned by your module, not RL.</p>
+    <p><strong>RL stores performance data (trial counts and reward rates) for each variant, but the authoritative list of which variants are active is owned by your module, not RL. This means adding or removing a variant takes effect on the next render with no second save step required.</strong></p>
     <p>Different consumer modules keep the live variant list in different places:</p>
     <ul>
       <li><strong>rl_sorting</strong>: the content returned by a View</li>
@@ -177,38 +183,39 @@ Drupal.rl.reward('hero_cta', 'v0');</code></pre>
       <li><strong>rl_menu_link</strong>: labels on a menu link</li>
       <li><strong>DXPR Builder</strong>: slots inside a block component</li>
     </ul>
-    <p>On each call your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner. A newly added variant is in play on the next render; a removed one stops appearing. No second save step can drift out of sync with your module's UI.</p>
+    <p>On each call your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner.</p>
   </dd>
 
   <dt>When do I pick a winner and end an A/B test?</dt>
   <dd>
-    <p><strong>Only when you want to.</strong> RL has no fixed horizon and no significance gate to wait out. It just shifts traffic to whatever variant is winning right now and keeps adapting as evidence changes.</p>
+    <p><strong>You pick a winner only when you choose to. RL has no fixed horizon and no significance gate to wait out; it continuously shifts traffic toward whichever variant is winning and keeps adapting as evidence changes. You can lock in a confident winner or leave the experiment running indefinitely.</strong></p>
     <p>Two patterns, depending on what you are testing:</p>
     <ul>
       <li><strong>Converging tests</strong>: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on.</li>
       <li><strong>Evergreen experiments</strong>: blog post lists, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. RL follows the winner as it shifts.</li>
     </ul>
-    <p>In both cases the loser of a pair receives progressively less traffic as the winner's distribution strengthens, but it never drops to zero: Thompson Sampling preserves exploration, so a losing arm always retains a small chance of selection. Traffic only truly stops when the experiment owner removes or locks the variant.</p>
+    <p>Thompson Sampling preserves exploration, so a losing arm always retains a small chance of selection. Traffic only truly stops when the experiment owner removes the variant.</p>
   </dd>
 
   <dt>How many variants can I run at once?</dt>
   <dd>
-    <p>There is no hard limit. Thompson Sampling scales to thousands of arms per experiment. The practical limit is how many variants you can create and maintain. Two variants is a classic A/B test; dozens or hundreds is true multivariate testing.</p>
+    <p><strong>There is no hard limit. Thompson Sampling scales to thousands of arms per experiment, so you can run anything from a classic two-variant A/B test to true multivariate testing with dozens or hundreds of alternatives. The practical limit is how many variants you can create and maintain.</strong></p>
   </dd>
 
   <dt>Does RL work with page caching?</dt>
   <dd>
-    <p>Yes. For server-side decisions, the cache lifetime determines how often the algorithm re-evaluates. For client-side decisions (using <code>Drupal.rl</code>), the page can be fully cached and the variant swap happens in JavaScript after load. DXPR Builder uses this pattern to stay compatible with Varnish and Fastly.</p>
+    <p><strong>Yes, RL is fully compatible with page caching. For server-side decisions the cache lifetime determines how often the algorithm re-evaluates. For client-side decisions using the <code>Drupal.rl</code> JavaScript API, the page can be fully cached (including behind Varnish or Fastly) and the variant swap happens in JavaScript after load.</strong></p>
+    <p>DXPR Builder uses the client-side pattern to stay compatible with aggressive edge caching.</p>
   </dd>
 
   <dt>Does RL set cookies or track users?</dt>
   <dd>
-    <p>No. RL tracks only anonymous interaction counts (impressions and conversions). It does not set cookies, store user IDs, or create visitor profiles. This makes it GDPR-friendly by design.</p>
+    <p><strong>No. RL tracks only anonymous interaction counts: impressions (trials) and conversions (rewards). It does not set cookies, store user IDs, fingerprint browsers, or create visitor profiles. This makes RL GDPR-friendly by design, with no consent banner required for the testing itself.</strong></p>
   </dd>
 
   <dt>How is RL different from Google Optimize or other SaaS A/B testing tools?</dt>
   <dd>
-    <p>RL runs entirely inside your Drupal installation: all data stays in your database, there is no external JavaScript snippet, no third-party account, and no monthly fee. Unlike fixed-horizon tools, RL uses Thompson Sampling to shift traffic toward the winner continuously rather than splitting 50/50 for a set duration.</p>
+    <p><strong>RL runs entirely inside your Drupal installation with no external JavaScript snippet, no third-party account, and no monthly fee. All experiment data stays in your own database. Unlike fixed-horizon tools that split traffic 50/50 for a set duration, RL uses Thompson Sampling to shift traffic toward the winner continuously.</strong></p>
   </dd>
 </dl>
 

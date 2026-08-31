@@ -2,7 +2,9 @@ site_name: 'RL: A/B & Multivariate Testing - Documentation'
 site_url: 'https://project.pages.drupalcode.org/rl/'
 repo_url: https://git.drupalcode.org/project/rl
 repo_name: drupal/rl
-edit_uri: /-/edit/1.x/docs/
+edit_uri: -/edit/1.x/docs/
+exclude_docs: |
+  rl_project_desc.html
 
 theme:
   name: material

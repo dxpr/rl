@@ -9,6 +9,8 @@
 
 # RL: A/B & Multivariate Testing for Drupal (Reinforcement Learning)
 
+**[Full documentation](https://project.pages.drupalcode.org/rl/)** | This README covers the essentials; the docs site has guides, API reference, and worked examples.
+
 A/B and multivariate testing for Drupal using reinforcement learning. Each page
 view is a trial, each conversion is a reward, and the algorithm continuously
 shifts traffic to whichever variant is winning. RLHF-style feedback loop, no
@@ -70,26 +72,6 @@ composer require drupal/rl
 drush en rl
 ```
 
-### Plotly.js Library (Required for Charts)
-
-The RL module uses Plotly.js for experiment charts. Install it via Composer using
-[Asset Packagist](https://asset-packagist.org):
-
-```bash
-# Add Asset Packagist repository (if not already configured)
-composer config repositories.asset-packagist composer https://asset-packagist.org
-
-# Install the Composer plugin for npm assets (if not already installed)
-composer require oomphinc/composer-installers-extender
-composer config extra.installer-types --json '["npm-asset"]'
-composer config extra.installer-paths.web/libraries/\{\$name\} --json '["type:npm-asset"]'
-
-# Install Plotly.js
-composer require npm-asset/plotly.js-dist-min:^2.35
-```
-
-This installs the library to `web/libraries/plotly.js-dist-min/`.
-
 ### Post-Installation: Verify rl.php Access
 
 The RL module includes a `.htaccess` file that allows direct access to
@@ -98,7 +80,7 @@ module). Test that it's working:
 
 ```bash
 # Test if rl.php is accessible
-curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" \
+curl -X POST -d "action=ping" \
   http://example.com/modules/contrib/rl/rl.php
 ```
 
@@ -134,8 +116,8 @@ location ~ ^/modules/.*\.php$ {
 - Socket: `unix:/var/run/php/php8.1-fpm.sock` (or your PHP version)
 - TCP: `127.0.0.1:9000`
 
-If server policies prevent direct access to `rl.php`, use the Drupal
-Routes API instead.
+If server policies prevent direct access to `rl.php`, your consumer
+module must implement its own Drupal route as an alternative endpoint.
 
 ## Drush Command Reference
 
@@ -234,7 +216,7 @@ $experiment_manager->recordTurn('my-experiment', 'variant-a');
 $experiment_manager->recordReward('my-experiment', 'variant-a');
 
 // Get Thompson Sampling scores
-$scores = $experiment_manager->getThompsonScores('my-experiment');
+$scores = $experiment_manager->getThompsonScores('my-experiment', NULL, ['variant-a', 'variant-b']);
 
 // Select best option
 $ts_calculator = \Drupal::service('rl.ts_calculator');
@@ -410,8 +392,8 @@ Content-Type: application/json
 ```
 
 All three sections are optional. Invalid or unregistered entries are
-dropped silently so one bad event does not poison the rest of the
-batch. The response is
+rejected individually without poisoning the rest of the batch. A
+successful response looks like:
 
 ```json
 {
@@ -431,6 +413,24 @@ Sampling lookup. Missing keys mean "use the default variant". When
 `ranking[0]` for backwards compatibility. Turns and rewards are
 fire-and-forget writes with no per-event response.
 
+When some entries are rejected (invalid IDs, unregistered experiments,
+malformed entries), the response includes an `errors` array:
+
+```json
+{
+  "ok": false,
+  "errors": [
+    {"kind": "decide", "id": "unknown_exp", "reason": "unknown_experiment"},
+    {"kind": "turn", "id": "bad!", "reason": "invalid_id"}
+  ]
+}
+```
+
+Each error includes the `kind` (decide, turn, or reward), the `id` that
+failed, and a machine-readable `reason`. Partial successes return HTTP 200
+with both `decisions` and `errors`; the response is 422 only when every
+entry in the batch was rejected.
+
 ### Curl examples
 
 ```bash
@@ -449,6 +449,7 @@ curl -X POST 'https://example.com/modules/contrib/rl/rl.php' -d 'action=ping'
 | Status | When |
 | --- | --- |
 | `400` | Missing/invalid `action`, malformed JSON, or missing `experiment_id` on a legacy action. |
+| `422` | Batch request where every entry was rejected (all invalid or unregistered). |
 | `500` | Drupal kernel failed to boot. Error logged to the PHP error log. |
 
 ### Performance notes
@@ -499,31 +500,29 @@ Implement the `ExperimentDecoratorInterface`:
 
 namespace Drupal\my_module\Decorator;
 
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
 
 class MyExperimentDecorator implements ExperimentDecoratorInterface {
 
-  /**
-   * {@inheritdoc}
-   */
+  protected EntityTypeManagerInterface $entityTypeManager;
+
+  public function __construct(EntityTypeManagerInterface $entity_type_manager) {
+    $this->entityTypeManager = $entity_type_manager;
+  }
+
   public function decorateExperiment(string $experiment_id): ?array {
-    // Return NULL to skip, or a render array for custom display.
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
     return ['#markup' => 'My Custom Experiment Name'];
   }
 
-  /**
-   * {@inheritdoc}
-   */
   public function decorateArm(string $experiment_id, string $arm_id): ?array {
-    // Return NULL to skip, or a render array for custom display.
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
-    // Example: Load entity and return its label.
-    $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
+    $entity = $this->entityTypeManager->getStorage('node')->load($arm_id);
     if ($entity) {
       return [
         '#markup' => htmlspecialchars($entity->label()) .
