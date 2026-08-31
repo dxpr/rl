@@ -85,11 +85,16 @@ Sampling lookup. Missing keys mean "use the default variant". When
 fire-and-forget writes with no per-event response.
 
 When some entries are rejected (invalid IDs, unregistered experiments,
-malformed entries), the response includes an `errors` array:
+malformed entries), the response includes an `errors` array alongside
+any successful results. A partial success returns HTTP 200 with
+`ok: true`:
 
 ```json
 {
-  "ok": false,
+  "ok": true,
+  "decisions": {
+    "hero_cta": {"armId": "v1"}
+  },
   "errors": [
     {"kind": "decide", "id": "unknown_exp", "reason": "unknown_experiment"},
     {"kind": "turn", "id": "bad!", "reason": "invalid_id"}
@@ -98,9 +103,9 @@ malformed entries), the response includes an `errors` array:
 ```
 
 Each error includes the `kind` (decide, turn, or reward), the `id` that
-failed, and a machine-readable `reason`. Partial successes return HTTP 200
-with both `decisions` and `errors`; the response is 422 only when every
-entry in the batch was rejected.
+failed, and a machine-readable `reason`. When *every* entry in the batch
+is rejected, the response is HTTP 422 with `ok: false` and no
+`decisions`.
 
 ## Error responses
 
