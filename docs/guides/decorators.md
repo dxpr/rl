@@ -9,8 +9,6 @@ can provide human-readable labels.
 Implement the `ExperimentDecoratorInterface`:
 
 ```php
-<?php
-
 namespace Drupal\my_module\Decorator;
 
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
