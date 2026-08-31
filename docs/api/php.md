@@ -37,11 +37,12 @@ $registry = \Drupal::service('rl.experiment_registry');
 // Register a new experiment.
 $registry->register('my-experiment', 'my_module', 'Homepage Hero Test');
 
-// Check if an experiment exists.
-$exists = $registry->exists('my-experiment');
+// Check if an experiment is registered.
+$registered = $registry->isRegistered('my-experiment');
 
 // Remove an experiment and all its data.
-$registry->delete('my-experiment');
+$experiment_manager = \Drupal::service('rl.experiment_manager');
+$experiment_manager->purgeExperiment('my-experiment');
 ```
 
 ## Variant selection helpers

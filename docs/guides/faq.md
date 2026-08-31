@@ -36,10 +36,12 @@ Two patterns, depending on what you are testing:
   returning visitors tune them out, seasonal calls to action. Leave them
   running. RL follows the winner as it shifts.
 
-In both cases the loser of a pair just stops receiving traffic on its own,
-so there is no urgency to declare a winner by hand. If you are used to
-fixed-horizon A/B tools, this is the biggest mental shift: there is no
-"test complete" flag to chase.
+In both cases the loser of a pair receives progressively less traffic as
+the winner's distribution strengthens, but it never drops to zero: Thompson
+Sampling preserves exploration, so a losing arm always retains a small
+chance of selection. Traffic only truly stops when the experiment owner
+removes or locks the variant. If you are used to fixed-horizon A/B tools,
+this is the biggest mental shift: there is no "test complete" flag to chase.
 
 ## How many variants can I run at once?
 
