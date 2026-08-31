@@ -47,7 +47,9 @@ $best_arm = key($scores);
 Deciding server-side keeps the arm list where it belongs (with the
 experiment owner) and avoids a network round trip on every page load.
 See `rl_sorting`'s Views sort plugin for the canonical pattern and
-`VariantSelectorBase` in this module for a reusable base class.
+`VariantSelectorBase` in this module for a reusable base class. The
+[Building a Consumer Module](../guides/integrations.md) guide walks
+through both bundled submodules as worked examples.
 
 ### Client-side (cache-friendly path)
 

@@ -10,12 +10,23 @@ fixed horizons, no third-party SaaS.
 ## What you can A/B test
 
 - **[RL: A/B Test Views Content](https://www.drupal.org/project/rl_sorting)**
-  (`rl_sorting`): the order of items in any Drupal View
+  (`rl_sorting`): reorders any Drupal View by engagement. A Views sort plugin
+  calls Thompson Sampling with content IDs as arms and reorders rows before
+  rendering; turns and rewards are tracked client-side.
 - **RL: A/B Test Page Titles** (`rl_page_title`, bundled submodule):
-  page titles for nodes, View pages, and any controller
+  tests page titles for nodes, Views pages, and any controller. Hooks into the
+  preprocess pipeline to swap the visible title and `<title>` tag. A vertical
+  tab on content entity edit forms lets editors manage variants inline.
 - **RL: A/B Test Menu Links** (`rl_menu_link`, bundled submodule):
-  labels in any menu link
-- **DXPR Builder** integration: variant slots inside builder blocks
+  tests labels in any menu link. Walks the menu tree at render time and swaps
+  link titles with the winning variant. A vertical tab on the menu link edit
+  form lets editors add alternatives.
+- **DXPR Builder** integration: renders all variant slots into the page HTML
+  (so the page stays fully cacheable) and uses `Drupal.rl.decide()` on the
+  client to pick and swap the winner.
+- **Custom modules**: RL provides base classes and services for building your
+  own consumer modules. See the
+  [Building a Consumer Module](guides/integrations.md) guide.
 
 ## Features
 
