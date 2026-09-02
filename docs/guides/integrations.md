@@ -191,11 +191,24 @@ replace link titles:
 
 ```php
 function rl_menu_link_preprocess_menu(array &$variables) {
-  foreach ($variables['items'] as &$item) {
-    $plugin_id = $item['original_link']->getPluginId();
-    $result = $selector->selectForPluginId($plugin_id);
-    if ($result && $result['text'] !== NULL) {
-      $item['title'] = $result['text'];
+  if (empty($variables['items'])) {
+    return;
+  }
+  _rl_menu_link_process_items($variables['items']);
+}
+
+function _rl_menu_link_process_items(array &$items) {
+  $selector = \Drupal::service('rl_menu_link.variant_selector');
+  foreach ($items as &$item) {
+    if (isset($item['original_link']) && method_exists($item['original_link'], 'getPluginId')) {
+      $plugin_id = $item['original_link']->getPluginId();
+      $result = $selector->selectForPluginId($plugin_id);
+      if ($result && $result['text'] !== NULL) {
+        $item['title'] = $result['text'];
+      }
+    }
+    if (!empty($item['below'])) {
+      _rl_menu_link_process_items($item['below']);
     }
   }
 }
@@ -299,9 +312,10 @@ Sampling score, turning any View into an engagement-optimised ranking.
 
 The pattern is fully server-side: the sort plugin calls
 `getThompsonScores()` with the content IDs from the View results as arm IDs,
-then reorders the rows before rendering. Turns are batched via
-`Drupal.rl.turn()` for all visible items; rewards fire when a visitor clicks
-through to a listed item.
+then reorders the rows before rendering. Turns are tracked client-side via
+an `IntersectionObserver` that collects visible entity IDs, then sends an
+`action=turns` payload directly to `rl.php` using `navigator.sendBeacon()`.
+Rewards fire via `sendBeacon()` when a visitor clicks through to a listed item.
 
 ## DXPR Builder integration
 

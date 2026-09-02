@@ -3,7 +3,7 @@
 ## Module settings
 
 After enabling the module, visit **Administration > Configuration >
-Web services > Reinforcement Learning**
+Web services > RL: A/B Testing**
 (`/admin/config/services/reinforcement-learning`) to configure the module.
 
 <!-- TODO: screenshot of the RL settings form -->
