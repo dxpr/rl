@@ -310,12 +310,12 @@ The three required services:
 It provides a Views sort plugin that reorders view results by Thompson
 Sampling score, turning any View into an engagement-optimised ranking.
 
-The pattern is fully server-side: the sort plugin calls
-`getThompsonScores()` with the content IDs from the View results as arm IDs,
-then reorders the rows before rendering. Turns are tracked client-side via
-an `IntersectionObserver` that collects visible entity IDs, then sends an
-`action=turns` payload directly to `rl.php` using `navigator.sendBeacon()`.
-Rewards fire via `sendBeacon()` when a visitor clicks through to a listed item.
+The decision is server-side: the sort plugin calls `getThompsonScores()`
+with the content IDs from the View results as arm IDs, then reorders the
+rows before rendering. Tracking is client-side: an `IntersectionObserver`
+collects visible entity IDs and sends an `action=turns` payload directly to
+`rl.php` using `navigator.sendBeacon()`. Rewards fire via `sendBeacon()`
+when a visitor clicks through to a listed item.
 
 ## DXPR Builder integration
 
