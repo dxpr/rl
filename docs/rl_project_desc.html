@@ -78,7 +78,7 @@ drush en rl</code></pre>
   <li><strong>Security modules</strong>: whitelist <code>/modules/contrib/rl/rl.php</code></li>
 </ul>
 
-<p>If server policies prevent direct access, use the Drupal Routes API instead.</p>
+<p>If server policies prevent direct PHP file access, consumer modules must implement their own tracking controller or proxy.</p>
 
 <h2>Drush command reference</h2>
 
@@ -130,6 +130,15 @@ drush en rl</code></pre>
   <li>"Create a new A/B test for the homepage banner"</li>
   <li>"What's the conversion rate for variant B?"</li>
 </ul>
+
+<div class="note-tip">
+  <ul>
+    <li><a href="https://project.pages.drupalcode.org/rl/">Module documentation</a>: experiment management, cache strategies, and decorator patterns</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/getting-started/installation/">Installation guide</a>: composer setup, rl.php verification, and Nginx configuration for the tracking endpoint</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/api/php/">API reference</a>: PHP, JavaScript, and HTTP APIs for recording trials, rewards, and decisions</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/guides/integrations/">Building a consumer module</a>: create your own A/B testable components using the RL framework</li>
+  </ul>
+</div>
 
 <h2>API</h2>
 
