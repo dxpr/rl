@@ -420,7 +420,7 @@ malformed entries), the response includes an `errors` array:
 {
   "ok": true,
   "decisions": {
-    "hero_cta": "v1"
+    "hero_cta": {"armId": "v1"}
   },
   "errors": [
     {"kind": "decide", "id": "unknown_exp", "reason": "unknown_experiment"},
