@@ -1,8 +1,10 @@
-<p><strong>Reinforcement Learning (RL)</strong> is an A/B and multivariate testing framework for Drupal where every visitor click is treated as human feedback (RLHF-style). Each page view is a trial, each conversion is a reward, and the algorithm continuously shifts traffic to whichever variant is winning. No fixed test horizons. No manual winner picking. No third-party SaaS.</p>
-
 <p>RL is part of the <a href="https://dxpr.com/c/marketing-cms?ref=50701">DXPR marketing CMS</a> stack and ships in <a href="https://www.drupal.org/project/dxpr_cms">DXPR CMS</a>.</p>
 
-<h3>What you can A/B test with RL</h3>
+<blockquote>A/B and multivariate testing framework for Drupal where every visitor click is treated as human feedback (RLHF-style). Each page view is a trial, each conversion is a reward, and the algorithm continuously shifts traffic to whichever variant is winning. No fixed test horizons. No manual winner picking. No third-party SaaS.</blockquote>
+
+<p><a href="/files/project-images/rl-3d-posterior-landscape.jpg"><img src="/files/project-images/rl-3d-posterior-landscape.jpg" alt="3D posterior landscape chart visualising Thompson Sampling: three variant reward distributions rendered as coloured surfaces across a probability axis, showing how the algorithm shifts traffic toward higher-performing variants over time" /></a></p>
+
+<h2>What you can A/B test with RL</h2>
 
 <ul>
   <li><a href="https://www.drupal.org/project/rl_sorting"><strong>RL: A/B Test Views Content</strong></a> (rl_sorting): the order of items in any Drupal View</li>
@@ -12,21 +14,23 @@
 </ul>
 
 <div class="note-tip">
-  <h4>Where experimentation fits in your AI workflow</h4>
+  <h3>Where experimentation fits in your AI workflow</h3>
   <p>Human review catches what's obviously off-brand, off-message, or factually wrong. It can't catch what merely fails to convert; only visitors can do that. Harvard Business School research on enterprise gen AI concludes that "designing targeted experiments and using scientific methods to test, refine, and scale promising solutions" is the layer between review and full rollout.</p>
   <p>RL is that layer for Drupal. After your team approves a variant, RL tests it in production against the alternatives, shifts traffic toward what works, and sends the result back to the report. Variants can be hand-written, AI-generated, or both; RL is indifferent to authorship.</p>
   <p><small>Source: Berndt et al., <a href="https://hbr.org/2026/01/a-systematic-approach-to-experimenting-with-gen-ai">A Systematic Approach to Experimenting with Gen AI</a>, Harvard Business Review, January-February 2026.</small></p>
 </div>
 
-<h3>Why RL instead of fixed-horizon A/B testing?</h3>
+<h2>Why RL instead of fixed-horizon A/B testing?</h2>
 
 <p>Traditional A/B tests run for a fixed window (say two weeks) and split traffic 50/50 the whole time, even when one variant is obviously losing. RL turns the experiment into a feedback loop: every click adjusts the model, traffic shifts toward the leader as soon as evidence emerges, and the test never has to "end". You can run dozens or thousands of variants simultaneously (true multivariate testing), and a newly added variant is in play on the next render with no manual setup.</p>
 
-<h3>How it works</h3>
+<h2>How it works</h2>
 
 <p>RL uses a multi-armed bandit (Thompson Sampling). Each variant has a reward distribution; on each render the algorithm samples from the distributions and picks the highest sample. Wins update the distribution toward higher rewards; losses update toward lower. The math: <a href="https://git.drupalcode.org/project/rl/-/blob/1.x/src/Service/ThompsonCalculator.php" target="_blank" rel="noopener">ThompsonCalculator.php</a>.</p>
 
-<h3>Features</h3>
+<p><a href="/files/rl-experiments-list.jpg"><img src="/files/rl-experiments-list.jpg" alt="RL Experiments Reporting UI showing a list of active A/B tests with experiment names, arm counts, total trials, and reward rates in a sortable admin table" /></a></p>
+
+<h2>Features</h2>
 
 <ul>
   <li><strong>Multivariate by default</strong>: 2 to thousands of variants, no manual configuration</li>
@@ -38,7 +42,9 @@
   <li><strong>GDPR-friendly tracking</strong>: only anonymous interaction counts, no user IDs or cookies</li>
 </ul>
 
-<h3>You need RL if</h3>
+<p><a href="/files/rl-experiment-details.jpg"><img src="/files/rl-experiment-details.jpg" alt="RL Experiment Details report showing per-variant performance with trial counts, reward rates, Thompson Sampling scores, and confidence intervals for each arm in a running A/B test" /></a></p>
+
+<h2>You need RL if</h2>
 
 <ul>
   <li>You want to <strong>A/B or multivariate test</strong> any part of your site without third-party SaaS</li>
@@ -49,17 +55,17 @@
 </ul>
 
 <div class="note-tip">
-  <h4>Prefer a turnkey demo site?</h4>
+  <h3>Prefer a turnkey demo site?</h3>
   <p>Spin up <strong>DXPR CMS</strong>, Drupal pre-configured with DXPR Builder, DXPR Theme, RL, and security best practices.</p>
-  <p><a href="https://www.drupal.org/project/dxpr_cms" title="DXPR CMS platform">Get DXPR CMS »</a></p>
+  <p><a href="https://www.drupal.org/project/dxpr_cms" title="DXPR CMS platform">Get DXPR CMS</a></p>
 </div>
 
-<h3>Installation</h3>
+<h2>Installation</h2>
 
 <pre><code>composer require drupal/rl
 drush en rl</code></pre>
 
-<h4>Verify rl.php access</h4>
+<h3>Verify rl.php access</h3>
 
 <p>RL ships an <code>.htaccess</code> file that allows direct access to <code>rl.php</code> (same pattern as Drupal core's <code>statistics.php</code>). Test it:</p>
 
@@ -74,7 +80,7 @@ drush en rl</code></pre>
 
 <p>If server policies prevent direct access, use the Drupal Routes API instead.</p>
 
-<h3>Drush command reference</h3>
+<h2>Drush command reference</h2>
 
 <table>
   <thead>
@@ -113,7 +119,7 @@ drush en rl</code></pre>
   </tbody>
 </table>
 
-<h3>AI coding assistant integration</h3>
+<h2>AI coding assistant integration</h2>
 
 <p>RL ships a built-in <a href="https://agentskills.io/specification">Agent Skills</a> file that teaches AI coding assistants how to manage A/B tests through natural language. Compatible with Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, and any tool supporting the standard.</p>
 
@@ -125,7 +131,16 @@ drush en rl</code></pre>
   <li>"What's the conversion rate for variant B?"</li>
 </ul>
 
-<h3>API</h3>
+<div class="note-tip">
+  <ul>
+    <li><a href="https://project.pages.drupalcode.org/rl/">Module documentation</a>: experiment management, cache strategies, and decorator patterns</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/getting-started/installation/">Installation guide</a>: composer setup, rl.php verification, and Nginx configuration for the tracking endpoint</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/api/php/">API reference</a>: PHP, JavaScript, and HTTP APIs for recording trials, rewards, and decisions</li>
+    <li><a href="https://project.pages.drupalcode.org/rl/guides/integrations/">Building a consumer module</a>: create your own A/B testable components using the RL framework</li>
+  </ul>
+</div>
+
+<h2>API</h2>
 
 <pre><code>// Get the experiment manager
 $experiment_manager = \Drupal::service('rl.experiment_manager');
@@ -144,7 +159,7 @@ $ts_calculator = \Drupal::service('rl.ts_calculator');
 $best_arm = $ts_calculator-&gt;selectBestArm($scores);
 </code></pre>
 
-<h3>JavaScript API</h3>
+<h2>JavaScript API</h2>
 
 <p>Attach the <code>rl/api</code> library to get <code>Drupal.rl</code> on the page:</p>
 
@@ -164,37 +179,56 @@ Drupal.rl.reward('hero_cta', 'v0');</code></pre>
 
 <p>All four methods feed a shared 500 ms batch window, so every A/B test on the page rides one POST to <code>rl.php</code>. <code>decide()</code> returns a single winner; <code>rank()</code> returns the full sorted arm list for use cases like reordering accordion items by visitor engagement. See the README for the HTTP wire format and server-side patterns.</p>
 
-<h3>FAQ</h3>
+<h2>FAQ</h2>
 
-<h4>Does RL store my A/B test's variants?</h4>
+<dl>
+  <dt>Does RL store my A/B test's variants?</dt>
+  <dd>
+    <p>RL stores performance data (trial counts and reward rates) for each variant, but the authoritative list of which variants are active is owned by your module, not RL. This means adding or removing a variant takes effect on the next render with no second save step required.</p>
+    <p>Different consumer modules keep the live variant list in different places:</p>
+    <ul>
+      <li>rl_sorting: the content returned by a View</li>
+      <li>rl_page_title: fields on a content entity</li>
+      <li>rl_menu_link: labels on a menu link</li>
+      <li>DXPR Builder: slots inside a block component</li>
+    </ul>
+    <p>On each call your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner.</p>
+  </dd>
 
-<p><strong>It stores their performance data, not the authoritative list.</strong> Every variant that has received traffic has a row in <code>rl_arm_data</code> with turn and reward counts. But "which variants are in play right now" is owned by your module, not RL.</p>
+  <dt>When do I pick a winner and end an A/B test?</dt>
+  <dd>
+    <p>You pick a winner only when you choose to. RL has no fixed horizon and no significance gate to wait out; it continuously shifts traffic toward whichever variant is winning and keeps adapting as evidence changes. You can lock in a confident winner or leave the experiment running indefinitely.</p>
+    <p>Two patterns, depending on what you are testing:</p>
+    <ul>
+      <li>Converging tests: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on.</li>
+      <li>Evergreen experiments: blog post lists, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. RL follows the winner as it shifts.</li>
+    </ul>
+    <p>Thompson Sampling preserves exploration, so a losing arm always retains a small chance of selection. Traffic only truly stops when the experiment owner removes the variant.</p>
+  </dd>
 
-<p>Different consumer modules keep the live variant list in different places:</p>
+  <dt>How many variants can I run at once?</dt>
+  <dd>
+    <p>There is no hard limit. Thompson Sampling scales to thousands of arms per experiment, so you can run anything from a classic two-variant A/B test to true multivariate testing with dozens or hundreds of alternatives. The practical limit is how many variants you can create and maintain.</p>
+  </dd>
 
-<ul>
-  <li><strong>rl_sorting</strong>: the content returned by a View</li>
-  <li><strong>rl_page_title</strong>: fields on a content entity</li>
-  <li><strong>rl_menu_link</strong>: labels on a menu link</li>
-  <li><strong>DXPR Builder</strong>: slots inside a block component</li>
-</ul>
+  <dt>Does RL work with page caching?</dt>
+  <dd>
+    <p>Yes, RL is fully compatible with page caching. For server-side decisions the cache lifetime determines how often the algorithm re-evaluates. For client-side decisions using the <code>Drupal.rl</code> JavaScript API, the page can be fully cached (including behind Varnish or Fastly) and the variant swap happens in JavaScript after load.</p>
+    <p>DXPR Builder uses the client-side pattern to stay compatible with aggressive edge caching.</p>
+  </dd>
 
-<p>On each call your module passes its current list (<code>getThompsonScores($id, NULL, $arms)</code> in PHP or <code>Drupal.rl.decide(id, arms)</code> in JS) and RL matches it against the stored stats to pick a winner. A newly added variant is in play on the next render; a removed one stops appearing. No second save step can drift out of sync with your module's UI.</p>
+  <dt>Does RL set cookies or track users?</dt>
+  <dd>
+    <p>No. RL tracks only anonymous interaction counts: impressions (trials) and conversions (rewards). It does not set cookies, store user IDs, fingerprint browsers, or create visitor profiles. This makes RL GDPR-friendly by design, with no consent banner required for the testing itself.</p>
+  </dd>
 
-<h4>When do I pick a winner and end an A/B test?</h4>
+  <dt>How is RL different from Google Optimize or other SaaS A/B testing tools?</dt>
+  <dd>
+    <p>RL runs entirely inside your Drupal installation with no external JavaScript snippet, no third-party account, and no monthly fee. All experiment data stays in your own database. Unlike fixed-horizon tools that split traffic 50/50 for a set duration, RL uses Thompson Sampling to shift traffic toward the winner continuously.</p>
+  </dd>
+</dl>
 
-<p><strong>Only when you want to.</strong> RL has no fixed horizon and no significance gate to wait out. It just shifts traffic to whatever variant is winning right now and keeps adapting as evidence changes.</p>
-
-<p>Two patterns, depending on what you're testing:</p>
-
-<ul>
-  <li><strong>Converging tests</strong>: a better page title, a clearer checkout button, a stronger hero image. Once the report shows a confident winner, lock it in and move on.</li>
-  <li><strong>Evergreen experiments</strong>: blog post lists, banner ads that fade as returning visitors tune them out, seasonal calls to action. Leave them running. RL follows the winner as it shifts.</li>
-</ul>
-
-<p>In both cases the loser of a pair just stops receiving traffic on its own, so there's no urgency to declare a winner by hand. If you're used to fixed-horizon A/B tools, this is the biggest mental shift: there's no "test complete" flag to chase.</p>
-
-<h3>Related modules</h3>
+<h2>Related modules</h2>
 
 <ul>
   <li><a href="https://www.drupal.org/project/rl_sorting">RL: A/B Test Views Content</a> (rl_sorting): A/B test the order of any Drupal View</li>
@@ -202,7 +236,7 @@ Drupal.rl.reward('hero_cta', 'v0');</code></pre>
   <li><a href="https://www.drupal.org/project/ai_content_strategy">AI Content Strategy</a>: AI-driven content strategy recommendations</li>
 </ul>
 
-<h3>Resources</h3>
+<h2>Resources</h2>
 
 <ul>
   <li><a href="https://en.wikipedia.org/wiki/Multi-armed_bandit" target="_blank" rel="noopener">Multi-armed bandit problem (Wikipedia)</a></li>
