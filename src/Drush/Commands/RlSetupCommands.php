@@ -180,15 +180,15 @@ final class RlSetupCommands extends RlCommandsBase {
           continue;
         }
         if (!file_exists($dest)) {
-          $results[] = sprintf('%s — NOT INSTALLED', $relativePath);
+          $results[] = sprintf('%s: NOT INSTALLED', $relativePath);
           $outdated = TRUE;
         }
         elseif (md5_file($source) !== md5_file($dest)) {
-          $results[] = sprintf('%s — OUTDATED', $relativePath);
+          $results[] = sprintf('%s: OUTDATED', $relativePath);
           $outdated = TRUE;
         }
         else {
-          $results[] = sprintf('%s — up to date', $relativePath);
+          $results[] = sprintf('%s: up to date', $relativePath);
         }
       }
     }

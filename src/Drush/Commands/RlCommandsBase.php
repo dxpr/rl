@@ -18,7 +18,7 @@ abstract class RlCommandsBase extends DrushCommands {
   /**
    * Switches to admin user for the duration of the Drush process.
    *
-   * Does not call switchBack() — relies on process termination after
+   * Does not call switchBack(), relying on process termination after
    * command execution.
    */
   protected function switchToAdmin(): void {
