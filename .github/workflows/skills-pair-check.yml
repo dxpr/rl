@@ -32,7 +32,9 @@ jobs:
                 fail=1
               fi
             fi
-          done < <(find . -type f -name 'SKILL.md' -path '*/.claude/*' -not -path './.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*worktrees*')
+          done < <(find . -type f -name 'SKILL.md' -path '*/.claude/*' \
+            -not -path './.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/vendor/*' -not -path '*worktrees*')
           while IFS= read -r agents_file; do
             claude_file="${agents_file//\/.agents\//\/.claude\/}"
             claude_dir=$(dirname "$claude_file")
@@ -40,15 +42,21 @@ jobs:
               echo "MISSING: $claude_file (no .claude counterpart)"
               fail=1
             fi
-          done < <(find . -type f -name 'SKILL.md' -path '*/.agents/*' -not -path './.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*worktrees*')
+          done < <(find . -type f -name 'SKILL.md' -path '*/.agents/*' \
+            -not -path './.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/vendor/*' -not -path '*worktrees*')
           # All other files are compared only when both counterparts
           # exist; host-specific files such as agents/openai.yaml stay
           # optional.
           while IFS= read -r claude_file; do
             agents_file="${claude_file//\/.claude\//\/.agents\/}"
-            if [ -f "$agents_file" ] && ! cmp -s "$claude_file" "$agents_file"; then
+            if [ -f "$agents_file" ] \
+              && ! cmp -s "$claude_file" "$agents_file"; then
               echo "DIFFER: $claude_file vs $agents_file"
               fail=1
             fi
-          done < <(find . -type f -path '*/.claude/*' -not -name 'SKILL.md' -not -path './.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*worktrees*')
+          done < <(find . -type f -path '*/.claude/*' \
+            -not -name 'SKILL.md' -not -path './.git/*' \
+            -not -path '*/node_modules/*' -not -path '*/vendor/*' \
+            -not -path '*worktrees*')
           exit $fail
