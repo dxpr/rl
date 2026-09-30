@@ -1,0 +1,29 @@
+name: Skills pair check
+
+on:
+  pull_request:
+    paths:
+      - '.claude/**'
+      - '.agents/**'
+      - '**/.claude/**'
+      - '**/.agents/**'
+
+jobs:
+  pairs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail when paired skill files differ
+        run: |
+          fail=0
+          while IFS= read -r claude_file; do
+            agents_file="${claude_file//\/.claude\//\/.agents\/}"
+            if [ -f "$agents_file" ]; then
+              if ! cmp -s "$claude_file" "$agents_file"; then
+                echo "DIFFER: $claude_file vs $agents_file"
+                fail=1
+              fi
+            fi
+          done < <(find . -type f -path '*/.claude/*' -not -path './.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*worktrees*')
+          exit $fail
