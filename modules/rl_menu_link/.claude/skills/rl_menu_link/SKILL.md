@@ -15,13 +15,13 @@ triggers:
   - rl_menu_link
 ---
 
-# RL Menu Link — Drush CLI
+# RL Menu Link: Drush CLI
 
 You are managing A/B testing experiments for Drupal menu link labels.
 The rl_menu_link module is a content-entity-backed integration on top
 of the parent rl module's Thompson Sampling engine.
 
-## Preamble — Auto-discover Current State
+## Preamble: Auto-discover Current State
 
 ```bash
 # List all menu link experiments with stats.

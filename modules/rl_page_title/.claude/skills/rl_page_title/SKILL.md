@@ -15,13 +15,13 @@ triggers:
   - rl_page_title
 ---
 
-# RL Page Title — Drush CLI
+# RL Page Title: Drush CLI
 
 You are managing A/B testing experiments for Drupal page titles. The
 rl_page_title module is a content-entity-backed integration on top of
 the parent rl module's Thompson Sampling engine.
 
-## Preamble — Auto-discover Current State
+## Preamble: Auto-discover Current State
 
 ```bash
 # List all page title experiments with stats.

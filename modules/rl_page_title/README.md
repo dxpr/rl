@@ -34,7 +34,7 @@ experiment entity. Stored variants are arms v1, v2, ... vN.
 
 The RL experiment ID is a deterministic hash:
 `rl_page_title-{12-char-sha1-of-path-pipe-langcode}`. The hash includes the
-langcode so each language gets its own Thompson Sampling state -- an English
+langcode so each language gets its own Thompson Sampling state: an English
 experiment for `/blog` and a Spanish experiment for `/blog` accumulate
 separate turns and rewards.
 

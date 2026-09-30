@@ -1,0 +1,62 @@
+name: Skills pair check
+
+on:
+  pull_request:
+    paths:
+      - '.claude/**'
+      - '.agents/**'
+      - '**/.claude/**'
+      - '**/.agents/**'
+
+jobs:
+  pairs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail when paired skill files differ
+        run: |
+          fail=0
+          # Every SKILL.md whose skill exists in both trees must exist in
+          # both trees and be byte-identical. Skills living in only one
+          # tree (e.g. Claude-only helpers) are skipped by design.
+          while IFS= read -r claude_file; do
+            agents_file="${claude_file//\/.claude\//\/.agents\/}"
+            agents_dir=$(dirname "$agents_file")
+            if [ -d "$agents_dir" ]; then
+              if [ ! -f "$agents_file" ]; then
+                echo "MISSING: $agents_file (no .agents counterpart)"
+                fail=1
+              elif ! cmp -s "$claude_file" "$agents_file"; then
+                echo "DIFFER: $claude_file vs $agents_file"
+                fail=1
+              fi
+            fi
+          done < <(find . -type f -name 'SKILL.md' -path '*/.claude/*' \
+            -not -path './.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/vendor/*' -not -path '*worktrees*')
+          while IFS= read -r agents_file; do
+            claude_file="${agents_file//\/.agents\//\/.claude\/}"
+            claude_dir=$(dirname "$claude_file")
+            if [ -d "$claude_dir" ] && [ ! -f "$claude_file" ]; then
+              echo "MISSING: $claude_file (no .claude counterpart)"
+              fail=1
+            fi
+          done < <(find . -type f -name 'SKILL.md' -path '*/.agents/*' \
+            -not -path './.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/vendor/*' -not -path '*worktrees*')
+          # All other files are compared only when both counterparts
+          # exist; host-specific files such as agents/openai.yaml stay
+          # optional.
+          while IFS= read -r claude_file; do
+            agents_file="${claude_file//\/.claude\//\/.agents\/}"
+            if [ -f "$agents_file" ] \
+              && ! cmp -s "$claude_file" "$agents_file"; then
+              echo "DIFFER: $claude_file vs $agents_file"
+              fail=1
+            fi
+          done < <(find . -type f -path '*/.claude/*' \
+            -not -name 'SKILL.md' -not -path './.git/*' \
+            -not -path '*/node_modules/*' -not -path '*/vendor/*' \
+            -not -path '*worktrees*')
+          exit $fail

@@ -1,57 +1,138 @@
-# RL Menu Link — A/B test menu link labels via Drush CLI
+---
+name: rl_menu_link
+version: 1.0.0
+description: >
+  A/B test Drupal menu link labels using Thompson Sampling. Works for
+  both menu_link_content entities and YAML-defined links. Per-language
+  scoping. Manage experiments via Drush CLI.
+triggers:
+  - /rl-menu-link
+  - menu link test
+  - menu label test
+  - menu variant
+  - a/b test menu
+  - test menu link
+  - rl_menu_link
+---
 
-A/B test Drupal menu link labels for menu_link_content entities and
-YAML-defined links using Thompson Sampling. Per-language scoping.
+# RL Menu Link: Drush CLI
 
-## Commands
+You are managing A/B testing experiments for Drupal menu link labels.
+The rl_menu_link module is a content-entity-backed integration on top
+of the parent rl module's Thompson Sampling engine.
 
-### Discovery
-- `drush rl:menu-link:list` — List experiments (`--enabled=yes|no|all`)
-- `drush rl:menu-link:get <id>` — Full details + live arm stats + original label
+## Preamble: Auto-discover Current State
 
-### Lifecycle
-- `drush rl:menu-link:create <plugin_id> --variants="A,B,C"` — Create
-- `drush rl:menu-link:update <id> --label="X"` — Update
-- `drush rl:menu-link:delete <id>` — Delete + purge analytics
+```bash
+# List all menu link experiments with stats.
+drush rl:menu-link:list --format=yaml
 
-### Common options
-- `--variants="A,B,C"` or `--variants=A --variants=B` — Alternative labels
-- `--label="..."` — Human-readable label
-- `--langcode=es` — Per-language scope (default `und` = all languages)
-- `--disabled` — Create as disabled
-- `--dry-run` — Preview without applying
+# Filter to active experiments only.
+drush rl:menu-link:list --enabled=yes --format=yaml
+```
 
-All commands output YAML. All state-changing commands support `--dry-run`.
+## Commands Reference
 
-## Plugin ID format
+| Command | Alias | Purpose |
+|---|---|---|
+| `rl:menu-link:list` | `rl-mll` | List experiments (`--enabled=yes\|no\|all`) |
+| `rl:menu-link:get <id>` | `rl-mlg` | Show full details + live arm stats + original label |
+| `rl:menu-link:create <plugin>` | `rl-mlc` | Create experiment (`--variants`, `--label`, `--langcode`, `--disabled`, `--dry-run`) |
+| `rl:menu-link:update <id>` | `rl-mlu` | Update label / variants / enable / disable (`--dry-run`) |
+| `rl:menu-link:delete <id>` | `rl-mld` | Delete experiment AND purge RL analytics (`--dry-run`) |
 
-- User-created menu links: `menu_link_content:abc-uuid`
-- YAML-defined links: machine name like `system.admin_content`,
-  `user.page`, `system.admin_structure`
+All state-changing commands support `--dry-run`. All commands output YAML.
 
 ## Concepts
 
-- The original label is always tested as variant `v0` (read live from
-  the menu link manager).
-- Stored variants are `v1`, `v2`, etc.
-- Each `(plugin_id, langcode)` pair is its own experiment with
-  independent Thompson Sampling state.
-- Reward signal: user clicked the tracked menu link.
-- Lookups are indexed; tested at 10K+ experiments per site.
+- **Plugin ID**: every menu link in Drupal has a plugin ID. For
+  user-created `menu_link_content` entities it looks like
+  `menu_link_content:abc-uuid` (the entity UUID). For YAML-defined links
+  from contrib/custom modules it is the link's machine name (e.g.,
+  `system.admin_content`, `user.page`).
+- **Variant**: an alternative label text. The original label (whatever
+  the menu link normally renders) is always tested as variant `v0`.
+  Stored variants are `v1`, `v2`, etc.
+- **Langcode**: experiments are scoped per language. Use `und` (the
+  default, `LANGCODE_NOT_SPECIFIED`) for "all languages". Lookup tries
+  language-specific match first, falls back to "all languages".
+- **Reward**: a click on the tracked menu link.
 
-## Example
+## Workflow Examples
+
+### Test alternatives for a content menu link
 
 ```bash
-# A/B test the core "Content" admin link with alternatives.
-drush rl:menu-link:create system.admin_content \
-  --variants="Content,Manage Content,Site Content"
+# Find the plugin ID first via the menu UI or:
+drush ev "echo \\Drupal::entityTypeManager()->getStorage('menu_link_content')->load(1)->getPluginId();"
 
-# Check progress.
-drush rl:menu-link:get <id>
-
-# Delete + purge.
-drush rl:menu-link:delete <id>
+# Then create the experiment.
+drush rl:menu-link:create menu_link_content:abc-uuid \
+  --variants="Services,What We Do,Solutions" \
+  --label="Services menu link test"
 ```
 
-The same admin UI is available at /admin/config/services/rl-menu-link
-via Views.
+### Test a core admin menu link
+
+```bash
+drush rl:menu-link:create system.admin_content \
+  --variants="Content,Manage Content,Edit Site"
+```
+
+### Test a Spanish-only variant
+
+```bash
+drush rl:menu-link:create menu_link_content:abc-uuid \
+  --variants="Servicios,Lo Que Hacemos" \
+  --langcode=es
+```
+
+### Use multiple --variants flags
+
+```bash
+drush rl:menu-link:create system.admin_structure \
+  --variants="Structure" \
+  --variants="Site Structure" \
+  --variants="Layout"
+```
+
+### Preview before applying
+
+```bash
+drush rl:menu-link:create system.admin_content \
+  --variants="One,Two" \
+  --dry-run
+```
+
+### Check current state of an experiment
+
+```bash
+drush rl:menu-link:get <id>
+# Returns: id, label, plugin id, original_label (read live from menu
+# link manager), langcode, enabled, variants list, rl_experiment_id,
+# total_turns, per-arm turns/rewards/rate.
+```
+
+## How variants reach end users
+
+1. The module's preprocess_menu hook walks the menu tree on every
+   render and looks up an experiment by each item's plugin ID.
+2. Matching items get their `title` swapped with the Thompson Sampling
+   winner, and `data-rl-ml-experiment-id` / `data-rl-ml-arm-id` data
+   attributes are injected onto the rendered anchor.
+3. The bundled tracking JS uses IntersectionObserver to record an
+   impression when the link enters the viewport, and a click handler
+   to record a reward.
+4. Tens of thousands of experiments scale via indexed `(plugin_id,
+   langcode)` lookups (content entities, not config).
+
+## Notes
+
+- The same menu link can have separate experiments per language.
+- Vertical tabs on `menu_link_content` edit forms also create menu link
+  experiments; the Drush commands operate on the same content entities.
+- The admin UI is at `/admin/config/services/rl-menu-link` (Views).
+- Analytics are managed by the parent `rl` module; use `drush rl:list`
+  and the `rl:experiment:*` commands to inspect raw turn/reward data.
+- Deleting an experiment via this command purges the RL analytics
+  tables (turns, rewards, snapshots, registry) atomically.
