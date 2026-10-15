@@ -1,19 +1,14 @@
 ---
 name: rl
-version: 1.0.0
 description: >
-  Manage Reinforcement Learning (A/B testing) experiments via Drush CLI.
-  Thompson Sampling multi-armed bandit experiments: create, analyze,
-  configure, and optimize content variants.
-triggers:
-  - /rl
-  - experiment
-  - a/b test
-  - ab test
-  - bandit
-  - thompson sampling
-  - conversion rate
-  - variant
+  Manage A/B testing experiments run by the RL module (Thompson
+  Sampling multi-armed bandits) with drush rl:* commands: list,
+  inspect, analyze, create, update or delete experiments and tune
+  module settings. Use it when a task mentions experiments, A/B or
+  multivariate tests, variants, bandits, conversion rates, or which
+  variant is winning.
+metadata:
+  version: "1.0.0"
 ---
 
 # RL: Reinforcement Learning Experiments
