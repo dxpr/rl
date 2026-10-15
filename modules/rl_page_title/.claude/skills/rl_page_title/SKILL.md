@@ -1,18 +1,14 @@
 ---
 name: rl_page_title
-version: 1.0.0
 description: >
-  A/B test page titles for any Drupal page (nodes, Views displays, custom
-  controllers, any path) using Thompson Sampling. Per-language scoping.
-  Manage experiments via Drush CLI.
-triggers:
-  - /rl-page-title
-  - page title test
-  - title experiment
-  - title variant
-  - a/b test page title
-  - test page title
-  - rl_page_title
+  A/B test the page title of any Drupal path (nodes, Views displays,
+  custom controllers) with the RL module's Thompson Sampling, scoped
+  per language, through drush rl:page-title:* commands: list, inspect,
+  create, update or delete title experiments. Use it when a task asks
+  to test, compare or optimise the title shown for a page, or mentions
+  page title variants.
+metadata:
+  version: "1.0.0"
 ---
 
 # RL Page Title: Drush CLI
