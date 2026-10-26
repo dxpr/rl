@@ -75,15 +75,17 @@ class ExperimentsOverviewForm extends FormBase {
       ],
     ];
 
-    $experiments = $this->experimentStorage->getExperimentsWithStats();
-    foreach ($experiments as $experiment) {
+    $experiments = [];
+    foreach ($this->experimentStorage->getExperimentsWithStats() as $experiment) {
       // Sort the values users see, including names and activity fallbacks.
       $experiment->experiment_name = $experiment->experiment_name ?: $experiment->experiment_id;
       $experiment->last_activity = $experiment->totals_updated ?: $experiment->registered_at;
+      // IDs may contain brackets or be "0"; use safe, non-numeric form keys.
+      $experiments['experiment_' . hash('sha256', $experiment->experiment_id)] = $experiment;
     }
     $sort = TableSort::getContextFromRequest($header, $this->getRequest());
     $field = $sort['sql'];
-    usort($experiments, static function (object $a, object $b) use ($field, $sort): int {
+    uasort($experiments, static function (object $a, object $b) use ($field, $sort): int {
       $comparison = in_array($field, ['experiment_name', 'module'], TRUE)
         ? strnatcasecmp($a->$field, $b->$field)
         : (int) $a->$field <=> (int) $b->$field;
@@ -92,7 +94,15 @@ class ExperimentsOverviewForm extends FormBase {
         ?: strcmp($a->experiment_id, $b->experiment_id);
     });
     $pager = $this->pagerManager->createPager(count($experiments), 50);
-    $experiments = array_slice($experiments, $pager->getCurrentPage() * 50, 50);
+    $page = array_slice($experiments, $pager->getCurrentPage() * 50, 50, TRUE);
+    // Live statistics can move checked rows to another page between GET and
+    // POST. Retain submitted choices that still exist in the registry so core
+    // tableselect validation can process them. Never trust submitted labels.
+    $submitted = $form_state->getUserInput()['experiments'] ?? [];
+    if ($can_administer && $this->getRequest()->isMethod('POST') && is_array($submitted)) {
+      $page += array_intersect_key($experiments, $submitted);
+    }
+    $experiments = $page;
 
     $form['add'] = [
       '#type' => 'link',
@@ -127,10 +137,8 @@ class ExperimentsOverviewForm extends FormBase {
 
     $rows = [];
     $form['#experiments'] = [];
-    foreach ($experiments as $experiment) {
+    foreach ($experiments as $key => $experiment) {
       $id = $experiment->experiment_id;
-      // IDs may contain brackets or be "0"; use safe, non-numeric form keys.
-      $key = 'experiment_' . hash('sha256', $id);
       $form['#experiments'][$key] = ['id' => $id, 'name' => $experiment->experiment_name];
       $name = [
         'view' => [
@@ -170,7 +178,8 @@ class ExperimentsOverviewForm extends FormBase {
     if ($can_administer) {
       // Core tableselect uses this title for accessible checkbox labels.
       foreach ($rows as $key => &$row) {
-        $row['title']['data']['#title'] = $form['#experiments'][$key]['name'];
+        // A markup object also keeps a literal "0" from being treated as empty.
+        $row['title']['data']['#title'] = $this->t('@name', ['@name' => $form['#experiments'][$key]['name']]);
       }
       $form['experiments']['#options'] = $rows;
     }
@@ -207,8 +216,11 @@ class ExperimentsOverviewForm extends FormBase {
     // Separate tokens prevent another tab from replacing this selection.
     $token = Crypt::randomBytesBase64();
     $this->tempStoreFactory->get('rl_experiment_delete_multiple')->set($token, $form_state->get('selection'));
+    // Defer the destination until after confirmation, as in a multi-step form.
+    $form_state->setIgnoreDestination();
+    $query = array_intersect_key($this->getRequest()->query->all(), array_flip(['order', 'sort', 'page', 'destination']));
     $form_state->setRedirect('rl.experiment.delete_multiple', ['selection' => $token], [
-      'query' => array_intersect_key($this->getRequest()->query->all(), array_flip(['order', 'sort', 'page'])),
+      'query' => $query,
     ]);
   }
 

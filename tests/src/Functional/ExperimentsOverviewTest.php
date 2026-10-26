@@ -3,6 +3,7 @@
 namespace Drupal\Tests\rl\Functional;
 
 use Drupal\Tests\BrowserTestBase;
+use Drupal\user\Entity\Role;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -62,6 +63,7 @@ class ExperimentsOverviewTest extends BrowserTestBase {
     $this->drupalGet('admin/reports/rl', ['query' => ['order' => 'Experiment', 'sort' => 'asc']]);
     $this->assertSession()->elementTextContains('css', 'tbody tr:first-child', 'Never');
     $this->assertSession()->linkExists('0');
+    $this->assertSession()->fieldExists('Update 0');
     $this->drupalGet('admin/reports/rl', ['query' => ['order' => 'invalid', 'sort' => 'invalid']]);
     $this->assertSession()->statusCodeEquals(200);
   }
@@ -138,6 +140,88 @@ class ExperimentsOverviewTest extends BrowserTestBase {
     $this->clickLink('Cancel');
     $this->assertSession()->linkExists('Experiment 51');
     $this->assertSession()->elementAttributeContains('css', 'th.is-active', 'aria-sort', 'ascending');
+  }
+
+  /**
+   * Tests that live statistics cannot change a submitted selection.
+   */
+  public function testSelectionSurvivesReordering(): void {
+    for ($i = 1; $i <= 51; $i++) {
+      $this->createExperiment('id-' . $i, 'Experiment ' . $i, 'test', $i);
+    }
+    $this->drupalGet('admin/reports/rl', ['query' => ['order' => 'Impressions', 'sort' => 'asc']]);
+    // Traffic moves a selected experiment off the displayed page before POST.
+    $this->container->get('database')->update('rl_experiment_totals')
+      ->fields(['total_turns' => 1000])
+      ->condition('experiment_id', 'id-1')
+      ->execute();
+    $this->submitForm([
+      'experiments[experiment_' . hash('sha256', 'id-1') . ']' => TRUE,
+      'experiments[experiment_' . hash('sha256', 'id-2') . ']' => TRUE,
+    ], 'Apply to selected items');
+    $this->assertSession()->pageTextContains('Are you sure you want to delete these 2 experiments?');
+    $this->assertSession()->pageTextContains('Experiment 1 (id-1)');
+    $this->assertSession()->pageTextContains('Experiment 2 (id-2)');
+    $this->submitForm([], 'Delete');
+    $this->assertExperimentExists('id-1', FALSE);
+    $this->assertExperimentExists('id-2', FALSE);
+    $this->assertExperimentExists('id-51', TRUE);
+  }
+
+  /**
+   * Tests that a destination parameter cannot bypass the confirmation step.
+   */
+  public function testDestinationStillShowsConfirmation(): void {
+    $this->createExperiment('selected', 'Selected experiment');
+    $this->drupalGet('admin/reports/rl', ['query' => ['destination' => '/user']]);
+    $this->submitForm([
+      'experiments[experiment_' . hash('sha256', 'selected') . ']' => TRUE,
+    ], 'Apply to selected items');
+    $this->assertSession()->pageTextContains('Are you sure you want to delete this experiment?');
+    $this->assertExperimentExists('selected', TRUE);
+    $this->submitForm([], 'Delete');
+    $this->assertExperimentExists('selected', FALSE);
+    $this->assertSession()->addressEquals('user/' . $this->loggedInUser->id());
+  }
+
+  /**
+   * Tests that submitted selections still enforce current permissions.
+   */
+  public function testRevokedPermission(): void {
+    $this->createExperiment('selected', 'Selected experiment');
+    $this->drupalGet('admin/reports/rl');
+    foreach ($this->loggedInUser->getRoles(TRUE) as $role_id) {
+      Role::load($role_id)->revokePermission('administer rl experiments')->save();
+    }
+    $this->submitForm([
+      'experiments[experiment_' . hash('sha256', 'selected') . ']' => TRUE,
+    ], 'Apply to selected items');
+    $this->assertSession()->statusCodeEquals(403);
+    $this->assertExperimentExists('selected', TRUE);
+  }
+
+  /**
+   * Tests that separate confirmation pages keep independent selections.
+   */
+  public function testIndependentSelections(): void {
+    $this->createExperiment('first', 'First experiment');
+    $this->createExperiment('second', 'Second experiment');
+    $confirmations = [];
+    foreach (['first', 'second'] as $id) {
+      $this->drupalGet('admin/reports/rl');
+      $this->submitForm([
+        'experiments[experiment_' . hash('sha256', $id) . ']' => TRUE,
+      ], 'Apply to selected items');
+      $confirmations[$id] = $this->getSession()->getCurrentUrl();
+    }
+    $this->assertNotSame($confirmations['first'], $confirmations['second']);
+    $this->drupalGet($confirmations['first']);
+    $this->submitForm([], 'Delete');
+    $this->assertExperimentExists('first', FALSE);
+    $this->assertExperimentExists('second', TRUE);
+    $this->drupalGet($confirmations['second']);
+    $this->submitForm([], 'Delete');
+    $this->assertExperimentExists('second', FALSE);
   }
 
   /**
