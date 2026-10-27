@@ -5,11 +5,11 @@ namespace Drupal\rl\Controller;
 use Drupal\Component\Utility\Html;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Datetime\DateFormatterInterface;
-use Drupal\Core\Link;
 use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
+use Drupal\rl\Form\ExperimentsOverviewForm;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ArmDataValidator;
 use Drupal\rl\Storage\ExperimentDataStorageInterface;
@@ -129,103 +129,7 @@ class ReportsController extends ControllerBase {
    *   A render array.
    */
   public function experimentsOverview() {
-    $header = [
-      $this->t('Operations'),
-      $this->t('Experiment'),
-      $this->t('Source'),
-      $this->t('Impressions'),
-      $this->t('Conversions'),
-      $this->t('Variants'),
-      $this->t('Created'),
-      $this->t('Last Activity'),
-    ];
-
-    $rows = [];
-
-    // Get all experiments with their statistics from storage.
-    $experiments = $this->experimentStorage->getExperimentsWithStats();
-
-    foreach ($experiments as $experiment) {
-      $arms_count = $experiment->arm_count;
-      $total_rewards = $experiment->total_rewards;
-
-      $operations = [];
-
-      $detail_url = Url::fromRoute('rl.reports.experiment_detail', [
-        'experiment_id' => $experiment->experiment_id,
-      ]);
-      $operations[] = Link::fromTextAndUrl($this->t('View'), $detail_url);
-
-      if ($this->currentUser()->hasPermission('administer rl experiments')) {
-        $delete_url = Url::fromRoute('rl.experiment.delete', [
-          'experiment_id' => $experiment->experiment_id,
-        ]);
-        $operations[] = Link::fromTextAndUrl($this->t('Delete'), $delete_url);
-      }
-
-      $operations_markup = implode(' | ', array_map(function ($link) {
-        return $link->toString();
-      }, $operations));
-
-      // Format last activity timestamp - use totals_updated if available,
-      // otherwise registered_at.
-      $last_activity_timestamp = $experiment->totals_updated ?: $experiment->registered_at;
-      $last_activity = $last_activity_timestamp > 0
-            ? $this->dateFormatter->format($last_activity_timestamp, 'short')
-            : $this->t('Never');
-
-      $created = $experiment->registered_at > 0
-            ? $this->dateFormatter->format($experiment->registered_at, 'short')
-            : $this->t('Never');
-
-      // Use experiment name from registry or fallback to experiment ID.
-      $experiment_name = $experiment->experiment_name ?: $experiment->experiment_id;
-
-      $rows[] = [
-        ['data' => ['#markup' => $operations_markup]],
-        $experiment_name,
-        $experiment->module,
-        $experiment->total_turns ?: 0,
-        $total_rewards,
-        $arms_count,
-        $created,
-        $last_activity,
-      ];
-    }
-
-    $build = [];
-
-    $actions = [];
-
-    if ($this->currentUser()->hasPermission('administer rl experiments')) {
-      $add_url = Url::fromRoute('rl.experiment.add');
-      $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('Add experiment'),
-        '#url' => $add_url,
-        '#attributes' => ['class' => ['button', 'button--primary']],
-      ];
-    }
-
-    if (!empty($actions)) {
-      $build['actions'] = [
-        '#type' => 'container',
-        '#attributes' => ['class' => ['rl-actions']],
-        'links' => $actions,
-        '#suffix' => '<br><br>',
-      ];
-    }
-
-    $build['table'] = [
-      '#theme' => 'table',
-      '#header' => $header,
-      '#rows' => $rows,
-      '#empty' => $this->t('No experiments found.'),
-    ];
-
-    $build['#prefix'] = '<p>' . $this->t('<strong>Tip:</strong> Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>';
-
-    return $build;
+    return $this->formBuilder()->getForm(ExperimentsOverviewForm::class);
   }
 
   /**

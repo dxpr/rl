@@ -1,4 +1,8 @@
 services:
+  rl.experiment_deletion:
+    class: Drupal\rl\Service\ExperimentDeletion
+    arguments: ['@database']
+
   logger.channel.rl:
     parent: logger.channel_base
     arguments: ['rl']

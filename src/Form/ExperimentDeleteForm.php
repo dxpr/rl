@@ -6,6 +6,7 @@ use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Url;
+use Drupal\rl\Service\ExperimentDeletion;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -30,7 +31,7 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   /**
    * Constructs an ExperimentDeleteForm object.
    */
-  public function __construct(Connection $database) {
+  public function __construct(Connection $database, protected ExperimentDeletion $experimentDeletion) {
     $this->database = $database;
   }
 
@@ -40,7 +41,8 @@ class ExperimentDeleteForm extends ConfirmFormBase {
   public static function create(ContainerInterface $container): static {
     // @phpstan-ignore new.static
     return new static(
-      $container->get('database')
+      $container->get('database'),
+      $container->get('rl.experiment_deletion')
     );
   }
 
@@ -99,31 +101,14 @@ class ExperimentDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $transaction = $this->database->startTransaction();
-
     try {
-      $this->database->delete('rl_arm_data')
-        ->condition('experiment_id', $this->experimentId)
-        ->execute();
-
-      $this->database->delete('rl_experiment_totals')
-        ->condition('experiment_id', $this->experimentId)
-        ->execute();
-
-      $this->database->delete('rl_arm_snapshots')
-        ->condition('experiment_id', $this->experimentId)
-        ->execute();
-
-      $this->database->delete('rl_experiment_registry')
-        ->condition('experiment_id', $this->experimentId)
-        ->execute();
+      $this->experimentDeletion->deleteMultiple([$this->experimentId]);
 
       $this->messenger()->addStatus($this->t('Experiment %id has been deleted.', [
         '%id' => $this->experimentId,
       ]));
     }
     catch (\Exception $e) {
-      $transaction->rollBack();
       $this->messenger()->addError($this->t('An error occurred while deleting the experiment.'));
       $this->getLogger('rl')->error('Error deleting experiment @id: @message', [
         '@id' => $this->experimentId,
