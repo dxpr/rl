@@ -24,9 +24,6 @@ cat <<EOF > phpstan.neon
 parameters:
     paths:
         - web/modules/contrib/rl
-    # Browser tests run in the E2E job with Drupal's PHPUnit bootstrap.
-    excludePaths:
-        - web/modules/contrib/rl/tests
     # Set the analysis level (0-9)
     level: 5
     # Treat PHPDoc types as less certain to avoid false positives with Drupal API methods
@@ -43,4 +40,4 @@ fi
 composer require --dev phpstan/phpstan mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules drush/drush --with-all-dependencies --no-interaction
 
 # Run phpstan
-./vendor/bin/phpstan analyse --memory-limit=-1 -c phpstan.neon
+./vendor/bin/phpstan analyse --memory-limit=-1 -c phpstan.neon 
