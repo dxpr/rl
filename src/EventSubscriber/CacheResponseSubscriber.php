@@ -3,6 +3,7 @@
 namespace Drupal\rl\EventSubscriber;
 
 use Drupal\Core\Cache\CacheableResponseInterface;
+use Drupal\Core\Cache\MemoryCache\MemoryCacheInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -13,9 +14,14 @@ use Symfony\Component\HttpKernel\KernelEvents;
 class CacheResponseSubscriber implements EventSubscriberInterface {
 
   /**
+   * Constructs the cache response subscriber.
+   */
+  public function __construct(protected MemoryCacheInterface $runtimeCache) {}
+
+  /**
    * {@inheritdoc}
    */
-  public static function getSubscribedEvents() {
+  public static function getSubscribedEvents(): array {
     return [
       KernelEvents::RESPONSE => 'onResponse',
     ];
@@ -28,7 +34,7 @@ class CacheResponseSubscriber implements EventSubscriberInterface {
    *   The response event.
    */
   public function onResponse(ResponseEvent $event) {
-    $cache_override = &drupal_static('rl_cache_override');
+    $cache_override = $this->runtimeCache->get('rl_cache_override')->data ?? NULL;
 
     if ($cache_override !== NULL) {
       $response = $event->getResponse();
@@ -39,8 +45,8 @@ class CacheResponseSubscriber implements EventSubscriberInterface {
         $response->getCacheableMetadata()->setCacheMaxAge($cache_override);
       }
 
-      // Clear the static variable.
-      $cache_override = NULL;
+      // Consume the override so it cannot affect another response.
+      $this->runtimeCache->delete('rl_cache_override');
     }
   }
 
