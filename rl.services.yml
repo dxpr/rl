@@ -32,12 +32,18 @@ services:
     tags:
       - { name: service_collector, tag: rl_experiment_decorator, call: addDecorator }
 
+  # Keep request-only values in memory on every supported core version.
+  rl.runtime_cache:
+    class: Drupal\Core\Cache\MemoryCache\MemoryCache
+    arguments: ['@datetime.time']
+
   rl.cache_manager:
     class: Drupal\rl\Service\CacheManager
-    arguments: ['@config.factory']
+    arguments: ['@config.factory', '@rl.runtime_cache']
 
   rl.cache_response_subscriber:
     class: Drupal\rl\EventSubscriber\CacheResponseSubscriber
+    arguments: ['@rl.runtime_cache']
     tags:
       - { name: event_subscriber }
 

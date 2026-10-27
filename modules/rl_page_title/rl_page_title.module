@@ -36,7 +36,7 @@ function rl_page_title_help($route_name, RouteMatchInterface $route_match) {
 /**
  * Implements hook_preprocess_page_title().
  *
- * Captures the original title text in a per-request static so the
+ * Captures the original title text in request-only memory so the
  * preprocess_html hook can do a targeted substitution within whatever
  * structure the head_title has been built into (which may already have
  * been mutated by metatag, dxpr_seo, etc.).
@@ -48,8 +48,7 @@ function rl_page_title_preprocess_page_title(array &$variables) {
   }
   $original = (string) $variables['title'];
   if ($original !== '') {
-    $captured = &drupal_static('rl_page_title_original', NULL);
-    $captured = $original;
+    \Drupal::service('rl.runtime_cache')->set('rl_page_title_original', $original);
   }
   $variables['title'] = $result['text'];
 }
@@ -88,7 +87,7 @@ function rl_page_title_preprocess_html(array &$variables) {
   // Resolve the original title text. Prefer the value captured during
   // preprocess_page_title; fall back to the title resolver for pages
   // without a rendered page title block.
-  $original = drupal_static('rl_page_title_original', NULL);
+  $original = \Drupal::service('rl.runtime_cache')->get('rl_page_title_original')->data ?? NULL;
   if ($original === NULL || $original === '') {
     $original = _rl_page_title_resolve_route_title();
   }
