@@ -1,10 +1,19 @@
 rl.reports.experiments:
   path: '/admin/reports/rl'
   defaults:
-    _controller: '\Drupal\rl\Controller\ReportsController::experimentsOverview'
+    _form: '\Drupal\rl\Form\ExperimentsOverviewForm'
     _title: 'RL: A/B Testing'
   requirements:
     _permission: 'view rl reports'
+
+rl.experiment.delete_multiple:
+  path: '/admin/reports/rl/delete/{selection}'
+  defaults:
+    _form: '\Drupal\rl\Form\ExperimentDeleteMultipleForm'
+    _title: 'Delete experiments'
+  requirements:
+    _permission: 'administer rl experiments'
+    selection: '[a-zA-Z0-9_-]+'
 
 rl.reports.experiment_detail:
   path: '/admin/reports/rl/experiment/{experiment_id}'

@@ -3,6 +3,50 @@
  * Styles for RL experiment charts.
  */
 
+/* Chart header with icon */
+.rl-chart-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+  margin-bottom: 1.25em;
+}
+
+.rl-chart-header__icon {
+  flex-shrink: 0;
+  width: 2.5em;
+  height: 2.5em;
+  background: linear-gradient(135deg, var(--rl-color-1), var(--rl-color-5), var(--rl-color-8));
+  border-radius: 0.5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.rl-chart-header__icon svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+
+.rl-chart-header__text {
+  min-width: 0;
+}
+
+.rl-chart-header__title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111;
+}
+
+.rl-chart-header__subtitle {
+  margin: 0.15em 0 0;
+  font-size: 0.95em;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
 .rl-charts-container {
   margin-bottom: 2em;
 }

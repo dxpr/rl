@@ -9,6 +9,8 @@
 
 # RL: A/B & Multivariate Testing for Drupal (Reinforcement Learning)
 
+**[Full documentation](https://project.pages.drupalcode.org/rl/)** | This README covers the essentials; the docs site has guides, API reference, and worked examples.
+
 A/B and multivariate testing for Drupal using reinforcement learning. Each page
 view is a trial, each conversion is a reward, and the algorithm continuously
 shifts traffic to whichever variant is winning. RLHF-style feedback loop, no
@@ -60,6 +62,7 @@ losses update toward lower. Algorithm details:
 - **Multivariate test** dozens or thousands of variants at once
 - **Continuous optimization**: tests never end, the model keeps learning
 - **Recommendations**: rank items by real engagement
+- **Smart sorting**: reorder lists, accordions, or FAQs by visitor engagement
 - **Feature flags**: route users to variants based on observed reward, not coin flip
 
 ## Installation
@@ -69,26 +72,6 @@ composer require drupal/rl
 drush en rl
 ```
 
-### Plotly.js Library (Required for Charts)
-
-The RL module uses Plotly.js for experiment charts. Install it via Composer using
-[Asset Packagist](https://asset-packagist.org):
-
-```bash
-# Add Asset Packagist repository (if not already configured)
-composer config repositories.asset-packagist composer https://asset-packagist.org
-
-# Install the Composer plugin for npm assets (if not already installed)
-composer require oomphinc/composer-installers-extender
-composer config extra.installer-types --json '["npm-asset"]'
-composer config extra.installer-paths.web/libraries/\{\$name\} --json '["type:npm-asset"]'
-
-# Install Plotly.js
-composer require npm-asset/plotly.js-dist-min:^2.35
-```
-
-This installs the library to `web/libraries/plotly.js-dist-min/`.
-
 ### Post-Installation: Verify rl.php Access
 
 The RL module includes a `.htaccess` file that allows direct access to
@@ -97,7 +80,7 @@ module). Test that it's working:
 
 ```bash
 # Test if rl.php is accessible
-curl -X POST -d "action=turns&experiment_id=test&arm_ids=1" \
+curl -X POST -d "action=ping" \
   http://example.com/modules/contrib/rl/rl.php
 ```
 
@@ -133,8 +116,8 @@ location ~ ^/modules/.*\.php$ {
 - Socket: `unix:/var/run/php/php8.1-fpm.sock` (or your PHP version)
 - TCP: `127.0.0.1:9000`
 
-If server policies prevent direct access to `rl.php`, use the Drupal
-Routes API instead.
+If server policies prevent direct access to `rl.php`, your consumer
+module must implement its own Drupal route as an alternative endpoint.
 
 ## Drush Command Reference
 
@@ -233,7 +216,7 @@ $experiment_manager->recordTurn('my-experiment', 'variant-a');
 $experiment_manager->recordReward('my-experiment', 'variant-a');
 
 // Get Thompson Sampling scores
-$scores = $experiment_manager->getThompsonScores('my-experiment');
+$scores = $experiment_manager->getThompsonScores('my-experiment', NULL, ['variant-a', 'variant-b']);
 
 // Select best option
 $ts_calculator = \Drupal::service('rl.ts_calculator');
@@ -297,6 +280,18 @@ Drupal.rl.decide('hero_cta', armIds).then(function (armId) {
   showVariant(armId);
 });
 
+// Ask for a full ranking when you need to sort, not just pick a winner.
+// Use case: reordering accordion items, FAQ lists, or any sortable
+// content by visitor engagement.
+var items = document.querySelector('[data-rl-experiment="faq_sort"]');
+var faqArms = items.dataset.rlArms.split(',');
+Drupal.rl.rank('faq_sort', faqArms).then(function (sorted) {
+  // sorted = ['t3', 't0', 't1', 't2'], all arms, best first
+  sorted.forEach(function (armId) {
+    items.appendChild(items.querySelector('[data-rl-arm="' + armId + '"]'));
+  });
+});
+
 // Optional: force an immediate flush.
 Drupal.rl.flush();
 ```
@@ -308,7 +303,7 @@ elements ends up making a single round trip. Buffered tracking events
 are also flushed via `navigator.sendBeacon` on `visibilitychange` and
 `pagehide` so they survive navigation.
 
-### Discipline for `decide()`
+### Discipline for `decide()` and `rank()`
 
 > **Never hardcode arm ids in JS. Always read them from a DOM
 > attribute that the server-side renderer emitted.**
@@ -317,11 +312,11 @@ Rationale: the DOM is downstream of the same server-render pipeline
 that produced the decide's context. When the experiment manager adds
 or removes a variant, the consumer's page cache is invalidated, the
 next render emits the new attribute, and JS picks it up. JS never
-asserts what the arm set is - it just echoes whatever the current
+asserts what the arm set is; it just echoes whatever the current
 cached HTML says, mirroring rl_sorting's PHP pattern of recomputing
 `$arm_ids` from a fresh view query on every render. This keeps
-`Drupal.rl.decide()` drift-free without requiring the rl core to
-store arm lists.
+`Drupal.rl.decide()` and `Drupal.rl.rank()` drift-free without
+requiring the rl core to store arm lists.
 
 The convention your builder uses internally (numeric `v0..vN`, UUIDs,
 node ids, anything matching `^[a-zA-Z0-9_-]+$`) is whatever you emit
@@ -383,7 +378,8 @@ Content-Type: application/json
 
 {
   "decides": [
-    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]}
+    {"id": "hero_cta", "arms": ["v0", "v1", "v2"]},
+    {"id": "faq_sort", "arms": ["t0", "t1", "t2", "t3"], "rank": true}
   ],
   "turns": [
     {"id": "hero_cta", "arm": "v0"},
@@ -396,16 +392,47 @@ Content-Type: application/json
 ```
 
 All three sections are optional. Invalid or unregistered entries are
-dropped silently so one bad event does not poison the rest of the
-batch. The response is
+rejected individually without poisoning the rest of the batch. A
+successful response looks like:
 
 ```json
-{"ok":true,"decisions":{"hero_cta":{"armId":"v1"}}}
+{
+  "ok": true,
+  "decisions": {
+    "hero_cta": {"armId": "v1"},
+    "faq_sort": {"armId": "t2", "ranking": ["t2", "t0", "t3", "t1"]}
+  }
+}
 ```
 
 `decisions` contains only entries that had a successful Thompson
-Sampling lookup. Missing keys mean "use the default variant". Turns
-and rewards are fire-and-forget writes with no per-event response.
+Sampling lookup. Missing keys mean "use the default variant". When
+`"rank": true` is set on a decide entry, the response includes a
+`ranking` array with all arm IDs sorted by Thompson Sampling score
+(best first). The `armId` field is always present and equals
+`ranking[0]` for backwards compatibility. Turns and rewards are
+fire-and-forget writes with no per-event response.
+
+When some entries are rejected (invalid IDs, unregistered experiments,
+malformed entries), the response includes an `errors` array:
+
+```json
+{
+  "ok": true,
+  "decisions": {
+    "hero_cta": {"armId": "v1"}
+  },
+  "errors": [
+    {"kind": "decide", "id": "unknown_exp", "reason": "unknown_experiment"},
+    {"kind": "turn", "id": "bad!", "reason": "invalid_id"}
+  ]
+}
+```
+
+Each error includes the `kind` (decide, turn, or reward), the `id` that
+failed, and a machine-readable `reason`. Partial successes return HTTP 200
+with `ok: true` alongside both `decisions` and `errors`; the response is
+422 with `ok: false` only when every entry in the batch was rejected.
 
 ### Curl examples
 
@@ -425,6 +452,7 @@ curl -X POST 'https://example.com/modules/contrib/rl/rl.php' -d 'action=ping'
 | Status | When |
 | --- | --- |
 | `400` | Missing/invalid `action`, malformed JSON, or missing `experiment_id` on a legacy action. |
+| `422` | Batch request where every entry was rejected (all invalid or unregistered). |
 | `500` | Drupal kernel failed to boot. Error logged to the PHP error log. |
 
 ### Performance notes
@@ -475,31 +503,29 @@ Implement the `ExperimentDecoratorInterface`:
 
 namespace Drupal\my_module\Decorator;
 
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\rl\Decorator\ExperimentDecoratorInterface;
 
 class MyExperimentDecorator implements ExperimentDecoratorInterface {
 
-  /**
-   * {@inheritdoc}
-   */
+  protected EntityTypeManagerInterface $entityTypeManager;
+
+  public function __construct(EntityTypeManagerInterface $entity_type_manager) {
+    $this->entityTypeManager = $entity_type_manager;
+  }
+
   public function decorateExperiment(string $experiment_id): ?array {
-    // Return NULL to skip, or a render array for custom display.
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
     return ['#markup' => 'My Custom Experiment Name'];
   }
 
-  /**
-   * {@inheritdoc}
-   */
   public function decorateArm(string $experiment_id, string $arm_id): ?array {
-    // Return NULL to skip, or a render array for custom display.
     if (!str_starts_with($experiment_id, 'my_module-')) {
       return NULL;
     }
-    // Example: Load entity and return its label.
-    $entity = \Drupal::entityTypeManager()->getStorage('node')->load($arm_id);
+    $entity = $this->entityTypeManager->getStorage('node')->load($arm_id);
     if ($entity) {
       return [
         '#markup' => htmlspecialchars($entity->label()) .

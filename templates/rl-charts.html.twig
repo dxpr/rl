@@ -5,13 +5,24 @@
  *
  * Available variables:
  * - title: The section title.
+ * - subtitle: Optional descriptive subtitle below the title.
  * - tip_hover: Tip text for hover.
  * - tip_taller: Tip text for 3D landscape.
  * - interaction_hint: Hint for 3D interaction.
  * - date_filter: Date filter dropdowns render array.
  */
 #}
-<h3>{{ title }}</h3>
+<div class="rl-chart-header">
+  <div class="rl-chart-header__icon" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+  </div>
+  <div class="rl-chart-header__text">
+    <h3 class="rl-chart-header__title">{{ title }}</h3>
+    {% if subtitle %}
+      <p class="rl-chart-header__subtitle">{{ subtitle }}</p>
+    {% endif %}
+  </div>
+</div>
 
 <div class="rl-chart-tabs-wrapper">
   {% if date_filter %}

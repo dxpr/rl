@@ -61,6 +61,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         'updated' => $timestamp,
       ])
       ->expression('turns', 'turns + :inc', [':inc' => 1])
+      ->expression('created', 'created')
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
@@ -73,6 +74,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         'updated' => $timestamp,
       ])
       ->expression('total_turns', 'total_turns + :inc', [':inc' => 1])
+      ->expression('created', 'created')
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
@@ -97,6 +99,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
           'updated' => $timestamp,
         ])
         ->expression('turns', 'turns + :inc', [':inc' => 1])
+        ->expression('created', 'created')
         ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
         ->execute();
     }
@@ -110,6 +113,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         'updated' => $timestamp,
       ])
       ->expression('total_turns', 'total_turns + :inc', [':inc' => $arm_count])
+      ->expression('created', 'created')
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
@@ -131,6 +135,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         'updated' => $timestamp,
       ])
       ->expression('rewards', 'rewards + :inc', [':inc' => 1])
+      ->expression('created', 'created')
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
@@ -141,6 +146,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
         'created' => $timestamp,
         'updated' => $timestamp,
       ])
+      ->expression('created', 'created')
       ->expression('updated', ':timestamp', [':timestamp' => $timestamp])
       ->execute();
 
@@ -157,7 +163,7 @@ class ExperimentDataStorage implements ExperimentDataStorageInterface {
       ->condition('experiment_id', $experiment_id)
       ->condition('arm_id', $arm_id)
       ->execute()
-      ->fetchObject();
+      ->fetchObject() ?: NULL;
   }
 
   /**

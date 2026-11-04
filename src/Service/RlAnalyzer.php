@@ -242,10 +242,11 @@ class RlAnalyzer implements RlAnalyzerInterface {
     // We fetch raw data and group in PHP for database compatibility.
     $query = $this->database->select('rl_arm_snapshots', 's');
     $query->condition('s.experiment_id', $experimentId);
-    $query->fields('s', ['turns', 'rewards', 'created']);
+    $query->fields('s', ['arm_id', 'turns', 'rewards', 'created']);
     $query->orderBy('s.created', 'DESC');
     // Fetch more rows than needed since we'll aggregate them.
-    $query->range(0, $periods * 100);
+    $limit = $periods * 100;
+    $query->range(0, $limit);
 
     $rawResults = $query->execute()->fetchAll();
 
@@ -255,7 +256,7 @@ class RlAnalyzer implements RlAnalyzerInterface {
     }
 
     // Group results by period in PHP for database compatibility.
-    $periodData = $this->groupSnapshotsByPeriod($rawResults, $period, $periods);
+    $periodData = $this->groupSnapshotsByPeriod($rawResults, $period, $periods, count($rawResults) >= $limit);
 
     if (empty($periodData)) {
       // Fall back to current arm data if no snapshots.
@@ -531,43 +532,97 @@ class RlAnalyzer implements RlAnalyzerInterface {
    * raw snapshot data in PHP instead of using MySQL-specific DATE_FORMAT.
    *
    * @param array $rawResults
-   *   Raw snapshot results with turns, rewards, created fields.
+   *   Raw snapshot results with arm_id, turns, rewards, created fields.
    * @param string $period
    *   Period type: 'daily', 'weekly', or 'monthly'.
    * @param int $maxPeriods
    *   Maximum number of periods to return.
+   * @param bool $historyTruncated
+   *   TRUE when the query row limit cut off older snapshots, meaning the
+   *   earliest fetched period has an incomplete baseline.
    *
    * @return array
    *   Associative array keyed by period string with aggregated data.
    */
-  protected function groupSnapshotsByPeriod(array $rawResults, string $period, int $maxPeriods): array {
-    $grouped = [];
+  protected function groupSnapshotsByPeriod(array $rawResults, string $period, int $maxPeriods, bool $historyTruncated = FALSE): array {
+    // Snapshots store cumulative values per arm. To get per-period activity
+    // we take the latest snapshot per arm per period, carry arms without a
+    // snapshot forward at their last known values, sum across arms to get
+    // period-end totals, then diff consecutive periods.
+    $armPeriodMax = [];
 
     foreach ($rawResults as $row) {
       $timestamp = (int) $row->created;
+      $armId = $row->arm_id;
 
-      // Generate period key based on period type.
+      // Use date('o') (ISO week-numbering year) with date('W') so weeks
+      // spanning a year boundary are not misfiled; date('Y') would key
+      // Dec 29, 2025 as "2025-W01" and merge it with early January.
       $periodKey = match ($period) {
         'daily' => date('Y-m-d', $timestamp),
         'monthly' => date('Y-m', $timestamp),
-        default => date('Y', $timestamp) . '-W' . date('W', $timestamp),
+        default => date('o', $timestamp) . '-W' . date('W', $timestamp),
       };
 
-      if (!isset($grouped[$periodKey])) {
-        $grouped[$periodKey] = [
-          'impressions' => 0,
-          'conversions' => 0,
-          'period_end' => $timestamp,
+      if (!isset($armPeriodMax[$periodKey][$armId])
+          || $timestamp > $armPeriodMax[$periodKey][$armId]['ts']) {
+        $armPeriodMax[$periodKey][$armId] = [
+          'turns' => (int) $row->turns,
+          'rewards' => (int) $row->rewards,
+          'ts' => $timestamp,
         ];
       }
-
-      $grouped[$periodKey]['impressions'] += (int) $row->turns;
-      $grouped[$periodKey]['conversions'] += (int) $row->rewards;
-      $grouped[$periodKey]['period_end'] = max($grouped[$periodKey]['period_end'], $timestamp);
     }
 
-    // Sort by period key and limit.
-    ksort($grouped);
+    ksort($armPeriodMax);
+
+    // Sum to period-end cumulative totals. Arms with no snapshot in a
+    // period (no traffic, or rows trimmed by cron) are carried forward at
+    // their last known values; otherwise they would drop out of the total
+    // and distort the deltas below.
+    $carried = [];
+    $periodTotals = [];
+    foreach ($armPeriodMax as $periodKey => $arms) {
+      $periodEnd = 0;
+      foreach ($arms as $armId => $arm) {
+        $carried[$armId] = $arm;
+        $periodEnd = max($periodEnd, $arm['ts']);
+      }
+      $totalTurns = 0;
+      $totalRewards = 0;
+      foreach ($carried as $arm) {
+        $totalTurns += $arm['turns'];
+        $totalRewards += $arm['rewards'];
+      }
+      $periodTotals[$periodKey] = [
+        'turns' => $totalTurns,
+        'rewards' => $totalRewards,
+        'period_end' => $periodEnd,
+      ];
+    }
+
+    // Diff consecutive periods to get per-period incremental activity.
+    $grouped = [];
+    $prevTurns = 0;
+    $prevRewards = 0;
+    foreach ($periodTotals as $periodKey => $totals) {
+      $grouped[$periodKey] = [
+        'impressions' => max(0, $totals['turns'] - $prevTurns),
+        'conversions' => max(0, $totals['rewards'] - $prevRewards),
+        'period_end' => $totals['period_end'],
+      ];
+      $prevTurns = $totals['turns'];
+      $prevRewards = $totals['rewards'];
+    }
+
+    // The earliest period diffs against zero, so its delta equals all
+    // activity up to that point. That is correct for an experiment's true
+    // first period, but with truncated history the baseline is incomplete
+    // and the period would show as a spurious spike; drop it.
+    if ($historyTruncated && count($grouped) > 1) {
+      array_shift($grouped);
+    }
+
     $grouped = array_slice($grouped, -$maxPeriods, $maxPeriods, TRUE);
 
     return $grouped;
@@ -599,7 +654,11 @@ class RlAnalyzer implements RlAnalyzerInterface {
     $query->fields('a', ['arm_id', 'turns', 'rewards']);
     $query->condition('experiment_id', $experimentId);
     $query->condition('turns', 50, '>=');
-    $query->orderBy('rewards', 'DESC');
+    // Multiply by 1.0 to force float division; PostgreSQL and SQLite
+    // perform integer division on integer operands, which would make
+    // every arm's rate 0 and the ordering arbitrary.
+    $query->addExpression('rewards * 1.0 / turns', 'conversion_rate');
+    $query->orderBy('conversion_rate', 'DESC');
     $query->range(0, 2);
     $topArms = $query->execute()->fetchAll();
 

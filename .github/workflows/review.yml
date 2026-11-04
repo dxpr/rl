@@ -6,6 +6,76 @@ env:
   TARGET_DRUPAL_CORE_VERSION: 11
 
 jobs:
+  changes:
+    runs-on: ubicloud-standard-4
+    outputs:
+      javascript: ${{ steps.filter.outputs.javascript }}
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dorny/paths-filter@v3
+      id: filter
+      with:
+        filters: |
+          javascript:
+            - '**/*.js'
+            - 'eslint.config.js'
+            - 'package.json'
+
+  eslint:
+    needs: changes
+    if: needs.changes.outputs.javascript == 'true'
+    runs-on: ubicloud-standard-4
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint with eslint
+      id: lint
+      run: |
+        set -o pipefail
+        npx eslint . 2>&1 | tee eslint-output.log
+      continue-on-error: true
+
+    - name: Generate summary
+      if: always() && steps.lint.outcome != 'cancelled'
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require('fs');
+          const passed = '${{ steps.lint.outcome }}' === 'success';
+          let output = '';
+          try { output = fs.readFileSync('eslint-output.log', 'utf8'); } catch {}
+
+          await core.summary.addHeading(`${passed ? '✅' : '❌'} ESLint`);
+
+          const problemsMatch = output.match(/✖ (\d+) problems? \((\d+) errors?, (\d+) warnings?\)/);
+          if (problemsMatch) {
+            await core.summary.addTable([
+              [
+                { data: 'Problems', header: true },
+                { data: 'Errors', header: true },
+                { data: 'Warnings', header: true }
+              ],
+              [problemsMatch[1], problemsMatch[2], problemsMatch[3]]
+            ]);
+          } else if (passed) {
+            await core.summary.addRaw('No lint issues found.', true);
+          }
+
+          await core.summary.write();
+
+    - name: Fail if lint failed
+      if: steps.lint.outcome == 'failure'
+      run: exit 1
+
   drupal-lint:
     runs-on: ubicloud-standard-4
     timeout-minutes: 60

@@ -16,13 +16,13 @@ triggers:
   - variant
 ---
 
-# RL — Reinforcement Learning Experiments
+# RL: Reinforcement Learning Experiments
 
 You are managing A/B testing experiments powered by Thompson Sampling.
 The RL module tracks impressions (turns) and conversions (rewards) across
 content variants and automatically optimizes traffic distribution.
 
-## Preamble — Auto-discover Current State
+## Preamble: Auto-discover Current State
 
 ```bash
 # List all active experiments
@@ -133,4 +133,4 @@ drush rl:config:list
 - Arms are typically node IDs; the analyzer resolves
   them to node titles automatically
 - Views management is handled by `drush_webmaster`
-  (`wm:view:*` commands) — do not duplicate
+  (`wm:view:*` commands); do not duplicate

@@ -2,8 +2,9 @@
  * @file
  * Thin RL transport proxy with request batching.
  *
- * Exposes Drupal.rl.decide(), Drupal.rl.turn(), Drupal.rl.reward(), and
- * Drupal.rl.flush(). Batches calls into a single POST to rl.php so that
+ * Exposes Drupal.rl.decide(), Drupal.rl.rank(), Drupal.rl.turn(),
+ * Drupal.rl.reward(), and Drupal.rl.flush(). Batches calls into a
+ * single POST to rl.php so that
  * multiple RL-powered features on the same page share one request
  * instead of each making its own.
  *
@@ -12,12 +13,14 @@
  * visibilitychange / pagehide flush tracking writes immediately via
  * navigator.sendBeacon so buffered events survive navigation.
  *
- * About decide(): client-side decide exists to serve consumers that
- * render variants in JS (DXPR Builder's runtime, etc.) where shifting
- * the decision to PHP would burn full-page cache. Consumers that can
- * decide server-side (ai_sorting, rl_page_title, rl_menu_link,
- * rl_example, rl_example_frontend) should keep doing so; decide() is
- * for the client-rendered path only.
+ * About decide() and rank(): client-side decide/rank exist to serve
+ * consumers that render variants in JS (DXPR Builder's runtime, etc.)
+ * where shifting the decision to PHP would burn full-page cache.
+ * decide() returns a single winner; rank() returns the full sorted
+ * arm list for use cases like reordering accordion items or lists.
+ * Consumers that can decide server-side (ai_sorting, rl_page_title,
+ * rl_menu_link, rl_example, rl_example_frontend) should keep doing
+ * so; decide()/rank() are for the client-rendered path only.
  *
  * Important discipline for callers:
  *   Read the arm id list from the DOM at call time. Do not hardcode
@@ -35,15 +38,14 @@
  */
 
 (function (Drupal, drupalSettings) {
-
   'use strict';
 
-  var queue = emptyQueue();
-  var timer = null;
+  let queue = emptyQueue();
+  let timer = null;
 
   function emptyQueue() {
     return {
-      // experimentId -> { arms: [...], resolvers: [fn] }
+      // experimentId -> { arms: [...], rank: bool, resolvers: [fn], rankResolvers: [fn] }
       decides: Object.create(null),
       turns: [],
       rewards: [],
@@ -58,8 +60,8 @@
   }
 
   function hasPending() {
-    for (var id in queue.decides) {
-      if (Object.prototype.hasOwnProperty.call(queue.decides, id)) {
+    for (const id in queue.decides) {
+      if (Object.hasOwn(queue.decides, id)) {
         return true;
       }
     }
@@ -70,68 +72,83 @@
     if (timer !== null) {
       return;
     }
-    timer = setTimeout(function () {
+    timer = setTimeout(() => {
       timer = null;
       flush();
     }, 500);
   }
 
   function takeQueue() {
-    var snapshot = queue;
+    const snapshot = queue;
     queue = emptyQueue();
     return snapshot;
   }
 
   function batchUrl(url) {
-    return url + (url.indexOf('?') === -1 ? '?' : '&') + 'action=batch';
+    return `${url}${url.includes('?') ? '&' : '?'}action=batch`;
   }
 
   function buildPayload(snapshot) {
-    var decides = [];
-    for (var id in snapshot.decides) {
-      if (Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
-        decides.push({ id: id, arms: snapshot.decides[id].arms });
+    const decides = [];
+    for (const id in snapshot.decides) {
+      if (Object.hasOwn(snapshot.decides, id)) {
+        const entry = { id, arms: snapshot.decides[id].arms };
+        if (snapshot.decides[id].rank) {
+          entry.rank = true;
+        }
+        decides.push(entry);
       }
     }
     return {
-      decides: decides,
+      decides,
       turns: snapshot.turns,
       rewards: snapshot.rewards,
     };
   }
 
   function resolveDecides(snapshot, decisions) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
+    for (const id in snapshot.decides) {
+      if (!Object.hasOwn(snapshot.decides, id)) {
         continue;
       }
-      var entry = snapshot.decides[id];
-      var armId = null;
-      if (decisions && decisions[id] && decisions[id].armId) {
-        armId = decisions[id].armId;
+      const entry = snapshot.decides[id];
+      const decision = (decisions && decisions[id]) || {};
+      const armId = decision.armId || entry.arms[0];
+      let ranking;
+      if (Array.isArray(decision.ranking) && decision.ranking.length) {
+        ranking = decision.ranking;
       }
-      // Fallback: first arm in the caller-provided list. This keeps the
-      // promise contract "always resolves to a usable arm" so consumers
-      // do not need a .catch() for the common failure modes (unknown
-      // experiment, empty data, network error).
-      if (!armId) {
-        armId = entry.arms[0];
+      else {
+        ranking = entry.arms.slice();
+        const winnerIdx = ranking.indexOf(armId);
+        if (winnerIdx > 0) {
+          ranking.splice(winnerIdx, 1);
+          ranking.unshift(armId);
+        }
       }
-      entry.resolvers.forEach(function (resolve) {
+
+      entry.resolvers.forEach((resolve) => {
         resolve(armId);
+      });
+      entry.rankResolvers.forEach((resolve) => {
+        resolve(ranking);
       });
     }
   }
 
   function fallbackDecides(snapshot) {
-    for (var id in snapshot.decides) {
-      if (!Object.prototype.hasOwnProperty.call(snapshot.decides, id)) {
+    for (const id in snapshot.decides) {
+      if (!Object.hasOwn(snapshot.decides, id)) {
         continue;
       }
-      var entry = snapshot.decides[id];
-      var fallback = entry.arms[0];
-      entry.resolvers.forEach(function (resolve) {
+      const entry = snapshot.decides[id];
+      const fallback = entry.arms[0];
+      const fallbackRanking = entry.arms.slice();
+      entry.resolvers.forEach((resolve) => {
         resolve(fallback);
+      });
+      entry.rankResolvers.forEach((resolve) => {
+        resolve(fallbackRanking);
       });
     }
   }
@@ -140,25 +157,25 @@
     if (!hasPending()) {
       return;
     }
-    var url = endpoint();
-    var snapshot = takeQueue();
+    const url = endpoint();
+    const snapshot = takeQueue();
     if (!url) {
       fallbackDecides(snapshot);
       return;
     }
-    var body = JSON.stringify(buildPayload(snapshot));
+    const body = JSON.stringify(buildPayload(snapshot));
 
     fetch(batchUrl(url), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: body,
+      body,
       credentials: 'same-origin',
       keepalive: true,
-    }).then(function (response) {
+    }).then((response) => {
       // rl.php returns 422 when every entry in a non-empty batch was
       // rejected (unknown experiment, invalid ids, manager
       // unavailable). Read the JSON body anyway so the errors array
-      // reaches the console — without this, a site-wide mistake like
+      // reaches the console; without this, a site-wide mistake like
       // "registry cache missed the new hook so no experiment rows
       // exist" looks identical to a healthy empty batch and the
       // operator has nothing to grep for in devtools. Other non-2xx
@@ -169,12 +186,12 @@
         return null;
       }
       return response.json();
-    }).then(function (json) {
+    }).then((json) => {
       if (json) {
         reportErrors(json.errors);
         resolveDecides(snapshot, json.decisions || {});
       }
-    }).catch(function () {
+    }).catch(() => {
       fallbackDecides(snapshot);
     });
   }
@@ -188,13 +205,18 @@
       return;
     }
     if (typeof Drupal.rl.onErrors === 'function') {
-      try { Drupal.rl.onErrors(errors); } catch (e) { /* never let a listener poison the next flush */ }
+      try {
+        Drupal.rl.onErrors(errors);
+      }
+      catch { /* never let a listener poison the next flush */ }
     }
     if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-      errors.forEach(function (err) {
-        if (!err || typeof err !== 'object') { return; }
+      errors.forEach((err) => {
+        if (!err || typeof err !== 'object') {
+          return;
+        }
         console.warn(
-          '[rl] ' + (err.kind || 'entry') + ' for ' + (err.id || '(no id)') + ' rejected: ' + (err.reason || 'unknown')
+          `[rl] ${err.kind || 'entry'} for ${err.id || '(no id)'} rejected: ${err.reason || 'unknown'}`,
         );
       });
     }
@@ -204,11 +226,11 @@
     if (!hasPending()) {
       return;
     }
-    var url = endpoint();
+    const url = endpoint();
     if (!url) {
       return;
     }
-    var snapshot = takeQueue();
+    const snapshot = takeQueue();
 
     // sendBeacon is fire-and-forget: we cannot read the response, so
     // pending decides cannot be fulfilled from this path. Resolve them
@@ -218,14 +240,14 @@
     if (snapshot.turns.length === 0 && snapshot.rewards.length === 0) {
       return;
     }
-    var body = JSON.stringify({
+    const body = JSON.stringify({
       decides: [],
       turns: snapshot.turns,
       rewards: snapshot.rewards,
     });
 
     if ('sendBeacon' in navigator) {
-      var blob = new Blob([body], { type: 'application/json' });
+      const blob = new Blob([body], { type: 'application/json' });
       navigator.sendBeacon(batchUrl(url), blob);
     }
   }
@@ -255,19 +277,63 @@
      *   server failure (unknown experiment, no data, network error) so
      *   callers do not need a .catch() for the common path.
      */
-    decide: function (experimentId, armIds) {
+    decide(experimentId, armIds) {
       if (!Array.isArray(armIds) || armIds.length < 2) {
         return Promise.reject(new Error('Drupal.rl.decide requires an array of at least 2 arm ids'));
       }
-      return new Promise(function (resolve) {
-        var entry = queue.decides[experimentId];
+      return new Promise((resolve) => {
+        let entry = queue.decides[experimentId];
         if (!entry) {
           entry = queue.decides[experimentId] = {
             arms: armIds.slice(),
+            rank: false,
             resolvers: [],
+            rankResolvers: [],
           };
         }
         entry.resolvers.push(resolve);
+        schedule();
+      });
+    },
+
+    /**
+     * Request a full Thompson Sampling ranking for an experiment.
+     *
+     * Returns all arm IDs sorted by Thompson Sampling score (best
+     * first). The same batching, deduplication, and fallback rules
+     * as decide() apply. When both decide() and rank() are called
+     * for the same experiment in the same flush cycle, they share
+     * the same batch entry: the first caller's arm list wins (the
+     * second caller's armIds are validated but not merged). Decide
+     * callers receive the top arm; rank callers receive the full
+     * sorted list.
+     *
+     * @param {string} experimentId
+     *   The pre-registered experiment id.
+     * @param {Array<string>} armIds
+     *   The arm ids in play. Minimum 2.
+     *
+     * @return {Promise<Array<string>>}
+     *   Resolves to all arm ids sorted by Thompson Sampling score
+     *   (best first). Falls back to the caller-provided order on
+     *   any failure.
+     */
+    rank(experimentId, armIds) {
+      if (!Array.isArray(armIds) || armIds.length < 2) {
+        return Promise.reject(new Error('Drupal.rl.rank requires an array of at least 2 arm ids'));
+      }
+      return new Promise((resolve) => {
+        let entry = queue.decides[experimentId];
+        if (!entry) {
+          entry = queue.decides[experimentId] = {
+            arms: armIds.slice(),
+            rank: true,
+            resolvers: [],
+            rankResolvers: [],
+          };
+        }
+        entry.rank = true;
+        entry.rankResolvers.push(resolve);
         schedule();
       });
     },
@@ -278,7 +344,7 @@
      * @param {string} experimentId
      * @param {string} armId
      */
-    turn: function (experimentId, armId) {
+    turn(experimentId, armId) {
       queue.turns.push({ id: experimentId, arm: armId });
       schedule();
     },
@@ -289,7 +355,7 @@
      * @param {string} experimentId
      * @param {string} armId
      */
-    reward: function (experimentId, armId) {
+    reward(experimentId, armId) {
       queue.rewards.push({ id: experimentId, arm: armId });
       schedule();
     },
@@ -297,7 +363,7 @@
     /**
      * Force an immediate flush of the buffered queue.
      */
-    flush: function () {
+    flush() {
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
@@ -312,11 +378,10 @@
   // navigation; pagehide covers desktop back/forward cache restoration.
   // Pending decides are resolved with the fallback arm - the page is
   // going away so the answer no longer matters.
-  document.addEventListener('visibilitychange', function () {
+  document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushBeacon();
     }
   });
   window.addEventListener('pagehide', flushBeacon);
-
 })(Drupal, drupalSettings);

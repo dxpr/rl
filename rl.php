@@ -17,9 +17,11 @@
  *     below for the payload shape.
  *
  * Deciding which variant to show is an application concern that belongs in
- * PHP at render time (see ai_sorting's Views sort plugin, or
- * VariantSelectorBase in this module). rl.php intentionally does not
- * expose a client-side decide endpoint.
+ * PHP at render time when possible (see ai_sorting's Views sort plugin,
+ * or VariantSelectorBase in this module). For client-rendered consumers
+ * that cannot decide server-side without breaking page cache, the batch
+ * action supports "decides" entries that return Thompson Sampling winners
+ * and, optionally, full ranked arm lists via "rank": true.
  */
 
 use Drupal\Core\DrupalKernel;
@@ -176,6 +178,7 @@ catch (\Exception $e) {
  * {
  *   "decides": [
  *     {"id": "<experiment_id>", "arms": ["<arm>", "<arm>", ...]},
+ *     {"id": "<experiment_id>", "arms": [...], "rank": true},
  *     ...
  *   ],
  *   "turns":   [{"id": "<experiment_id>", "arm": "<arm>"}, ...],
@@ -184,9 +187,13 @@ catch (\Exception $e) {
  * @endcode
  *
  * Decides resolve to Thompson Sampling winners and are returned keyed
- * by experiment id:
+ * by experiment id. When "rank": true is set on a decide entry, the
+ * response includes "ranking": an ordered list containing only the
+ * arms the caller sent, sorted by Thompson Sampling score (best
+ * first). Historical arms not in the request are excluded.
  * @code
- * {"decisions": {"<experiment_id>": {"armId": "<arm>"}, ...}}
+ * {"decisions": {"<experiment_id>": {"armId": "<arm>"}}}
+ * {"decisions": {"<experiment_id>": {"armId": "<arm>", "ranking": ["<arm>", ...]}}}
  * @endcode
  *
  * Rejected entries are recorded in `errors` with a machine-readable
@@ -272,8 +279,13 @@ function handle_batch_request(array $payload, $registry, $storage, $manager = NU
         $errors[] = ['kind' => 'decide', 'id' => $eid, 'reason' => 'scoring_failed'];
         continue;
       }
+      $scores = array_intersect_key($scores, array_flip($arm_ids));
       arsort($scores);
-      $decisions->{$eid} = ['armId' => (string) key($scores)];
+      $decision = ['armId' => (string) key($scores)];
+      if (!empty($decide['rank'])) {
+        $decision['ranking'] = array_map('strval', array_keys($scores));
+      }
+      $decisions->{$eid} = $decision;
       $succeeded++;
     }
   }

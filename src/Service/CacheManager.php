@@ -3,6 +3,7 @@
 namespace Drupal\rl\Service;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Cache\MemoryCache\MemoryCacheInterface;
 
 /**
  * Cache manager service for RL experiments.
@@ -21,8 +22,10 @@ class CacheManager {
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
+   * @param \Drupal\Core\Cache\MemoryCache\MemoryCacheInterface $runtimeCache
+   *   The request-only memory cache.
    */
-  public function __construct(ConfigFactoryInterface $config_factory) {
+  public function __construct(ConfigFactoryInterface $config_factory, protected MemoryCacheInterface $runtimeCache) {
     $this->configFactory = $config_factory;
   }
 
@@ -43,8 +46,7 @@ class CacheManager {
 
     // Experiment cache is shorter than site cache - store for response
     // subscriber.
-    $cache_override = &drupal_static('rl_cache_override');
-    $cache_override = $experiment_cache_seconds;
+    $this->runtimeCache->set('rl_cache_override', $experiment_cache_seconds);
   }
 
 }
