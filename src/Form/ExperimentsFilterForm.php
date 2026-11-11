@@ -83,7 +83,8 @@ final class ExperimentsFilterForm extends FormBase {
     natcasesort($sources);
     $sources = array_combine($sources, $sources);
 
-    $form['#attributes']['class'][] = 'form--inline';
+    $form['#attributes']['class'][] = 'rl-experiments-filter';
+    $form['#attached']['library'][] = 'rl/experiments-filter';
     $form['search'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Name or ID'),

@@ -12,6 +12,12 @@ experiment-highlight:
     theme:
       css/experiment-highlight.css: {}
 
+experiments-filter:
+  version: 1.0
+  css:
+    component:
+      css/experiments-filter.css: {}
+
 plotly:
   version: 2.35.2
   license:
