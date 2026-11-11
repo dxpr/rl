@@ -66,6 +66,11 @@ per-experiment performance, traffic distribution, and confidence levels.
 
 ![RL experiment list showing impressions, conversions, and variant counts](../images/rl-experiment-list.jpg)
 
+Above the list, search by experiment name or ID, or filter by **Source** (the
+module that registered the experiment) and **Activity** (with or without
+impressions). The filters combine, work with column sorting and paging, and
+stay in the page address, so a filtered list can be bookmarked or shared.
+
 Click **View** on any experiment to see its detail page with interactive
 charts. The 2D line chart shows conversion scores over time; the 3D
 posterior landscape visualises how Thompson Sampling distributions evolve

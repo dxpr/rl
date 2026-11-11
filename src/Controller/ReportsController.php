@@ -9,6 +9,7 @@ use Drupal\Core\Render\RendererInterface;
 use Drupal\Core\Url;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\rl\Decorator\ExperimentDecoratorManager;
+use Drupal\rl\Form\ExperimentsFilterForm;
 use Drupal\rl\Form\ExperimentsOverviewForm;
 use Drupal\rl\Registry\ExperimentRegistryInterface;
 use Drupal\rl\Service\ArmDataValidator;
@@ -123,13 +124,26 @@ class ReportsController extends ControllerBase {
   }
 
   /**
-   * Overview page showing all experiments.
+   * Overview page showing all experiments, with filters above the list.
    *
    * @return array
    *   A render array.
    */
   public function experimentsOverview() {
-    return $this->formBuilder()->getForm(ExperimentsOverviewForm::class);
+    return [
+      'add' => [
+        '#type' => 'link',
+        '#title' => $this->t('Add experiment'),
+        '#url' => Url::fromRoute('rl.experiment.add'),
+        '#attributes' => ['class' => ['button', 'button--primary']],
+        '#access' => $this->currentUser()->hasPermission('administer rl experiments'),
+      ],
+      'description' => [
+        '#markup' => '<p>' . $this->t('Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>',
+      ],
+      'filters' => $this->formBuilder()->getForm(ExperimentsFilterForm::class),
+      'overview' => $this->formBuilder()->getForm(ExperimentsOverviewForm::class),
+    ];
   }
 
   /**

@@ -83,6 +83,13 @@ class ExperimentsOverviewForm extends FormBase {
       // IDs may contain brackets or be "0"; use safe, non-numeric form keys.
       $experiments['experiment_' . hash('sha256', $experiment->experiment_id)] = $experiment;
     }
+    $registered = $experiments;
+    $filters = ExperimentsFilterForm::getFilters($this->getRequest());
+    // Ignore a source that no longer exists, as the filter form shows "Any".
+    if (!in_array($filters['source'], array_column($registered, 'module'), TRUE)) {
+      $filters['source'] = '';
+    }
+    $experiments = array_filter($experiments, fn (object $experiment): bool => $this->matchesFilters($experiment, $filters));
     $sort = TableSort::getContextFromRequest($header, $this->getRequest());
     $field = $sort['sql'];
     uasort($experiments, static function (object $a, object $b) use ($field, $sort): int {
@@ -100,20 +107,19 @@ class ExperimentsOverviewForm extends FormBase {
     // tableselect validation can process them. Never trust submitted labels.
     $submitted = $form_state->getUserInput()['experiments'] ?? [];
     if ($can_administer && $this->getRequest()->isMethod('POST') && is_array($submitted)) {
-      $page += array_intersect_key($experiments, $submitted);
+      $page += array_intersect_key($registered, $submitted);
     }
     $experiments = $page;
 
-    $form['add'] = [
-      '#type' => 'link',
-      '#title' => $this->t('Add experiment'),
-      '#url' => Url::fromRoute('rl.experiment.add'),
-      '#attributes' => ['class' => ['button', 'button--primary']],
-      '#access' => $can_administer,
-    ];
-    $form['description'] = [
-      '#markup' => '<p>' . $this->t('Deleting an experiment resets its data. Experiments auto-recreate on next render.') . '</p>',
-    ];
+    $filtered = ExperimentsFilterForm::isFiltered($filters);
+    if ($filtered) {
+      $form['summary'] = [
+        '#markup' => '<p>' . $this->t('Showing @shown of @total experiments.', [
+          '@shown' => $pager->getTotalItems(),
+          '@total' => count($registered),
+        ]) . '</p>',
+      ];
+    }
     $form['selection_help'] = [
       '#markup' => '<p>' . $this->t('Select experiments on this page to apply an action.') . '</p>',
       '#access' => $can_administer && !empty($experiments),
@@ -173,7 +179,7 @@ class ExperimentsOverviewForm extends FormBase {
     $form['experiments'] = [
       '#type' => $can_administer ? 'tableselect' : 'table',
       '#header' => $header,
-      '#empty' => $this->t('No experiments found.'),
+      '#empty' => $filtered ? $this->t('No experiments match the filters.') : $this->t('No experiments found.'),
     ];
     if ($can_administer) {
       // Core tableselect uses this title for accessible checkbox labels.
@@ -218,10 +224,37 @@ class ExperimentsOverviewForm extends FormBase {
     $this->tempStoreFactory->get('rl_experiment_delete_multiple')->set($token, $form_state->get('selection'));
     // Defer the destination until after confirmation, as in a multi-step form.
     $form_state->setIgnoreDestination();
-    $query = array_intersect_key($this->getRequest()->query->all(), array_flip(['order', 'sort', 'page', 'destination']));
+    $keep = array_merge(['order', 'sort', 'page', 'destination'], ExperimentsFilterForm::FILTER_KEYS);
+    $query = array_intersect_key($this->getRequest()->query->all(), array_flip($keep));
     $form_state->setRedirect('rl.experiment.delete_multiple', ['selection' => $token], [
       'query' => $query,
     ]);
+  }
+
+  /**
+   * Checks an experiment against the search, source and activity filters.
+   *
+   * @param object $experiment
+   *   An experiment row with a display name and statistics.
+   * @param string[] $filters
+   *   The filters from ExperimentsFilterForm::getFilters().
+   */
+  protected function matchesFilters(object $experiment, array $filters): bool {
+    if ($filters['search'] !== '') {
+      $haystacks = [$experiment->experiment_name, $experiment->experiment_id];
+      if (!array_filter($haystacks, static fn (string $text): bool => mb_stripos($text, $filters['search']) !== FALSE)) {
+        return FALSE;
+      }
+    }
+    if ($filters['source'] !== '' && $experiment->module !== $filters['source']) {
+      return FALSE;
+    }
+    $has_impressions = (int) $experiment->total_turns > 0;
+    return match ($filters['activity']) {
+      'active' => $has_impressions,
+      'idle' => !$has_impressions,
+      default => TRUE,
+    };
   }
 
 }
