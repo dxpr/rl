@@ -22,10 +22,6 @@
 - New submodule `rl_menu_link` for A/B testing menu link labels (works for both
   `menu_link_content` entities and YAML-defined links). **Multilingual: same
   per-language scoping as rl_page_title.**
-- The experiments overview at `/admin/reports/rl` has a search box (matches
-  the experiment name or ID) and Source and Activity filters. Filters live in
-  the URL, combine with sorting and paging, and survive the bulk delete
-  confirmation.
 
 ### Architecture
 
