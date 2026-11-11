@@ -1,7 +1,7 @@
 rl.reports.experiments:
   path: '/admin/reports/rl'
   defaults:
-    _form: '\Drupal\rl\Form\ExperimentsOverviewForm'
+    _controller: '\Drupal\rl\Controller\ReportsController::experimentsOverview'
     _title: 'RL: A/B Testing'
   requirements:
     _permission: 'view rl reports'

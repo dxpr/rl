@@ -83,8 +83,9 @@ class ExperimentDeleteMultipleForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl(): Url {
+    $keep = array_merge(['order', 'sort', 'page'], ExperimentsFilterForm::FILTER_KEYS);
     return Url::fromRoute('rl.reports.experiments', [], [
-      'query' => array_intersect_key($this->getRequest()->query->all(), array_flip(['order', 'sort', 'page'])),
+      'query' => array_intersect_key($this->getRequest()->query->all(), array_flip($keep)),
     ]);
   }
 
