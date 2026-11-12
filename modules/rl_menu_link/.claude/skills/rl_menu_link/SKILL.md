@@ -1,18 +1,14 @@
 ---
 name: rl_menu_link
-version: 1.0.0
 description: >
-  A/B test Drupal menu link labels using Thompson Sampling. Works for
-  both menu_link_content entities and YAML-defined links. Per-language
-  scoping. Manage experiments via Drush CLI.
-triggers:
-  - /rl-menu-link
-  - menu link test
-  - menu label test
-  - menu variant
-  - a/b test menu
-  - test menu link
-  - rl_menu_link
+  A/B test Drupal menu link labels, for both menu_link_content
+  entities and YAML-defined links, with the RL module's Thompson
+  Sampling, scoped per language, through drush rl:menu-link:* commands:
+  list, inspect, create, update or delete label experiments. Use it
+  when a task asks to test or compare menu labels or navigation
+  wording, or mentions menu link variants.
+metadata:
+  version: "1.0.0"
 ---
 
 # RL Menu Link: Drush CLI
