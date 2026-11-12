@@ -1,7 +1,7 @@
 > **Reinforcement Learning (RL)** is an A/B and multivariate testing framework
 > for Drupal where every visitor click is treated as human feedback (RLHF-style).
 > No fixed test horizons, no manual winner picking, no third-party SaaS. Built
-> by [DXPR](https://dxpr.com).
+> by [DXPR](https://dxpr.com)
 >
 > [Getting Started](https://dxpr.com/c/marketing-cms) |
 > [Pricing](https://dxpr.com/pricing) |
