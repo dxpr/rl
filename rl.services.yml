@@ -58,3 +58,7 @@ services:
   rl.endpoint_checker:
     class: Drupal\rl\Service\EndpointChecker
     arguments: ['@state', '@datetime.time', '@extension.list.module', '@http_client', '@request_stack']
+
+  Drupal\rl\Hook\RlHooks:
+    class: Drupal\rl\Hook\RlHooks
+    autowire: true

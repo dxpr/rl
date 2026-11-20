@@ -5,6 +5,8 @@
  * Install, update and uninstall functions for the RL module.
  */
 
+use Drupal\Component\Utility\DeprecationHelper;
+use Drupal\Core\Extension\Requirement\RequirementSeverity;
 use Drupal\Core\Database\SchemaObjectExistsException;
 use Drupal\Core\Database\SchemaObjectDoesNotExistException;
 use Drupal\rl\Service\EndpointChecker;
@@ -439,7 +441,7 @@ function rl_requirements($phase) {
     if ($module_handler->moduleExists('page_cache')) {
       $requirements['rl_page_cache_conflict'] = [
         'title' => t('RL: Page Cache compatibility'),
-        'severity' => REQUIREMENT_ERROR,
+        'severity' => DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR),
         'value' => t('Page Cache module is enabled'),
         'description' => t('The Page Cache module breaks time-based cache expiration needed for RL experiments. <a href="@link">Disable the Page Cache module</a> to fix this issue. Page cache only saves 10-20ms and conflicts with proper caching. See <a href="@issue" target="_blank">Drupal core issue #2352009</a>.', [
           '@link' => '/admin/modules/uninstall',
@@ -462,12 +464,12 @@ function rl_requirements($phase) {
 
     switch ($result['status']) {
       case EndpointChecker::STATUS_OK:
-        $requirement['severity'] = REQUIREMENT_OK;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::OK, fn() => REQUIREMENT_OK);
         $requirement['value'] = t('rl.php is accessible');
         break;
 
       case EndpointChecker::STATUS_REDIRECTED:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php probe was redirected to an unexpected target');
         $requirement['description'] = t('The probe to @url followed a redirect chain to @final and the final body was not "pong". This usually means Drupal generates absolute URLs with the wrong scheme — set <code>$settings[\'reverse_proxy\']</code> and <code>$settings[\'reverse_proxy_trusted_headers\']</code>, or fix the redirect rule that drops the host. @hint See the <a href="@readme" target="_blank">README</a>.', [
           '@url' => $result['public_url'] ?? '(unknown URL)',
@@ -478,7 +480,7 @@ function rl_requirements($phase) {
         break;
 
       case EndpointChecker::STATUS_HTTP_ERROR:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php returned HTTP @code', ['@code' => $result['code'] ?? 0]);
         $requirement['description'] = t('The web server returned HTTP @code for rl.php at @url. Ensure .htaccess is processed (Apache) or rewrite rules pass real files through (Nginx). @hint See the <a href="@readme" target="_blank">README</a>.', [
           '@code' => $result['code'] ?? 0,
@@ -489,7 +491,7 @@ function rl_requirements($phase) {
         break;
 
       case EndpointChecker::STATUS_BODY_MISMATCH:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php returned unexpected content');
         $requirement['description'] = t('rl.php is served at @url but returned unexpected content (@detail). Another module or rewrite rule may be intercepting the request, or a redirect led somewhere wrong. @hint See the <a href="@readme" target="_blank">README</a>.', [
           '@url' => $result['public_url'] ?? '(unknown URL)',
@@ -500,7 +502,7 @@ function rl_requirements($phase) {
         break;
 
       case EndpointChecker::STATUS_CONNECTION_ERROR:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php connection failed');
         $requirement['description'] = t('The HTTP probe to rl.php failed at the network layer: @detail. The web server may not be running, the public hostname may not resolve from inside the container, or TLS may be misconfigured. See the <a href="@readme" target="_blank">README</a>.', [
           '@detail' => $result['detail'] ?? '',
@@ -509,7 +511,7 @@ function rl_requirements($phase) {
         break;
 
       case EndpointChecker::STATUS_FILE_MISSING:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php is missing on disk');
         $requirement['description'] = t('rl.php is not present where it should be: @detail. Reinstall or re-deploy the rl module.', [
           '@detail' => $result['detail'] ?? '',
@@ -517,7 +519,7 @@ function rl_requirements($phase) {
         break;
 
       default:
-        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['severity'] = DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Error, fn() => REQUIREMENT_ERROR);
         $requirement['value'] = t('rl.php accessibility unknown');
         $requirement['description'] = t('The endpoint check returned an unrecognised status (@status). See the <a href="@readme" target="_blank">README</a>.', [
           '@status' => $result['status'] ?? '(none)',
@@ -556,7 +558,7 @@ function rl_requirements($phase) {
         $requirements['rl_skill_files'] = [
           'title' => t('RL AI Skill Files'),
           'description' => t('The installed AI skill files are outdated. Run <code>drush rl:setup-ai</code> to update.'),
-          'severity' => REQUIREMENT_WARNING,
+          'severity' => DeprecationHelper::backwardsCompatibleCall(\Drupal::VERSION, '11.2.0', fn() => RequirementSeverity::Warning, fn() => REQUIREMENT_WARNING),
         ];
         break;
       }

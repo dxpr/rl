@@ -1,7 +1,7 @@
 name: 'RL: A/B Test Page Titles'
 type: module
 description: 'A/B test page titles for any page using Thompson Sampling. Source-agnostic: works for nodes, Views pages, custom controllers, and any path.'
-core_version_requirement: ^10.3 | ^11
+core_version_requirement: ^10.3 | ^11 || ^12
 package: Custom
 dependencies:
   - rl:rl
