@@ -19,3 +19,9 @@ services:
   Drupal\rl_page_title\Hook\RlPageTitleHooks:
     class: Drupal\rl_page_title\Hook\RlPageTitleHooks
     autowire: true
+    arguments:
+      - '@rl.runtime_cache'
+      - '@rl.experiment_manager'
+      - '@entity_type.manager'
+      - '@current_user'
+      - '@language_manager'

@@ -2,6 +2,12 @@
 
 namespace Drupal\rl_page_title\Hook;
 
+use Drupal\Core\Cache\MemoryCache\MemoryCache;
+use Drupal\rl\Service\ExperimentManager;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Session\AccountProxyInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
+
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Render\Element;
@@ -21,6 +27,17 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
  */
 class RlPageTitleHooks {
   use StringTranslationTrait;
+
+  /**
+   * Constructs the hook service.
+   */
+  public function __construct(
+    protected MemoryCache $rlRuntimeCache,
+    protected ExperimentManager $rlExperimentManager,
+    protected EntityTypeManagerInterface $entityTypeManager,
+    protected AccountProxyInterface $currentUser,
+    protected LanguageManagerInterface $languageManager,
+  ) {}
 
   /**
    * Implements hook_help().
@@ -51,7 +68,7 @@ class RlPageTitleHooks {
     }
     $original = (string) $variables['title'];
     if ($original !== '') {
-      \Drupal::service('rl.runtime_cache')->set('rl_page_title_original', $original);
+      $this->rlRuntimeCache->set('rl_page_title_original', $original);
     }
     $variables['title'] = $result['text'];
   }
@@ -91,7 +108,7 @@ class RlPageTitleHooks {
     // Resolve the original title text. Prefer the value captured during
     // preprocess_page_title; fall back to the title resolver for pages
     // without a rendered page title block.
-    $original = \Drupal::service('rl.runtime_cache')->get('rl_page_title_original')->data ?? NULL;
+    $original = $this->rlRuntimeCache->get('rl_page_title_original')->data ?? NULL;
     if ($original === NULL || $original === '') {
       $original = _rl_page_title_resolve_route_title();
     }
@@ -180,7 +197,7 @@ class RlPageTitleHooks {
         return;
       }
     }
-    if (!\Drupal::currentUser()->hasPermission('administer rl page title experiments')) {
+    if (!$this->currentUser->hasPermission('administer rl page title experiments')) {
       return;
     }
     try {
@@ -194,7 +211,7 @@ class RlPageTitleHooks {
     // Indexed lookup against the UNIQUE lookup_hash column.
     $existing = NULL;
     $lookup_hash = PageTitleExperiment::computeLookupHash($internal_path, $entity_langcode);
-    $matches = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment')->loadByProperties([
+    $matches = $this->entityTypeManager->getStorage('rl_page_title_experiment')->loadByProperties([
       'lookup_hash' => $lookup_hash,
     ]);
     if ($matches) {
@@ -203,8 +220,8 @@ class RlPageTitleHooks {
         $existing = $candidate;
       }
     }
-    $is_multilingual = \Drupal::languageManager()->isMultilingual();
-    $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? $this->t('all languages') : \Drupal::languageManager()->getLanguage($entity_langcode)?->getName() ?? $entity_langcode;
+    $is_multilingual = $this->languageManager->isMultilingual();
+    $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? $this->t('all languages') : $this->languageManager->getLanguage($entity_langcode)?->getName() ?? $entity_langcode;
     $baseline_title = (string) ($entity->label() ?? '');
     $form['rl_page_title'] = [
       '#type' => 'details',
@@ -222,7 +239,7 @@ class RlPageTitleHooks {
     ];
     if ($existing) {
       $rl_experiment_id = $existing->getRlExperimentId();
-      $experiment_manager = \Drupal::service('rl.experiment_manager');
+      $experiment_manager = $this->rlExperimentManager;
       $total_turns = $experiment_manager->getTotalTurns($rl_experiment_id);
       $arms = $experiment_manager->getAllArmsData($rl_experiment_id);
       $total_rewards = 0;
@@ -393,14 +410,14 @@ class RlPageTitleHooks {
     catch (\Exception $e) {
       return;
     }
-    $storage = \Drupal::entityTypeManager()->getStorage('rl_page_title_experiment');
+    $storage = $this->entityTypeManager->getStorage('rl_page_title_experiment');
     $matches = $storage->loadByProperties([
       'path' => $internal_path,
     ]);
     if (!$matches) {
       return;
     }
-    $manager = \Drupal::service('rl.experiment_manager');
+    $manager = $this->rlExperimentManager;
     $invalidate_tags = [];
     foreach ($matches as $experiment) {
       if (!$experiment instanceof PageTitleExperiment) {

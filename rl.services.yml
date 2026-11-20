@@ -62,3 +62,10 @@ services:
   Drupal\rl\Hook\RlHooks:
     class: Drupal\rl\Hook\RlHooks
     autowire: true
+    arguments:
+      - '@rl.snapshot_storage'
+      - '@extension.list.module'
+      - '@current_user'
+      - '@current_route_match'
+      - '@logger.factory'
+      - '@request_stack'

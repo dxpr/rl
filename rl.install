@@ -5,6 +5,7 @@
  * Install, update and uninstall functions for the RL module.
  */
 
+use Drupal\Core\Hook\Attribute\LegacyRequirementsHook;
 use Drupal\Component\Utility\DeprecationHelper;
 use Drupal\Core\Extension\Requirement\RequirementSeverity;
 use Drupal\Core\Database\SchemaObjectExistsException;
@@ -433,6 +434,7 @@ function rl_schema() {
 /**
  * Implements hook_requirements().
  */
+#[LegacyRequirementsHook]
 function rl_requirements($phase) {
   $requirements = [];
 

@@ -48,3 +48,15 @@ function rl_preprocess_html(&$variables) {
 function rl_help($route_name, RouteMatchInterface $route_match) {
   return \Drupal::service(RlHooks::class)->help($route_name, $route_match);
 }
+
+/**
+ * Implements hook_runtime_requirements().
+ */
+function rl_runtime_requirements(): array {
+  // Drupal 11.2 still invokes the legacy requirements hook.
+  if (version_compare(\Drupal::VERSION, '11.3.0', '<')) {
+    return [];
+  }
+  \Drupal::moduleHandler()->loadInclude('rl', 'install');
+  return rl_requirements('runtime');
+}

@@ -2,6 +2,12 @@
 
 namespace Drupal\rl\Hook;
 
+use Drupal\rl\Storage\SnapshotStorage;
+use Drupal\Core\Extension\ModuleExtensionList;
+use Drupal\Core\Session\AccountProxyInterface;
+use Drupal\Core\Logger\LoggerChannelFactoryInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
+
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
@@ -13,17 +19,29 @@ class RlHooks {
   use StringTranslationTrait;
 
   /**
+   * Constructs the hook service.
+   */
+  public function __construct(
+    protected SnapshotStorage $rlSnapshotStorage,
+    protected ModuleExtensionList $moduleList,
+    protected AccountProxyInterface $currentUser,
+    protected RouteMatchInterface $routeMatch,
+    protected LoggerChannelFactoryInterface $loggerFactory,
+    protected RequestStack $requestStack,
+  ) {}
+
+  /**
    * Implements hook_cron().
    */
   #[Hook('cron')]
   public function cron() {
     // Clean up old snapshots if event logging is enabled.
     /** @var \Drupal\rl\Storage\SnapshotStorageInterface $snapshot_storage */
-    $snapshot_storage = \Drupal::service('rl.snapshot_storage');
+    $snapshot_storage = $this->rlSnapshotStorage;
     if ($snapshot_storage->isEnabled()) {
       $deleted = $snapshot_storage->cleanup();
       if ($deleted > 0) {
-        \Drupal::logger('rl')->info('Cleaned up @count old snapshots.', [
+        $this->loggerFactory->get('rl')->info('Cleaned up @count old snapshots.', [
           '@count' => $deleted,
         ]);
       }
@@ -56,14 +74,14 @@ class RlHooks {
   #[Hook('page_attachments')]
   public function pageAttachments(array &$attachments) {
     // Attach experiment highlight styles for users who can view RL reports.
-    if (\Drupal::currentUser()->hasPermission('view rl reports')) {
+    if ($this->currentUser->hasPermission('view rl reports')) {
       $attachments['#attached']['library'][] = 'rl/experiment-highlight';
     }
     // Publish the rl.php endpoint URL to drupalSettings so any page that
     // attaches the rl/api library can use Drupal.rl without each consumer
     // module recomputing the URL.
-    $rl_path = \Drupal::service('extension.list.module')->getPath('rl');
-    $base_path = \Drupal::request()->getBasePath();
+    $rl_path = $this->moduleList->getPath('rl');
+    $base_path = $this->requestStack->getCurrentRequest()->getBasePath();
     $attachments['#attached']['drupalSettings']['rl']['endpointUrl'] = $base_path . '/' . $rl_path . '/rl.php';
   }
 
@@ -73,7 +91,7 @@ class RlHooks {
   #[Hook('preprocess_html')]
   public function preprocessHtml(&$variables) {
     // Add body class on RL admin pages for styling.
-    $route_name = \Drupal::routeMatch()->getRouteName();
+    $route_name = $this->routeMatch->getRouteName();
     if ($route_name && str_starts_with($route_name, 'rl.')) {
       $variables['attributes']['class'][] = 'rl-admin-page';
     }

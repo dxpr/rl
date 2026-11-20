@@ -2,6 +2,11 @@
 
 namespace Drupal\rl_menu_link\Hook;
 
+use Drupal\rl\Service\ExperimentManager;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Session\AccountProxyInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
+
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Render\Element;
@@ -20,6 +25,16 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
  */
 class RlMenuLinkHooks {
   use StringTranslationTrait;
+
+  /**
+   * Constructs the hook service.
+   */
+  public function __construct(
+    protected ExperimentManager $rlExperimentManager,
+    protected EntityTypeManagerInterface $entityTypeManager,
+    protected AccountProxyInterface $currentUser,
+    protected LanguageManagerInterface $languageManager,
+  ) {}
 
   /**
    * Implements hook_help().
@@ -92,7 +107,7 @@ class RlMenuLinkHooks {
     if (!method_exists($entity, 'getPluginId')) {
       return;
     }
-    if (!\Drupal::currentUser()->hasPermission('administer rl menu link experiments')) {
+    if (!$this->currentUser->hasPermission('administer rl menu link experiments')) {
       return;
     }
     $plugin_id = $entity->getPluginId();
@@ -102,7 +117,7 @@ class RlMenuLinkHooks {
     /** @var \Drupal\rl_menu_link\Entity\MenuLinkExperiment|null $existing */
     $existing = NULL;
     $lookup_hash = MenuLinkExperiment::computeLookupHash($plugin_id, $entity_langcode);
-    $matches = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment')->loadByProperties([
+    $matches = $this->entityTypeManager->getStorage('rl_menu_link_experiment')->loadByProperties([
       'lookup_hash' => $lookup_hash,
     ]);
     if ($matches) {
@@ -111,8 +126,8 @@ class RlMenuLinkHooks {
         $existing = $candidate;
       }
     }
-    $is_multilingual = \Drupal::languageManager()->isMultilingual();
-    $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? $this->t('all languages') : \Drupal::languageManager()->getLanguage($entity_langcode)?->getName() ?? $entity_langcode;
+    $is_multilingual = $this->languageManager->isMultilingual();
+    $language_name = $entity_langcode === LanguageInterface::LANGCODE_NOT_SPECIFIED ? $this->t('all languages') : $this->languageManager->getLanguage($entity_langcode)?->getName() ?? $entity_langcode;
     $baseline_title = (string) ($entity->label() ?? '');
     $form['rl_menu_link'] = [
       '#type' => 'details',
@@ -129,7 +144,7 @@ class RlMenuLinkHooks {
     ];
     if ($existing) {
       $rl_experiment_id = $existing->getRlExperimentId();
-      $experiment_manager = \Drupal::service('rl.experiment_manager');
+      $experiment_manager = $this->rlExperimentManager;
       $total_turns = $experiment_manager->getTotalTurns($rl_experiment_id);
       $arms = $experiment_manager->getAllArmsData($rl_experiment_id);
       $total_rewards = 0;
@@ -287,14 +302,14 @@ class RlMenuLinkHooks {
     if (!$plugin_id) {
       return;
     }
-    $storage = \Drupal::entityTypeManager()->getStorage('rl_menu_link_experiment');
+    $storage = $this->entityTypeManager->getStorage('rl_menu_link_experiment');
     $matches = $storage->loadByProperties([
       'menu_link_plugin_id' => $plugin_id,
     ]);
     if (!$matches) {
       return;
     }
-    $manager = \Drupal::service('rl.experiment_manager');
+    $manager = $this->rlExperimentManager;
     $invalidate_tags = [
       'rl_menu_link:all' => TRUE,
     ];
