@@ -1,0 +1,5 @@
+
+services:
+  Drupal\rl_example_frontend\Hook\RlExampleFrontendHooks:
+    class: Drupal\rl_example_frontend\Hook\RlExampleFrontendHooks
+    autowire: true

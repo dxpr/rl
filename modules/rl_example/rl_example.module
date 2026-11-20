@@ -5,13 +5,14 @@
  * RL Example module.
  */
 
+use Drupal\Core\Hook\Attribute\LegacyHook;
+use Drupal\rl_example\Hook\RlExampleHooks;
 use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
  * Implements hook_help().
  */
+#[LegacyHook]
 function rl_example_help($route_name, RouteMatchInterface $route_match) {
-  if ($route_name == 'help.page.rl_example') {
-    return '<p>' . t('Place the "RL Example Newsletter Signup" block to see A/B testing in action. The module tests which button text gets more signups.') . '</p>';
-  }
+  return \Drupal::service(RlExampleHooks::class)->help($route_name, $route_match);
 }

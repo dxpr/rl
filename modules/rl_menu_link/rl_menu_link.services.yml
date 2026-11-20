@@ -15,3 +15,12 @@ services:
       - '@plugin.manager.menu.link'
     tags:
       - { name: rl_experiment_decorator }
+
+  Drupal\rl_menu_link\Hook\RlMenuLinkHooks:
+    class: Drupal\rl_menu_link\Hook\RlMenuLinkHooks
+    autowire: true
+    arguments:
+      - '@rl.experiment_manager'
+      - '@entity_type.manager'
+      - '@current_user'
+      - '@language_manager'

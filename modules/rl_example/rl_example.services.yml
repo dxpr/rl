@@ -1,0 +1,5 @@
+
+services:
+  Drupal\rl_example\Hook\RlExampleHooks:
+    class: Drupal\rl_example\Hook\RlExampleHooks
+    autowire: true
