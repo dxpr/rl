@@ -36,7 +36,6 @@ class RlHooks {
   #[Hook('cron')]
   public function cron() {
     // Clean up old snapshots if event logging is enabled.
-    /** @var \Drupal\rl\Storage\SnapshotStorageInterface $snapshot_storage */
     $snapshot_storage = $this->rlSnapshotStorage;
     if ($snapshot_storage->isEnabled()) {
       $deleted = $snapshot_storage->cleanup();
